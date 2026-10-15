@@ -1,0 +1,30 @@
+# Node / Java / Editor
+node_modules/
+dist/
+build/
+target/
+*.log
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Mac
+*.DS_Store
+
+# Vagrant
+.vagrant/
+
+# container
+docker-compose.override.yml
+
+# Other
+coverage/
+reports/

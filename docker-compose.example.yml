@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: hris
+      MYSQL_USER: hris
+      MYSQL_PASSWORD: hris_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  milvus:
+    image: milvusdb/milvus:v2.2.12
+    environment:
+      - TZ=UTC
+    ports:
+      - "19530:19530"
+
+volumes:
+  db_data:
