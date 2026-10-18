@@ -1,0 +1,216 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# 同一分支的新 push 取消上一轮未完成的运行（避免队列堆积）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 密钥不落仓库：本地/CI 均从 secrets 或环境变量注入（JwtSecretGuard 门禁）
+  # 仅编译期占位（保证 Maven 能解析 ${DB_PASSWORD} 占位符），非真实凭据
+  MAVEN_OPTS: -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+
+jobs:
+  # ===================================================================
+  # P0 门禁（最快失败，秒级反馈）
+  # ===================================================================
+  gates:
+    name: P0 gates (emoji / color / 单文件行数)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Emoji scan (全仓)
+        run: node scripts/check-emoji.js
+
+      - name: Hardcoded color scan (前端)
+        run: node scripts/check-hardcoded-color.js frontend
+
+      - name: 单文件行数门禁（≤300 行）
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            n=$(wc -l < "$f")
+            if [ "$n" -gt 300 ]; then
+              echo "::error file=$f::单文件超过 300 行（实际 $n）"
+              fail=1
+            fi
+          done < <(find . -path ./node_modules -prune -o -path ./frontend/node_modules -prune -o \
+                   -path '*/target' -prune -o -path ./frontend/dist -prune -o \
+                   \( -name '*.java' -o -name '*.vue' -o -name '*.ts' \) -type f -print)
+          exit $fail
+
+  # ===================================================================
+  # 后端：编译 + 单测（含 L2 装配门禁）
+  # ===================================================================
+  backend:
+    name: Backend build & test (JDK 21)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # S0.4 硬门禁：Flowable 8 × Boot 4 引擎装配（先单独跑，失败信息更清晰）
+      - name: Flowable × Boot4 assembly gate
+        run: mvn -B -ntp -pl hris-flow -am test -Dtest=FlowableAssemblyTest -DfailIfNoTests=false
+
+      # 全量单元测试（docs/16 L1/L2，73 个用例）
+      - name: Unit tests (scripts/test-all.sh)
+        run: bash scripts/test-all.sh
+
+      # 打包（供后续 Docker 构建复用依赖缓存）
+      - name: Package jars
+        run: mvn -B -ntp -DskipTests package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jars
+          path: hris-*/target/*.jar
+          retention-days: 1
+          if-no-files-found: error
+
+  # ===================================================================
+  # 前端：类型检查 + 生产构建
+  # ===================================================================
+  frontend:
+    name: Frontend (type-check + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (vue-tsc, 0 error 门禁)
+        run: npm run type-check
+
+      - name: Production build
+        run: |
+          # dist 产物超阈值会触发构建机的批量删除保护，先清空
+          rm -rf dist
+          npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
+
+  # ===================================================================
+  # 镜像构建验证（部署基建门禁：Dockerfile 必须能构建出可运行镜像）
+  # 只构建网关 + 一个数据服务（覆盖 22 服务端口收敛到 8080 的通用路径），
+  # 全量 12 个镜像构建耗时过长，交给 docker/build-all.sh 按需本地/发布流水线执行。
+  # ===================================================================
+  docker:
+    name: Docker image build (gateway + rag)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # no-cache: false —— 利用 backend 阶段产生的 maven 缓存加速
+      - name: Build gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: MODULE=hris-gateway
+          tags: hris/gateway:ci
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # rag 是唯一含 Spring AI + Milvus SDK 的服务（jar 161MB），单独验证依赖不冲突
+      - name: Build rag image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: MODULE=hris-rag
+          tags: hris/rag:ci
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 冒烟：镜像内必须有 actuator 探针路径 + 非 root 用户
+      - name: Smoke check image
+        run: |
+          set -euo pipefail
+          for img in hris/gateway:ci hris/rag:ci; do
+            echo "--- $img ---"
+            # 镜像内用户应为非 root
+            uid=$(docker run --rm --entrypoint sh "$img" -c 'id -u')
+            echo "  uid=$uid"
+            if [ "$uid" = "0" ]; then
+              echo "::error::$img 以 root 运行，违反非 root 规范"
+              exit 1
+            fi
+            # jar 必须存在且非空
+            size=$(docker run --rm --entrypoint sh "$img" -c 'stat -c%s /app/app.jar')
+            echo "  app.jar=${size} bytes"
+            if [ "$size" -lt 1000000 ]; then
+              echo "::error::$img 的 app.jar 异常（${size} 字节），疑似未正确打包"
+              exit 1
+            fi
+          done
+
+      # 编排语法门禁：合并中间件 + 应用两份 compose 必须能渲染（不真拉起）
+      - name: Compose config validation
+        run: |
+          set -euo pipefail
+          cat > .env.ci <<EOF
+          DB_PASSWORD=ci-placeholder-password
+          JWT_SECRET=ci-placeholder-secret-at-least-32-bytes
+          EOF
+          docker compose --env-file .env.ci -f docker-compose.yml -f docker-compose.app.yml config > /dev/null
+          echo "::notice::应用编排（12 服务）语法校验通过"
+
+  # ===================================================================
+  # 汇总门禁
+  # ===================================================================
+  all-passed:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    needs: [gates, backend, frontend, docker]
+    if: always()
+    steps:
+      - name: 检查各 job 结果
+        run: |
+          results="${{ needs.gates.result }} ${{ needs.backend.result }} \
+                   ${{ needs.frontend.result }} ${{ needs.docker.result }}"
+          echo "job 结果: $results"
+          for r in $results; do
+            if [ "$r" != "success" ]; then
+              echo "::error::存在未通过的 job"
+              exit 1
+            fi
+          done
+          echo "全部检查通过（门禁 / 后端 / 前端 / 镜像构建）"

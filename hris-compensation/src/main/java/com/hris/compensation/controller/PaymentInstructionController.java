@@ -1,0 +1,67 @@
+package com.hris.compensation.controller;
+
+import com.hris.compensation.dto.PaymentInstructionDtos.PaymentInstructionCreateRequest;
+import com.hris.compensation.dto.PaymentInstructionDtos.PaymentInstructionResponse;
+import com.hris.compensation.dto.PaymentInstructionDtos.PaymentInstructionUpdateRequest;
+import com.hris.compensation.entity.PaymentInstruction;
+import com.hris.compensation.service.PaymentInstructionService;
+import com.hris.common.api.R;
+import com.hris.common.dto.PageResult;
+import com.hris.common.security.RequirePerm;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * PaymentInstruction 端点。
+ */
+@RestController
+@RequestMapping("/api/v1/cmp/payment-instructions")
+public class PaymentInstructionController {
+
+    private final PaymentInstructionService service;
+
+    public PaymentInstructionController(PaymentInstructionService service) {
+        this.service = service;
+    }
+
+    @RequirePerm("cmp:payment-instruction:read")
+    @GetMapping
+    public R<PageResult<PaymentInstructionResponse>> list(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "20") long size) {
+        return R.ok(service.list(page, size));
+    }
+
+    @RequirePerm("cmp:payment-instruction:read")
+    @GetMapping("/{id}")
+    public R<PaymentInstructionResponse> get(@PathVariable Long id) {
+        return R.ok(service.get(id));
+    }
+
+    @RequirePerm("cmp:payment-instruction:write")
+    @PostMapping
+    public R<PaymentInstructionResponse> create(@Valid @RequestBody PaymentInstructionCreateRequest req) {
+        return R.ok(service.create(req));
+    }
+
+    @RequirePerm("cmp:payment-instruction:write")
+    @PutMapping("/{id}")
+    public R<PaymentInstructionResponse> update(@PathVariable Long id, @Valid @RequestBody PaymentInstructionUpdateRequest req) {
+        return R.ok(service.update(id, req));
+    }
+
+    @RequirePerm("cmp:payment-instruction:write")
+    @DeleteMapping("/{id}")
+    public R<Void> delete(@PathVariable Long id) {
+        service.delete(id);
+        return R.ok();
+    }
+}

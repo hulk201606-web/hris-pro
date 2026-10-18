@@ -1,6 +1,8 @@
 # 05 知识库与 RAG 详细设计
 
-> 服务：hris-rag　栈：Spring AI Alibaba + Milvus + Elasticsearch(BM25) + RocketMQ　决策依据：ADR-005
+> 服务：hris-rag　栈：Spring AI 2.0 + Milvus + Elasticsearch(BM25) + RocketMQ　决策依据：ADR-005
+> （2026-10 修订：原 Spring AI Alibaba 已停更且仅支持 Boot 3.5，改用官方 Spring AI 2.0.0 GA，
+>   支持 Boot 4.0.x；通义千问 LLM 与 text-embedding 均走 DashScope OpenAI 兼容端点接入）
 
 ## 1. 总体管线
 

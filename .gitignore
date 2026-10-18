@@ -6,6 +6,12 @@ target/
 *.log
 .env
 .env.*
+# 模板必须提交（部署时 cp .env.example .env），不能被上面的通配规则排除
+!.env.example
+# 前端构建期环境变量必须提交（Vite 靠它注入 mock 开关与 API base，
+# 缺失会导致 CI 构建行为不可控）；此处不含任何密钥，纯开关与路径
+!frontend/.env
+!frontend/.env.*
 
 # OS
 .DS_Store
@@ -28,3 +34,14 @@ docker-compose.override.yml
 # Other
 coverage/
 reports/
+
+# 本地工作数据（记忆/踩坑记录，不提交）
+.workbuddy/
+
+# 本地临时区（截图、构建日志、临时令牌；含真实 JWT，绝不入库）
+.tmp/
+*.pid
+
+# Java 编译产物
+*.class
+.mvn/wrapper/maven-wrapper.jar

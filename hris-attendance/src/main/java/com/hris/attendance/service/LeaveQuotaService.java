@@ -1,0 +1,299 @@
+package com.hris.attendance.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.hris.attendance.dto.LeaveQuotaDtos.LeaveLedgerResponse;
+import com.hris.attendance.dto.LeaveQuotaDtos.LeaveQuotaResponse;
+import com.hris.attendance.dto.LeaveQuotaDtos.QuotaBalanceResponse;
+import com.hris.attendance.dto.LeaveQuotaDtos.QuotaGrantRequest;
+import com.hris.attendance.dto.LeaveQuotaDtos.QuotaTransferRequest;
+import com.hris.attendance.entity.LeaveLedger;
+import com.hris.attendance.entity.LeaveQuota;
+import com.hris.attendance.entity.LeaveType;
+import com.hris.attendance.mapper.LeaveLedgerMapper;
+import com.hris.attendance.mapper.LeaveQuotaMapper;
+import com.hris.attendance.util.TimeAmountUtil;
+import com.hris.common.exception.BizException;
+import com.hris.common.exception.ErrorCode;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 假期额度引擎与台账（ATT-F-012 / ATT-F-013 / ATT-F-015）。
+ *
+ * <p>额度行按 uk(tenant_id, emp_id, leave_type_id, period) 唯一，发放与结转均走 upsert 累加；
+ * 每一次额度变动都落 att_leave_ledger 流水，保证「余额 = 流水求和」可对账。</p>
+ *
+ * <p>注意：DDL 无 frozen_quota 列，审批期不冻结额度，仅在审批通过时扣减（见 OPEN-DECISIONS）。</p>
+ */
+@Service
+public class LeaveQuotaService {
+
+    /** rules 缺省时的年假结转上限（天） */
+    public static final BigDecimal MAX_CARRY_OVER_DAYS = new BigDecimal("5.00");
+
+    private final LeaveQuotaMapper quotaMapper;
+    private final LeaveLedgerMapper ledgerMapper;
+    private final LeaveTypeService leaveTypeService;
+
+    public LeaveQuotaService(LeaveQuotaMapper quotaMapper, LeaveLedgerMapper ledgerMapper,
+                             LeaveTypeService leaveTypeService) {
+        this.quotaMapper = quotaMapper;
+        this.ledgerMapper = ledgerMapper;
+        this.leaveTypeService = leaveTypeService;
+    }
+
+    /** 额度发放（正增负减），落流水。 */
+    @Transactional(rollbackFor = Exception.class)
+    public LeaveQuotaResponse grant(QuotaGrantRequest req) {
+        LeaveType type = leaveTypeService.require(req.leaveTypeId());
+        LeaveQuota quota = locate(req.empId(), req.leaveTypeId(), req.period());
+        boolean isNew = quota == null;
+        if (isNew) {
+            quota = new LeaveQuota();
+            quota.setId(IdWorker.getId());
+            quota.setEmpId(req.empId());
+            quota.setLeaveTypeId(req.leaveTypeId());
+            quota.setPeriod(req.period().trim());
+            quota.setTotalQuota(BigDecimal.ZERO);
+            quota.setUsedQuota(BigDecimal.ZERO);
+        }
+        quota.setTotalQuota(TimeAmountUtil.amount(quota.getTotalQuota()).add(req.amount()));
+        if (quota.getTotalQuota().signum() < 0) {
+            throw new BizException(ErrorCode.ATT_ERROR, "额度发放后总额度不能为负");
+        }
+        save(quota, isNew);
+        writeLedger(req.empId(), req.leaveTypeId(), req.amount(), "GRANT:" + req.period());
+        return toResponse(quota, type);
+    }
+
+    /**
+     * 额度结转：把源周期可用额度转入目标周期（≤ carryOverMax）。
+     * 源周期减总额度、目标周期加总额度，已用额度不随迁。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LeaveQuotaResponse transfer(QuotaTransferRequest req) {
+        LeaveType type = leaveTypeService.require(req.leaveTypeId());
+        BigDecimal amount = TimeAmountUtil.amount(req.amount());
+        if (amount.signum() <= 0) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "结转额度必须大于 0");
+        }
+        BigDecimal limit = carryOverLimit(type);
+        if (amount.compareTo(limit) > 0) {
+            throw new BizException(ErrorCode.ATT_ERROR, "结转额度超过上限 " + limit + " 天");
+        }
+        LeaveQuota from = locate(req.empId(), req.leaveTypeId(), req.fromPeriod());
+        if (from == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "源周期额度不存在");
+        }
+        BigDecimal available = TimeAmountUtil.amount(from.getTotalQuota())
+                .subtract(TimeAmountUtil.amount(from.getUsedQuota()));
+        if (amount.compareTo(available) > 0) {
+            throw new BizException(ErrorCode.ATT_ERROR, "源周期可用额度不足");
+        }
+        from.setTotalQuota(TimeAmountUtil.amount(from.getTotalQuota()).subtract(amount));
+        save(from, false);
+
+        LeaveQuota to = locate(req.empId(), req.leaveTypeId(), req.toPeriod());
+        boolean toIsNew = to == null;
+        if (toIsNew) {
+            to = new LeaveQuota();
+            to.setId(IdWorker.getId());
+            to.setEmpId(req.empId());
+            to.setLeaveTypeId(req.leaveTypeId());
+            to.setPeriod(req.toPeriod().trim());
+            to.setTotalQuota(BigDecimal.ZERO);
+            to.setUsedQuota(BigDecimal.ZERO);
+        }
+        to.setTotalQuota(TimeAmountUtil.amount(to.getTotalQuota()).add(amount));
+        save(to, toIsNew);
+
+        String ref = "CARRY_OVER:" + req.fromPeriod() + "->" + req.toPeriod();
+        writeLedger(req.empId(), req.leaveTypeId(), amount.negate(), ref);
+        writeLedger(req.empId(), req.leaveTypeId(), amount, ref);
+        return toResponse(to, type);
+    }
+
+    /** 员工余额视图（各类额度/已用/可用）。 */
+    public QuotaBalanceResponse balance(Long empId) {
+        List<LeaveQuota> quotas = quotaMapper.selectList(new LambdaQueryWrapper<LeaveQuota>()
+                .eq(LeaveQuota::getEmpId, empId)
+                .orderByAsc(LeaveQuota::getPeriod).orderByAsc(LeaveQuota::getLeaveTypeId));
+        Map<Long, LeaveType> types = loadTypes(quotas);
+        List<LeaveQuotaResponse> items = quotas.stream()
+                .map(q -> toResponse(q, types.get(q.getLeaveTypeId())))
+                .toList();
+        return new QuotaBalanceResponse(empId, items);
+    }
+
+    /** 额度查询（按员工 + 周期）。 */
+    public List<LeaveQuotaResponse> query(Long empId, String period) {
+        LambdaQueryWrapper<LeaveQuota> qw = new LambdaQueryWrapper<>();
+        if (empId != null) {
+            qw.eq(LeaveQuota::getEmpId, empId);
+        }
+        if (period != null && !period.isBlank()) {
+            qw.eq(LeaveQuota::getPeriod, period.trim());
+        }
+        qw.orderByAsc(LeaveQuota::getPeriod).orderByAsc(LeaveQuota::getLeaveTypeId);
+        List<LeaveQuota> quotas = quotaMapper.selectList(qw);
+        Map<Long, LeaveType> types = loadTypes(quotas);
+        return quotas.stream().map(q -> toResponse(q, types.get(q.getLeaveTypeId()))).toList();
+    }
+
+    /** 额度流水查询（按员工 + 假种）。 */
+    public List<LeaveLedgerResponse> ledgers(Long empId, Long leaveTypeId) {
+        LambdaQueryWrapper<LeaveLedger> qw = new LambdaQueryWrapper<>();
+        if (empId != null) {
+            qw.eq(LeaveLedger::getEmpId, empId);
+        }
+        if (leaveTypeId != null) {
+            qw.eq(LeaveLedger::getLeaveTypeId, leaveTypeId);
+        }
+        qw.orderByDesc(LeaveLedger::getCreatedAt).orderByDesc(LeaveLedger::getId);
+        List<LeaveLedger> list = ledgerMapper.selectList(qw);
+        Map<Long, LeaveType> types = loadTypesByLedger(list);
+        return list.stream()
+                .map(l -> new LeaveLedgerResponse(l.getId(), l.getEmpId(), l.getLeaveTypeId(),
+                        types.get(l.getLeaveTypeId()) == null ? null
+                                : types.get(l.getLeaveTypeId()).getName(),
+                        TimeAmountUtil.amount(l.getChangeAmount()), l.getBizRef(),
+                        l.getCreatedAt()))
+                .toList();
+    }
+
+    /**
+     * 扣减额度（审批通过）。额度不足抛 52000；无额度行时按「无额度不可请假」处理。
+     * 跨年请假按开始日期所在年度归集（见 OPEN-DECISIONS）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void consume(Long empId, Long leaveTypeId, String period, BigDecimal days) {
+        LeaveQuota quota = locate(empId, leaveTypeId, period);
+        if (quota == null) {
+            throw new BizException(ErrorCode.ATT_ERROR, "该假种无可用额度，请先发放");
+        }
+        BigDecimal used = TimeAmountUtil.amount(quota.getUsedQuota()).add(days);
+        BigDecimal total = TimeAmountUtil.amount(quota.getTotalQuota());
+        if (used.compareTo(total) > 0) {
+            throw new BizException(ErrorCode.ATT_ERROR, "假期额度不足");
+        }
+        quota.setUsedQuota(used);
+        save(quota, false);
+        writeLedger(empId, leaveTypeId, TimeAmountUtil.amount(days).negate(), "LEAVE_CONSUME");
+    }
+
+    /** 退还额度（销假 / 撤销已通过单）。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void refund(Long empId, Long leaveTypeId, String period, BigDecimal days, String bizKey) {
+        LeaveQuota quota = locate(empId, leaveTypeId, period);
+        if (quota == null) {
+            return;
+        }
+        BigDecimal used = TimeAmountUtil.amount(quota.getUsedQuota()).subtract(days);
+        quota.setUsedQuota(used.signum() < 0 ? BigDecimal.ZERO : used);
+        save(quota, false);
+        writeLedger(empId, leaveTypeId, TimeAmountUtil.amount(days), "LEAVE_REFUND:" + bizKey);
+    }
+
+    /** 定位额度行，不存在返回 null。 */
+    public LeaveQuota locate(Long empId, Long leaveTypeId, String period) {
+        return quotaMapper.selectOne(new LambdaQueryWrapper<LeaveQuota>()
+                .eq(LeaveQuota::getEmpId, empId)
+                .eq(LeaveQuota::getLeaveTypeId, leaveTypeId)
+                .eq(LeaveQuota::getPeriod, period)
+                .last("LIMIT 1"));
+    }
+
+    private void save(LeaveQuota quota, boolean isNew) {
+        if (isNew) {
+            quotaMapper.insert(quota);
+        } else {
+            if (quotaMapper.updateById(quota) == 0) {
+                throw new BizException(ErrorCode.ATT_ERROR, "数据已被其他操作变更，请刷新后重试");
+            }
+        }
+    }
+
+    private void writeLedger(Long empId, Long leaveTypeId, BigDecimal amount, String bizRef) {
+        LeaveLedger ledger = new LeaveLedger();
+        ledger.setId(IdWorker.getId());
+        ledger.setEmpId(empId);
+        ledger.setLeaveTypeId(leaveTypeId);
+        ledger.setChangeAmount(TimeAmountUtil.amount(amount));
+        ledger.setBizRef(bizRef);
+        ledgerMapper.insert(ledger);
+    }
+
+    private Map<Long, LeaveType> loadTypes(List<LeaveQuota> quotas) {
+        List<Long> ids = quotas.stream().map(LeaveQuota::getLeaveTypeId).distinct().toList();
+        return loadTypesByIds(ids);
+    }
+
+    private Map<Long, LeaveType> loadTypesByLedger(List<LeaveLedger> ledgers) {
+        List<Long> ids = ledgers.stream().map(LeaveLedger::getLeaveTypeId).distinct().toList();
+        return loadTypesByIds(ids);
+    }
+
+    private Map<Long, LeaveType> loadTypesByIds(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, LeaveType> map = new LinkedHashMap<>();
+        for (LeaveType t : leaveTypeService.listByIds(ids)) {
+            map.put(t.getId(), t);
+        }
+        return map;
+    }
+
+    private LeaveQuotaResponse toResponse(LeaveQuota q, LeaveType type) {
+        BigDecimal total = TimeAmountUtil.amount(q.getTotalQuota());
+        BigDecimal used = TimeAmountUtil.amount(q.getUsedQuota());
+        return new LeaveQuotaResponse(q.getId(), q.getEmpId(), q.getLeaveTypeId(),
+                type == null ? null : type.getName(), q.getPeriod(), total, used,
+                total.subtract(used));
+    }
+
+    /**
+     * 读取假种规则中的结转上限 rules.carryOverMax。
+     * MVP 不做完整 JSON 解析，仅按 "carryOverMax":数字 文本匹配，
+     * 缺失时用 MAX_CARRY_OVER_DAYS 兜底（完整规则引擎待二期落地，见 OPEN-DECISIONS）。
+     */
+    private BigDecimal carryOverLimit(LeaveType type) {
+        String rules = type.getRules();
+        if (rules == null || rules.isBlank()) {
+            return MAX_CARRY_OVER_DAYS;
+        }
+        String key = "\"carryOverMax\"";
+        int idx = rules.indexOf(key);
+        if (idx < 0) {
+            return MAX_CARRY_OVER_DAYS;
+        }
+        int colon = rules.indexOf(':', idx + key.length());
+        if (colon < 0) {
+            return MAX_CARRY_OVER_DAYS;
+        }
+        StringBuilder digits = new StringBuilder();
+        for (int i = colon + 1; i < rules.length(); i++) {
+            char c = rules.charAt(i);
+            if (c == '.' || (c >= '0' && c <= '9')) {
+                digits.append(c);
+            } else if (digits.length() > 0) {
+                break;
+            }
+        }
+        if (digits.length() == 0) {
+            return MAX_CARRY_OVER_DAYS;
+        }
+        try {
+            BigDecimal parsed = new BigDecimal(digits.toString());
+            return parsed.signum() < 0 ? MAX_CARRY_OVER_DAYS : parsed;
+        } catch (NumberFormatException e) {
+            return MAX_CARRY_OVER_DAYS;
+        }
+    }
+}

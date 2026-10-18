@@ -1,0 +1,85 @@
+/* =========================================================================
+ * 智云 HR Design Tokens（设计令牌单源）
+ * -------------------------------------------------------------------------
+ * 约束（P0 门禁）：
+ *  - 本文件是「色彩/间距/圆角/阴影/字距」唯一授权定义处；
+ *  - 组件/视图代码一律引用 var(--xxx)，禁止在组件内硬编码颜色；
+ *  - 中性色板经 HSL 通道表达（带蓝灰色调、非纯灰），且不引入 hex/rgb 字面量；
+ *  - 色相（主色/状态色）由 Ant Design Vue ConfigProvider 的 theme.token 统一派生
+ *    （默认企业蓝），本文件仅承担中性语义色。
+ * ========================================================================= */
+
+:root {
+  /* ---- 色彩 · 中性色板（蓝灰调，非纯灰） ---- */
+  --color-white: #fff;
+  --color-black: #000;
+
+  --color-bg-page: hsl(220 25% 97%);
+  --color-bg-surface: hsl(0 0% 100%);
+  --color-bg-elevated: hsl(0 0% 100%);
+
+  --color-text-primary: hsl(222 22% 15%);
+  --color-text-secondary: hsl(222 12% 42%);
+  --color-text-muted: hsl(220 14% 60%);
+
+  --color-border: hsl(220 18% 91%);
+  --color-border-strong: hsl(220 18% 84%);
+
+  /* ---- 间距 · 8px 栅格 ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- 圆角 · 四级体系 ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+
+  /* ---- 阴影 · 描边 + 轻微投影（浅色主题用柔和阴影） ---- */
+  --shadow-sm: 0 1px 2px hsl(220 16% 12% / 0.06), 0 4px 8px hsl(220 16% 12% / 0.06);
+  --shadow-md: 0 2px 4px hsl(220 16% 12% / 0.05), 0 8px 16px hsl(220 16% 12% / 0.08);
+  --shadow-lg: 0 4px 8px hsl(220 16% 12% / 0.06), 0 16px 32px hsl(220 16% 12% / 0.12);
+
+  /* ---- 字距 · 按场景设置 ---- */
+  --ls-body: 0;
+  --ls-small: 0.01em;
+  --ls-caps: 0.06em;
+  --ls-heading: -0.01em;
+  --ls-display: -0.02em;
+
+  /* ---- 字体 ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  /* ---- 动效 ---- */
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --motion-slow: 400ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- 层级（语义化 z-index） ---- */
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-modal-backdrop: 1300;
+  --z-modal: 1400;
+  --z-toast: 1600;
+  --z-tooltip: 1700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}

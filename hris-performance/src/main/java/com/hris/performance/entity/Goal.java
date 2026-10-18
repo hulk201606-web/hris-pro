@@ -1,0 +1,68 @@
+package com.hris.performance.entity;
+
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.hris.common.entity.BaseEntity;
+import java.math.BigDecimal;
+
+/**
+ * prf_goal（由 DDL 自动生成）
+ */
+@TableName("prf_goal")
+public class Goal extends BaseEntity {
+
+    private static final long serialVersionUID = 1L;
+    private Long cycleId;  // 周期ID(逻辑外键 prf_cycle.id)
+
+    public Long getCycleId() {
+        return cycleId;
+    }
+
+    public void setCycleId(Long cycleId) {
+        this.cycleId = cycleId;
+    }
+    private Long empId;  // 员工ID(逻辑外键 emp_employee.id)
+
+    public Long getEmpId() {
+        return empId;
+    }
+
+    public void setEmpId(Long empId) {
+        this.empId = empId;
+    }
+    private String title;  // 目标标题
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+    private BigDecimal weight;  // 权重(%)
+
+    public BigDecimal getWeight() {
+        return weight;
+    }
+
+    public void setWeight(BigDecimal weight) {
+        this.weight = weight;
+    }
+    private String targetValue;  // 目标值
+
+    public String getTargetValue() {
+        return targetValue;
+    }
+
+    public void setTargetValue(String targetValue) {
+        this.targetValue = targetValue;
+    }
+    private String resultValue;  // 完成值
+
+    public String getResultValue() {
+        return resultValue;
+    }
+
+    public void setResultValue(String resultValue) {
+        this.resultValue = resultValue;
+    }
+}

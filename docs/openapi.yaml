@@ -1,0 +1,5287 @@
+openapi: 3.0.3
+info:
+  title: 智云 HR - 认证授权 / 组织管理 / 员工管理 API
+  version: 1.0.0
+  description: |
+    Phase 3 一期增量：hris-auth / hris-org / hris-employee 三服务的字段级 API 契约。
+    契约对齐《12 数据库详细设计》DDL 列，统一响应体 {code,message,data,traceId,timestamp}。
+    认证：Authorization: Bearer <JWT>；多租户：租户上下文取自 JWT（网关校验后透传 X-Tenant-Id）。
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: auth
+    description: 认证授权（登录/刷新/登出/当前用户/菜单/MFA/内部建号）
+  - name: org
+    description: 组织管理（部门树/法人/岗位/职务/职级/职级带/编制/汇报线）
+  - name: employee
+    description: 员工管理（花名册/档案/入职转正调动离职/合同/黑名单）
+  - name: flow
+    description: 流程中台（发起/撤回/待办/任务操作/轨迹/模型部署）
+  - name: platform
+    description: 平台支撑（文件/通知/字典/审计/租户参数/报表）
+  - name: att
+    description: 假勤管理（考勤组/班次/排班/打卡/日考勤/异常/假期额度/请假加班出差补卡/月结/报表）
+
+paths:
+  # ===================== auth =====================
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: 账号密码登录（MVP 简化版）
+      description: 返回 access/refresh JWT。验证码与 MFA 逐步认证后续增量接入。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新令牌（轮换）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: 登出（撤销 access 与 refresh）
+      parameters:
+        - in: header
+          name: Authorization
+          schema: { type: string }
+          required: false
+          description: Bearer <accessToken>
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: 当前用户 + 权限摘要 + 租户品牌
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponseEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/menus:
+    get:
+      tags: [auth]
+      summary: 当前用户菜单树（由权限点派生）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MenuNode'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/mfa/bind:
+    post:
+      tags: [auth]
+      summary: 绑定 MFA（TOTP），返回密钥与 otpauth URI
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaBindResponseEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/mfa/verify:
+    post:
+      tags: [auth]
+      summary: 校验 TOTP 动态码（敏感操作二次认证）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaVerifyRequest'
+      responses:
+        '200':
+          description: 校验通过
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /internal/auth/accounts:
+    post:
+      tags: [auth]
+      summary: 入职建号（内部，EMP 域调用）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreateRequest'
+      responses:
+        '200':
+          description: 建号成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountCreateResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/auth/accounts/{empId}/disable:
+    put:
+      tags: [auth]
+      summary: 离职禁用账号（内部，EMP 域调用）
+      parameters:
+        - in: path
+          name: empId
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 禁用成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ===================== org =====================
+  /api/v1/org/depts:
+    get:
+      tags: [org]
+      summary: 部门树/列表查询
+      parameters:
+        - in: query
+          name: tree
+          schema: { type: boolean, default: false }
+          description: true=返回嵌套树，false=返回扁平当前生效部门
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DeptNode'
+    post:
+      tags: [org]
+      summary: 创建部门（版本化生效）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeptRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeptNodeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/depts/{id}:
+    put:
+      tags: [org]
+      summary: 更新部门（写历史快照后变更）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeptRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeptNodeEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/depts/{id}/snapshot:
+    get:
+      tags: [org]
+      summary: 部门历史快照
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: at
+          schema: { type: string, format: date }
+          description: 快照日期（ISO-8601，缺省取最新）
+      responses:
+        '200':
+          description: 成功（data 为快照对象，含 deptId/snapshotDate 及部门字段）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/depts/adjust-requests:
+    post:
+      tags: [org]
+      summary: 发起组织调整申请（ORG_ADJUST 流程，MVP 落单 + 预留 flow）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustRequestCreate'
+      responses:
+        '200':
+          description: 落单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustRequestResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/positions:
+    get:
+      tags: [org]
+      summary: 岗位列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogListEnvelope'
+    post:
+      tags: [org]
+      summary: 创建岗位
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/positions/{id}:
+    put:
+      tags: [org]
+      summary: 更新岗位
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [org]
+      summary: 删除岗位（逻辑删除）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/jobs:
+    get:
+      tags: [org]
+      summary: 职务列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogListEnvelope'
+    post:
+      tags: [org]
+      summary: 创建职务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/jobs/{id}:
+    put:
+      tags: [org]
+      summary: 更新职务
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [org]
+      summary: 删除职务（逻辑删除）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/grades:
+    get:
+      tags: [org]
+      summary: 职级列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogListEnvelope'
+    post:
+      tags: [org]
+      summary: 创建职级
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/grades/{id}:
+    put:
+      tags: [org]
+      summary: 更新职级
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [org]
+      summary: 删除职级（逻辑删除）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/bands:
+    get:
+      tags: [org]
+      summary: 职级带列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogListEnvelope'
+    post:
+      tags: [org]
+      summary: 创建职级带
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/bands/{id}:
+    put:
+      tags: [org]
+      summary: 更新职级带
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [org]
+      summary: 删除职级带（逻辑删除）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/legal-entities:
+    get:
+      tags: [org]
+      summary: 法人主体列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogListEnvelope'
+    post:
+      tags: [org]
+      summary: 创建法人主体
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/legal-entities/{id}:
+    put:
+      tags: [org]
+      summary: 更新法人主体
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/org/headcounts:
+    get:
+      tags: [org]
+      summary: 编制查询
+      parameters:
+        - in: query
+          name: deptId
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: positionId
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: period
+          schema: { type: string }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeadcountUsageListEnvelope'
+    put:
+      tags: [org]
+      summary: 编制设定（按 dept+position+period upsert）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeadcountRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeadcountUsageEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/org/headcounts/usage:
+    get:
+      tags: [org]
+      summary: 编制看板（在编/空缺/占用率）
+      parameters:
+        - in: query
+          name: deptId
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: period
+          schema: { type: string }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeadcountUsageListEnvelope'
+
+  /internal/org/hc/check:
+    get:
+      tags: [org]
+      summary: 编制校验（内部，EMP/RCU 域调用）
+      parameters:
+        - in: query
+          name: dept
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: position
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: count
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HcCheckResponseEnvelope'
+
+  /internal/org/reportline/{empId}:
+    get:
+      tags: [org]
+      summary: 汇报线解析（内部）
+      parameters:
+        - in: path
+          name: empId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功（data 为汇报线员工 ID 链，直属上级优先）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: integer
+                          format: int64
+
+  # ===================== employee =====================
+  /api/v1/emp/employees:
+    get:
+      tags: [employee]
+      summary: 花名册多维筛选 + 分页
+      parameters:
+        - in: query
+          name: name
+          schema: { type: string }
+          description: 姓名模糊
+        - in: query
+          name: empNo
+          schema: { type: string }
+          description: 工号精确
+        - in: query
+          name: status
+          schema: { type: integer }
+          description: 在职状态码（0 待入职 1 试用 2 在职 3 离职中 4 已离职 5 已取消 6 退休 7 黑名单）
+        - in: query
+          name: deptId
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: positionId
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: hireType
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: size
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeBriefPageEnvelope'
+    post:
+      tags: [employee]
+      summary: 建档（状态=待入职）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreateRequest'
+      responses:
+        '200':
+          description: 建档成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeProfileResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/emp/employees/{id}:
+    get:
+      tags: [employee]
+      summary: 档案详情（默认脱敏，证件/手机仅密域角色回明文）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeProfileResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [employee]
+      summary: 更新档案（敏感字段变更落 diff 审计）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeUpdateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeProfileResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/emp/employees/{id}/blacklist:
+    post:
+      tags: [employee]
+      summary: 加入黑名单（终态标记）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: reason
+          schema: { type: string }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/emp/onboardings:
+    post:
+      tags: [employee]
+      summary: 入职单（并发起 EMP_ONBOARD 流程）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardRequest'
+      responses:
+        '200':
+          description: 落单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleCaseResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/emp/regularizations:
+    post:
+      tags: [employee]
+      summary: 转正单（并发起 EMP_REGULAR 流程）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegularizeRequest'
+      responses:
+        '200':
+          description: 落单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleCaseResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/emp/transfers:
+    post:
+      tags: [employee]
+      summary: 调动单（并发起 EMP_TRANSFER 流程）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '200':
+          description: 落单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleCaseResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/emp/resignations:
+    post:
+      tags: [employee]
+      summary: 离职单（并发起 EMP_RESIGN 流程）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResignRequest'
+      responses:
+        '200':
+          description: 落单成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleCaseResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/emp/contracts:
+    get:
+      tags: [employee]
+      summary: 合同台账列表
+      parameters:
+        - in: query
+          name: empId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractListEnvelope'
+    post:
+      tags: [employee]
+      summary: 创建合同
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/emp/contracts/{id}/renew:
+    put:
+      tags: [employee]
+      summary: 合同续签（续签次数 +1，更新结束日）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractRenewRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/emp/contracts/expiring:
+    get:
+      tags: [employee]
+      summary: 合同到期预警（60/30/7 天多级）
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, default: 60 }
+          description: 预警窗口天数
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractExpiringListEnvelope'
+
+  /internal/emp/{id}/profile-brief:
+    get:
+      tags: [employee]
+      summary: 员工档案简报（内部，org 汇报线/rag 用）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功（data 含 empId/name/empNo/status/deptId/positionId/supervisorEmpId/tenantId）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: true
+
+  /internal/emp/pre-hire-links:
+    post:
+      tags: [employee]
+      summary: 生成入职资料自助填报链接（内部）
+      parameters:
+        - in: query
+          name: empId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreHireLinkResponseEnvelope'
+
+  # ===================== flow =====================
+  /api/v1/flow/instances:
+    post:
+      tags: [flow]
+      summary: 发起流程实例（幂等 bizKey）
+      description: 同 tenant+bizType+bizKey 只允许一个流程实例（flow_ext_biz_relation 唯一约束 + 应用层查重）。
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartInstanceRequest'
+      responses:
+        '200':
+          description: 发起成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartInstanceResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/flow/instances/{id}:
+    delete:
+      tags: [flow]
+      summary: 撤回流程实例
+      description: 仅当无已处理节点时允许（docs/04 §5）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: reason
+          schema: { type: string }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+        '409':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/flow/instances/{id}/track:
+    get:
+      tags: [flow]
+      summary: 流程轨迹图数据（节点+状态+耗时）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/flow/tasks/todo:
+    get:
+      tags: [flow]
+      summary: 我的待办（分页聚合）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskViewPageEnvelope'
+
+  /api/v1/flow/tasks/done:
+    get:
+      tags: [flow]
+      summary: 我的已办（分页聚合）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskViewPageEnvelope'
+
+  /api/v1/flow/tasks/cc:
+    get:
+      tags: [flow]
+      summary: 抄送我的（分页聚合）
+      description: MVP 暂返回空页（Flowable 原生无抄送，依赖 platform 通知后续增量）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskViewPageEnvelope'
+
+  /api/v1/flow/tasks/started:
+    get:
+      tags: [flow]
+      summary: 我发起的（分页聚合）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskViewPageEnvelope'
+
+  /api/v1/flow/tasks/{id}/approve:
+    post:
+      tags: [flow]
+      summary: 同意任务
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+
+  /api/v1/flow/tasks/{id}/reject:
+    post:
+      tags: [flow]
+      summary: 驳回任务（终止回发起人策略）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+
+  /api/v1/flow/tasks/{id}/transfer:
+    post:
+      tags: [flow]
+      summary: 转办任务（所有权转移）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+
+  /api/v1/flow/tasks/{id}/add-sign:
+    post:
+      tags: [flow]
+      summary: 加签（MVP 追加候选人并行加签）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+
+  /api/v1/flow/tasks/{id}/withdraw:
+    post:
+      tags: [flow]
+      summary: 撤回任务所在流程实例
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+
+  /api/v1/flow/models:
+    get:
+      tags: [flow]
+      summary: 模型列表（分页）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponsePageEnvelope'
+    post:
+      tags: [flow]
+      summary: 创建模型草稿
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/flow/models/{id}/deploy:
+    post:
+      tags: [flow]
+      summary: 部署模型版本到引擎
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/flow/models/{id}/versions:
+    get:
+      tags: [flow]
+      summary: 查询模型 key 的全部版本
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelVersionListEnvelope'
+
+  /internal/flow/instances:
+    post:
+      tags: [flow]
+      summary: 发起流程实例（内部 Feign，网关封禁外部访问）
+      description: 对齐业务服务的 FlowClient 契约；body 中 tenantId 不信任，以 X-Tenant-Id 头为准。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bizType: { type: string }
+                bizKey: { type: string }
+                procDefKey: { type: string }
+                tenantId: { type: integer, format: int64 }
+                payload: { type: object }
+                variables: { type: object }
+                initiator: { type: integer, format: int64 }
+                assignee: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 发起成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartInstanceResponseEnvelope'
+
+  # ===================== platform =====================
+  /api/v1/plt/files/presign-upload:
+    post:
+      tags: [platform]
+      summary: 文件预签名上传（MinIO 直传）
+      description: 生成 PUT 预签名 URL 并落库文件元数据；MinIO 未就绪时 degraded=true 且 uploadUrl=null。
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignUploadRequest'
+      responses:
+        '200':
+          description: 预签名上传 URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignUploadResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/plt/files/meta/{id}:
+    get:
+      tags: [platform]
+      summary: 文件元数据
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 文件元数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileMetaResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/plt/files/download:
+    get:
+      tags: [platform]
+      summary: 文件下载（签名 URL）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 下载签名 URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileDownloadResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/plt/notifications/templates:
+    get:
+      tags: [platform]
+      summary: 通知模板列表
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: channel, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: 模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListEnvelope'
+    post:
+      tags: [platform]
+      summary: 创建通知模板
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateRequest'
+      responses:
+        '200':
+          description: 模板
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/plt/notifications/templates/{id}:
+    put:
+      tags: [platform]
+      summary: 更新通知模板
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateRequest'
+      responses:
+        '200':
+          description: 模板
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [platform]
+      summary: 删除通知模板
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          $ref: '#/components/responses/EmptyResponse'
+
+  /api/v1/plt/notifications/records:
+    get:
+      tags: [platform]
+      summary: 通知记录分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: userId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: channel, required: false, schema: { type: string } }
+        - { in: query, name: sendStatus, required: false, schema: { type: string } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 记录分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordPageEnvelope'
+
+  /api/v1/plt/dicts/types:
+    get:
+      tags: [platform]
+      summary: 字典类型列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 类型列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictTypeListEnvelope'
+    post:
+      tags: [platform]
+      summary: 创建字典类型
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DictTypeRequest'
+      responses:
+        '200':
+          description: 类型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictTypeResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/plt/dicts/types/{id}:
+    put:
+      tags: [platform]
+      summary: 更新字典类型
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DictTypeRequest'
+      responses:
+        '200':
+          description: 类型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictTypeResponseEnvelope'
+    delete:
+      tags: [platform]
+      summary: 删除字典类型
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          $ref: '#/components/responses/EmptyResponse'
+
+  /api/v1/plt/dicts/types/{typeCode}/items:
+    get:
+      tags: [platform]
+      summary: 字典项列表（按类型编码）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: typeCode, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 字典项列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictItemListEnvelope'
+    post:
+      tags: [platform]
+      summary: 创建字典项
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: typeCode, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DictItemRequest'
+      responses:
+        '200':
+          description: 字典项
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictItemResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/plt/dicts/items/{id}:
+    put:
+      tags: [platform]
+      summary: 更新字典项
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DictItemRequest'
+      responses:
+        '200':
+          description: 字典项
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictItemResponseEnvelope'
+    delete:
+      tags: [platform]
+      summary: 删除字典项（逻辑删除 + 引用保护）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          $ref: '#/components/responses/EmptyResponse'
+
+  /api/v1/plt/audit-logs:
+    get:
+      tags: [platform]
+      summary: 审计日志查询（审计角色）
+      description: 只追加表只读查询；审计角色经网关 perm（plt:audit:read）校验，服务侧按当前租户隔离。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: actorId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: action, required: false, schema: { type: string } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date-time } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date-time } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 审计日志分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPageEnvelope'
+
+  /api/v1/plt/configs:
+    get:
+      tags: [platform]
+      summary: 租户参数列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 配置列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigListEnvelope'
+
+  /api/v1/plt/configs/{key}:
+    get:
+      tags: [platform]
+      summary: 查询租户参数
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: key, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 配置项
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponseEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [platform]
+      summary: 设置租户参数（按 key upsert）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: key, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigRequest'
+      responses:
+        '200':
+          description: 配置项
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponseEnvelope'
+    delete:
+      tags: [platform]
+      summary: 删除租户参数
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: key, required: true, schema: { type: string } }
+      responses:
+        '200':
+          $ref: '#/components/responses/EmptyResponse'
+
+  /api/v1/plt/reports/defs:
+    get:
+      tags: [platform]
+      summary: 报表定义列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 报表定义列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDefListEnvelope'
+    post:
+      tags: [platform]
+      summary: 创建报表定义
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportDefRequest'
+      responses:
+        '200':
+          description: 报表定义
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDefResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/plt/reports/defs/{id}:
+    put:
+      tags: [platform]
+      summary: 更新报表定义
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportDefRequest'
+      responses:
+        '200':
+          description: 报表定义
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDefResponseEnvelope'
+    delete:
+      tags: [platform]
+      summary: 删除报表定义
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          $ref: '#/components/responses/EmptyResponse'
+
+  /api/v1/plt/reports/exports:
+    post:
+      tags: [platform]
+      summary: 创建异步导出任务
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportTaskRequest'
+      responses:
+        '200':
+          description: 导出任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportTaskResponseEnvelope'
+    get:
+      tags: [platform]
+      summary: 导出任务分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: status, required: false, schema: { type: string } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 导出任务分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportTaskPageEnvelope'
+
+  # ===================== att（二期·假勤） =====================
+  /api/v1/att/groups:
+    get:
+      tags: [att]
+      summary: 考勤班组列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttGroupListEnvelope'
+    post:
+      tags: [att]
+      summary: 创建考勤班组
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttGroupRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttGroupEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/groups/{id}:
+    get:
+      tags: [att]
+      summary: 考勤班组详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttGroupEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [att]
+      summary: 更新考勤班组
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttGroupRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttGroupEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/shifts:
+    get:
+      tags: [att]
+      summary: 班次列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftListEnvelope'
+    post:
+      tags: [att]
+      summary: 创建班次（固定/弹性/跨天）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShiftRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/shifts/{id}:
+    get:
+      tags: [att]
+      summary: 班次详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [att]
+      summary: 更新班次
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShiftRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/assignments:
+    get:
+      tags: [att]
+      summary: 排班分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: shiftId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentPageEnvelope'
+
+  /api/v1/att/assignments/batch:
+    post:
+      tags: [att]
+      summary: 区间批量排班（每人每天绑定同一班次）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentBatchRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentBatchResultEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/assignments/cycle:
+    post:
+      tags: [att]
+      summary: 周期模板排班（DAILY / REST_ONE / BIG_SMALL_WEEK）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentCycleRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentBatchResultEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/punches:
+    get:
+      tags: [att]
+      summary: 打卡记录分页查询（带时间区间以命中分区键）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date-time } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date-time } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PunchPageEnvelope'
+    post:
+      tags: [att]
+      summary: 打卡写入（幂等：uk(tenant_id, emp_id, punch_time)）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PunchCreateRequest'
+      responses:
+        '200':
+          description: 成功；重复打卡返回已存在的原记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PunchEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/punches/today:
+    get:
+      tags: [att]
+      summary: 当日考勤状态自助查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PunchTodayEnvelope'
+
+  /api/v1/att/daily:
+    get:
+      tags: [att]
+      summary: 日考勤结果分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: attStatus, required: false, schema: { type: string } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyAttendancePageEnvelope'
+
+  /api/v1/att/daily/compute:
+    post:
+      tags: [att]
+      summary: 触发日考勤计算（幂等 upsert + 异常生成）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyComputeRequest'
+      responses:
+        '200':
+          description: 成功（data 含员工数与状态分布）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyComputeResultEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/daily/{empId}/{workDate}:
+    get:
+      tags: [att]
+      summary: 某员工某日考勤明细
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: empId, required: true, schema: { type: integer, format: int64 } }
+        - { in: path, name: workDate, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyAttendanceEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/exceptions:
+    get:
+      tags: [att]
+      summary: 考勤异常分页查询（工作台）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: exceptionType, required: false, schema: { type: string } }
+        - { in: query, name: status, required: false, schema: { type: string } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttExceptionPageEnvelope'
+
+  /api/v1/att/exceptions/{id}/handle:
+    post:
+      tags: [att]
+      summary: 单条异常处理（RESOLVE 认定 / IGNORE 豁免）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExceptionHandleRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttExceptionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/exceptions/batch-handle:
+    post:
+      tags: [att]
+      summary: 批量异常处理
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExceptionBatchHandleRequest'
+      responses:
+        '200':
+          description: 成功（data 含 success 与失败 ID 列表）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExceptionHandleResultEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-types:
+    get:
+      tags: [att]
+      summary: 假种列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeListEnvelope'
+    post:
+      tags: [att]
+      summary: 创建假种
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveTypeRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-types/{id}:
+    get:
+      tags: [att]
+      summary: 假种详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [att]
+      summary: 更新假种
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveTypeRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/leave-quotas:
+    get:
+      tags: [att]
+      summary: 假期额度查询（按员工 + 周期）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: period, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveQuotaListEnvelope'
+
+  /api/v1/att/leave-quotas/me:
+    get:
+      tags: [att]
+      summary: 员工假期余额自助视图
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+              $ref: '#/components/schemas/QuotaBalanceEnvelope'
+
+  /api/v1/att/leave-quotas/grant:
+    post:
+      tags: [att]
+      summary: 额度发放（正增负减），落台账流水
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaGrantRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveQuotaEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-quotas/transfer:
+    post:
+      tags: [att]
+      summary: 额度结转（受假种 rules.carryOverMax 约束）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaTransferRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveQuotaEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-quotas/ledgers:
+    get:
+      tags: [att]
+      summary: 额度流水（台账）查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: leaveTypeId, required: false, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveLedgerListEnvelope'
+
+  /api/v1/att/leave-requests:
+    get:
+      tags: [att]
+      summary: 请假单分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: status, required: false, schema: { type: string } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestPageEnvelope'
+    post:
+      tags: [att]
+      summary: 提交请假单（校验假种与额度后发起 ATT_LEAVE 审批）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-requests/{id}:
+    get:
+      tags: [att]
+      summary: 请假单详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/leave-requests/{id}/approve:
+    post:
+      tags: [att]
+      summary: 请假审批通过（扣减假期额度）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-requests/{id}/reject:
+    post:
+      tags: [att]
+      summary: 请假审批驳回（不扣额度）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-requests/{id}/cancel:
+    post:
+      tags: [att]
+      summary: 撤销请假单（仅 DRAFT / PROCESSING）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/leave-requests/{id}/revoke:
+    post:
+      tags: [att]
+      summary: 销假（提前返岗，退还未休额度）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveRevokeRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/overtime-requests:
+    get:
+      tags: [att]
+      summary: 加班单分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: status, required: false, schema: { type: string } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimePageEnvelope'
+    post:
+      tags: [att]
+      summary: 提交加班单（事前审批 / 事后补录）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OvertimeCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/overtime-requests/{id}:
+    get:
+      tags: [att]
+      summary: 加班单详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/overtime-requests/{id}/approve:
+    post:
+      tags: [att]
+      summary: 加班审批通过
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OvertimeActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/overtime-requests/{id}/reject:
+    post:
+      tags: [att]
+      summary: 加班审批驳回
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OvertimeActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/trip-requests:
+    get:
+      tags: [att]
+      summary: 出差单分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: status, required: false, schema: { type: string } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripPageEnvelope'
+    post:
+      tags: [att]
+      summary: 提交出差单（与已审批请假单互斥校验）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/trip-requests/{id}:
+    get:
+      tags: [att]
+      summary: 出差单详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/trip-requests/{id}/approve:
+    post:
+      tags: [att]
+      summary: 出差审批通过
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/trip-requests/{id}/reject:
+    post:
+      tags: [att]
+      summary: 出差审批驳回
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/fix-requests:
+    get:
+      tags: [att]
+      summary: 补卡单分页查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: empId, required: false, schema: { type: integer, format: int64 } }
+        - { in: query, name: status, required: false, schema: { type: string } }
+        - { in: query, name: from, required: false, schema: { type: string, format: date } }
+        - { in: query, name: to, required: false, schema: { type: string, format: date } }
+        - { in: query, name: page, required: false, schema: { type: integer, default: 1 } }
+        - { in: query, name: size, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixPageEnvelope'
+    post:
+      tags: [att]
+      summary: 提交补卡单（月度次数上限 3 次）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/fix-requests/{id}:
+    get:
+      tags: [att]
+      summary: 补卡单详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/fix-requests/{id}/approve:
+    post:
+      tags: [att]
+      summary: 补卡审批通过（补写一条 source=FIX 的打卡记录）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/fix-requests/{id}/reject:
+    post:
+      tags: [att]
+      summary: 补卡审批驳回
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/payroll-cycles:
+    get:
+      tags: [att]
+      summary: 薪酬取数周期列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleListEnvelope'
+    post:
+      tags: [att]
+      summary: 创建薪酬取数周期
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CycleRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/payroll-cycles/{id}:
+    get:
+      tags: [att]
+      summary: 周期详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [att]
+      summary: 更新周期
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CycleRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/att/payroll-cycles/{id}/close:
+    post:
+      tags: [att]
+      summary: 关闭周期
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/closings:
+    get:
+      tags: [att]
+      summary: 月结批次列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosingListEnvelope'
+
+  /api/v1/att/closings/run:
+    post:
+      tags: [att]
+      summary: 执行月结（前置校验：周期内未决异常必须为 0）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClosingRunRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosingEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/closings/{periodCode}:
+    get:
+      tags: [att]
+      summary: 月结结果集（状态分布 + 加班/请假时长 + 调整项数）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: periodCode
+          required: true
+          schema: { type: string, example: '2026-01' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosingDetailEnvelope'
+
+  /api/v1/att/closings/adjustments:
+    get:
+      tags: [att]
+      summary: 月结调整项查询
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: closingId, required: false, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentListEnvelope'
+    post:
+      tags: [att]
+      summary: 新增月结调整项（锁账后唯一可影响下期的通道）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustmentCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/reports/attendance-rate:
+    get:
+      tags: [att]
+      summary: 出勤率统计（按员工聚合）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: from, required: true, schema: { type: string, format: date } }
+        - { in: query, name: to, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceRateListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/reports/overtime:
+    get:
+      tags: [att]
+      summary: 加班时长统计（仅审批通过单）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: from, required: true, schema: { type: string, format: date } }
+        - { in: query, name: to, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OvertimeStatListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/att/reports/leave-consume:
+    get:
+      tags: [att]
+      summary: 假期消耗统计（按假种聚合）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: period, required: true, schema: { type: string, example: '2026' } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveConsumeListEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/att/daily:
+    get:
+      tags: [att]
+      summary: 日考勤取数（内部，供 CMP 算薪）
+      parameters:
+        - { in: query, name: empId, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: from, required: true, schema: { type: string, format: date } }
+        - { in: query, name: to, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyAttendanceListEnvelope'
+
+  /internal/att/monthly/{periodCode}:
+    get:
+      tags: [att]
+      summary: 月结结果集（内部，供 CMP 算薪）
+      parameters:
+        - in: path
+          name: periodCode
+          required: true
+          schema: { type: string, example: '2026-01' }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosingDetailEnvelope'
+
+  /internal/att/approval-callback:
+    post:
+      tags: [att]
+      summary: 审批结果回调（内部，flow 调用，幂等）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalCallbackRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalCallbackResponseEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiEnvelope'
+    Unauthorized:
+      description: 未认证或凭证失效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiEnvelope'
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiEnvelope'
+    EmptyResponse:
+      description: 成功（无数据载荷）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EmptyEnvelope'
+
+  schemas:
+    ApiEnvelope:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 0=成功，非 0=错误（分段见 docs/07 §2）
+        message:
+          type: string
+        traceId:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+
+    EmptyEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              nullable: true
+
+    TokenResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TokenResponse'
+
+    MeResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MeResponse'
+
+    MfaBindResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MfaBindResponse'
+
+    AccountCreateResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AccountCreateResponse'
+
+    DeptNodeEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DeptNode'
+
+    AdjustRequestResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdjustRequestResponse'
+
+    CatalogListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/CatalogResponse'
+
+    CatalogEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CatalogResponse'
+
+    HeadcountUsageListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/HeadcountUsage'
+
+    HeadcountUsageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HeadcountUsage'
+
+    HcCheckResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HcCheckResponse'
+
+    # ---------- auth DTO ----------
+    LoginRequest:
+      type: object
+      required: [tenantCode, username, password]
+      properties:
+        tenantCode: { type: string, description: 租户编码 }
+        username: { type: string, description: 登录用户名 }
+        password: { type: string, description: 明文密码 }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken: { type: string, description: 撤销 refresh 令牌族 }
+
+    TokenResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, description: Bearer }
+        expiresIn: { type: integer, description: access 有效期（秒） }
+        refreshExpiresIn: { type: integer, description: refresh 有效期（秒） }
+
+    MeResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserInfo'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleInfo'
+        perms:
+          type: array
+          items: { type: string }
+          description: 权限点（模块:资源:动作）
+        dataScopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataScopeInfo'
+        tenant:
+          $ref: '#/components/schemas/TenantBrand'
+
+    UserInfo:
+      type: object
+      properties:
+        userId: { type: integer, format: int64 }
+        employeeId: { type: integer, format: int64 }
+        username: { type: string }
+        status: { type: integer, description: 1=正常 0=禁用 }
+
+    RoleInfo:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+
+    DataScopeInfo:
+      type: object
+      properties:
+        roleCode: { type: string }
+        scopeType: { type: string, description: SELF/DEPT/DEPT_SUB/CUSTOM/ALL }
+        deptIds: { type: string, description: CUSTOM 时的部门 ID 集合（JSON 数组） }
+
+    TenantBrand:
+      type: object
+      properties:
+        tenantId: { type: integer, format: int64 }
+        code: { type: string }
+        name: { type: string }
+        plan: { type: string }
+        timezone: { type: string }
+        domain: { type: string }
+
+    MenuNode:
+      type: object
+      properties:
+        code: { type: string, description: 权限点前缀/编码 }
+        name: { type: string, description: 显示名 }
+        type: { type: string, description: module/menu/button }
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuNode'
+
+    MfaBindResponse:
+      type: object
+      properties:
+        secret: { type: string, description: Base32 TOTP 密钥 }
+        otpauthUrl: { type: string, description: 扫码 URI }
+
+    MfaVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, description: 6 位 TOTP 动态码 }
+
+    AccountCreateRequest:
+      type: object
+      required: [tenantId, employeeId, username, password]
+      properties:
+        tenantId: { type: integer, format: int64 }
+        employeeId: { type: integer, format: int64 }
+        username: { type: string }
+        password: { type: string }
+        roleCodes:
+          type: array
+          items: { type: string }
+
+    AccountCreateResponse:
+      type: object
+      properties:
+        userId: { type: integer, format: int64 }
+        tenantId: { type: integer, format: int64 }
+        employeeId: { type: integer, format: int64 }
+
+    # ---------- org DTO ----------
+    DeptRequest:
+      type: object
+      required: [name, effectiveFrom]
+      properties:
+        name: { type: string, description: 部门名称 }
+        code: { type: string, description: 部门编码（空则自动生成） }
+        parentId: { type: integer, format: int64, description: 父部门 ID，0=根 }
+        managerEmpId: { type: integer, format: int64, description: 部门负责人员工 ID }
+        effectiveFrom: { type: string, format: date, description: 生效开始日 }
+        effectiveTo: { type: string, format: date, description: 生效结束日（空=现行） }
+        status: { type: integer, description: 1=有效 0=失效 }
+
+    DeptNode:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        parentId: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        path: { type: string, description: 物化路径 }
+        managerEmpId: { type: integer, format: int64 }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, format: date }
+        status: { type: integer }
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeptNode'
+
+    AdjustRequestCreate:
+      type: object
+      required: [action, payload]
+      properties:
+        action: { type: string, description: CREATE/UPDATE/MERGE/DISSOLVE }
+        deptId: { type: integer, format: int64 }
+        payload:
+          $ref: '#/components/schemas/DeptRequest'
+        reason: { type: string }
+
+    AdjustRequestResponse:
+      type: object
+      properties:
+        bizKey: { type: string }
+        status: { type: string, description: PENDING 等 }
+        flowInstanceId: { type: string, description: flow 就绪后回填 }
+
+    CatalogRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        code: { type: string, description: 编码（空则自动生成） }
+        status: { type: integer, description: 1=有效 0=失效 }
+        gradeBandId: { type: integer, format: int64, description: 仅职级使用 }
+
+    CatalogResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        status: { type: integer }
+        gradeBandId: { type: integer, format: int64 }
+
+    HeadcountRequest:
+      type: object
+      required: [deptId, positionId, period, quota]
+      properties:
+        deptId: { type: integer, format: int64 }
+        positionId: { type: integer, format: int64 }
+        period: { type: string, description: 编制周期（如 2026Q1） }
+        quota: { type: integer, description: 编制数 }
+
+    HeadcountUsage:
+      type: object
+      properties:
+        deptId: { type: integer, format: int64 }
+        positionId: { type: integer, format: int64 }
+        period: { type: string }
+        quota: { type: integer }
+        occupied: { type: integer }
+        vacancy: { type: integer }
+        usageRate: { type: number, format: double }
+
+    HcCheckResponse:
+      type: object
+      properties:
+        allowed: { type: boolean }
+        quota: { type: integer }
+        occupied: { type: integer }
+        shortfall: { type: integer, description: 缺口数（0=满足） }
+
+    # ---------- employee DTO ----------
+    EmployeeBriefPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EmployeeBrief'
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    EmployeeProfileResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/EmployeeProfileResponse'
+
+    LifecycleCaseResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LifecycleCaseResponse'
+
+    ContractListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContractResponse'
+
+    ContractEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ContractResponse'
+
+    ContractExpiringListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContractExpiringItem'
+
+    PreHireLinkResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PreHireLinkResponse'
+
+    EmployeeBrief:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empNo: { type: string }
+        name: { type: string }
+        gender: { type: string }
+        status: { type: integer }
+        statusLabel: { type: string }
+        blacklisted: { type: integer }
+        certNoMask: { type: string }
+        mobileMask: { type: string }
+        email: { type: string }
+        deptId: { type: integer, format: int64 }
+        positionId: { type: integer, format: int64 }
+        hireType: { type: string }
+        supervisorEmpId: { type: integer, format: int64 }
+
+    EmployeeCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        certType: { type: string, description: 默认 ID_CARD }
+        certNo: { type: string, description: 证件号明文（密域） }
+        mobile: { type: string, description: 手机号明文（密域） }
+        email: { type: string }
+        gender: { type: string, description: M/F }
+        birthDate: { type: string, format: date }
+        empNoPrefix: { type: string, description: 工号前缀 }
+        educations: { type: array, items: { $ref: '#/components/schemas/ProfileEducationDto' } }
+        works: { type: array, items: { $ref: '#/components/schemas/ProfileWorkDto' } }
+        families: { type: array, items: { $ref: '#/components/schemas/ProfileFamilyDto' } }
+        emergencies: { type: array, items: { $ref: '#/components/schemas/ProfileEmergencyDto' } }
+
+    EmployeeUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string }
+        gender: { type: string }
+        birthDate: { type: string, format: date }
+        certType: { type: string }
+        certNo: { type: string }
+        mobile: { type: string }
+        educations: { type: array, items: { $ref: '#/components/schemas/ProfileEducationDto' } }
+        works: { type: array, items: { $ref: '#/components/schemas/ProfileWorkDto' } }
+        families: { type: array, items: { $ref: '#/components/schemas/ProfileFamilyDto' } }
+        emergencies: { type: array, items: { $ref: '#/components/schemas/ProfileEmergencyDto' } }
+
+    EmployeeProfileResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empNo: { type: string }
+        name: { type: string }
+        gender: { type: string }
+        birthDate: { type: string, format: date }
+        email: { type: string }
+        status: { type: integer }
+        statusLabel: { type: string }
+        blacklisted: { type: integer }
+        certNoMask: { type: string }
+        mobileMask: { type: string }
+        certNo: { type: string, description: 仅密域角色回填 }
+        mobile: { type: string, description: 仅密域角色回填 }
+        employment:
+          $ref: '#/components/schemas/EmploymentInfo'
+        educations: { type: array, items: { $ref: '#/components/schemas/ProfileEducationDto' } }
+        works: { type: array, items: { $ref: '#/components/schemas/ProfileWorkDto' } }
+        families: { type: array, items: { $ref: '#/components/schemas/ProfileFamilyDto' } }
+        emergencies: { type: array, items: { $ref: '#/components/schemas/ProfileEmergencyDto' } }
+
+    EmploymentInfo:
+      type: object
+      properties:
+        legalEntityId: { type: integer, format: int64 }
+        deptId: { type: integer, format: int64 }
+        positionId: { type: integer, format: int64 }
+        gradeId: { type: integer, format: int64 }
+        hireType: { type: string }
+        supervisorEmpId: { type: integer, format: int64 }
+        effectiveFrom: { type: string, format: date }
+
+    ProfileEducationDto:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        school: { type: string }
+        major: { type: string }
+        degree: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+
+    ProfileWorkDto:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        company: { type: string }
+        positionName: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        description: { type: string }
+
+    ProfileFamilyDto:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        relation: { type: string }
+        phone: { type: string }
+        company: { type: string }
+
+    ProfileEmergencyDto:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        relation: { type: string }
+        phone: { type: string }
+        address: { type: string }
+
+    OnboardRequest:
+      type: object
+      required: [empId, legalEntityId, deptId, positionId, hireType, hireDate]
+      properties:
+        empId: { type: integer, format: int64 }
+        legalEntityId: { type: integer, format: int64 }
+        deptId: { type: integer, format: int64 }
+        positionId: { type: integer, format: int64 }
+        gradeId: { type: integer, format: int64 }
+        hireType: { type: string }
+        supervisorEmpId: { type: integer, format: int64 }
+        hireDate: { type: string, format: date }
+        username: { type: string, description: 空则取工号 }
+        password: { type: string, description: 空则生成随机初密 }
+        roleCodes: { type: array, items: { type: string } }
+        reason: { type: string }
+
+    RegularizeRequest:
+      type: object
+      required: [empId, regularDate]
+      properties:
+        empId: { type: integer, format: int64 }
+        regularDate: { type: string, format: date }
+        comment: { type: string }
+        reason: { type: string }
+
+    TransferRequest:
+      type: object
+      required: [empId, targetDeptId, targetPositionId, effectDate]
+      properties:
+        empId: { type: integer, format: int64 }
+        targetDeptId: { type: integer, format: int64 }
+        targetPositionId: { type: integer, format: int64 }
+        targetGradeId: { type: integer, format: int64 }
+        targetSupervisorEmpId: { type: integer, format: int64 }
+        effectDate: { type: string, format: date }
+        reason: { type: string }
+
+    ResignRequest:
+      type: object
+      required: [empId, lastWorkDate]
+      properties:
+        empId: { type: integer, format: int64 }
+        lastWorkDate: { type: string, format: date }
+        resignType: { type: string, description: EMPLOYEE/COMPANY }
+        reason: { type: string }
+
+    LifecycleCaseResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        type: { type: string, description: ONBOARD/REGULAR/TRANSFER/RESIGN }
+        bizKey: { type: string }
+        state: { type: string, description: DRAFT/PROCESSING/DONE/CANCELLED }
+        effectDate: { type: string, format: date }
+        flowInstanceId: { type: string, description: flow 就绪后回填 }
+
+    ContractCreateRequest:
+      type: object
+      required: [empId, type, startDate]
+      properties:
+        empId: { type: integer, format: int64 }
+        type: { type: string, description: FIXED/OPEN_ENDED/INTERN }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        probationEnd: { type: string, format: date }
+        fileId: { type: integer, format: int64 }
+        contractNo: { type: string, description: 空则自动生成 }
+
+    ContractRenewRequest:
+      type: object
+      required: [newEndDate]
+      properties:
+        newEndDate: { type: string, format: date }
+
+    ContractResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        contractNo: { type: string }
+        type: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        probationEnd: { type: string, format: date }
+        renewCnt: { type: integer }
+        fileId: { type: integer, format: int64 }
+        status: { type: integer, description: 1=有效 0=终止 }
+
+    ContractExpiringItem:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        empNo: { type: string }
+        name: { type: string }
+        contractNo: { type: string }
+        endDate: { type: string, format: date }
+        daysToExpire: { type: integer }
+        level: { type: string, description: LEVEL_7/LEVEL_30/LEVEL_60 }
+
+    PreHireLinkResponse:
+      type: object
+      properties:
+        empId: { type: integer, format: int64 }
+        token: { type: string }
+        link: { type: string }
+        expireAt: { type: string, format: date-time }
+
+    # ===================== flow schemas =====================
+    StartInstanceRequest:
+      type: object
+      required: [bizType, bizKey]
+      properties:
+        bizType: { type: string, description: 业务类型，兼作流程定义 Key }
+        bizKey: { type: string, description: 业务单号（租户内唯一，幂等键） }
+        procDefKey: { type: string, description: 缺省取 bizType }
+        payload: { type: object, description: 业务快照（不落库，仅路由摘要） }
+        variables: { type: object, description: 路由变量（非敏感） }
+        initiator: { type: integer, format: int64, description: 发起人，缺省取当前用户 }
+        assignee: { type: integer, format: int64, description: 指定审批人 }
+
+    StartInstanceResponse:
+      type: object
+      properties:
+        instanceId: { type: string }
+        bizType: { type: string }
+        bizKey: { type: string }
+        status: { type: string, description: RUNNING/FINISHED/TERMINATED }
+
+    StartInstanceResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/StartInstanceResponse'
+
+    TaskView:
+      type: object
+      properties:
+        taskId: { type: string, nullable: true }
+        instanceId: { type: string }
+        procDefKey: { type: string }
+        bizType: { type: string }
+        bizKey: { type: string }
+        nodeName: { type: string }
+        assignee: { type: string }
+        status: { type: string, description: TODO/DONE/RUNNING/FINISHED }
+        startTime: { type: string, format: date-time }
+        createTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        durationInMillis: { type: integer, format: int64 }
+
+    TaskViewPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/TaskView' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    TaskActionRequest:
+      type: object
+      properties:
+        comment: { type: string, description: 审批意见 }
+        attachments: { type: array, items: { type: integer, format: int64 }, description: 附件 fileId 列表 }
+        targetUserId: { type: integer, format: int64, description: 转办/加签目标用户 }
+
+    TrackNode:
+      type: object
+      properties:
+        nodeId: { type: string }
+        nodeName: { type: string }
+        type: { type: string }
+        assignee: { type: string }
+        status: { type: string, description: COMPLETED/ACTIVE/PENDING }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        durationInMillis: { type: integer, format: int64 }
+
+    TrackResponse:
+      type: object
+      properties:
+        instanceId: { type: string }
+        status: { type: string }
+        startUserId: { type: string }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        nodes: { type: array, items: { $ref: '#/components/schemas/TrackNode' } }
+
+    TrackResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TrackResponse'
+
+    ModelCreateRequest:
+      type: object
+      required: [procDefKey, bpmnXml]
+      properties:
+        procDefKey: { type: string }
+        bpmnXml: { type: string }
+        formSchemaJson: { type: string }
+
+    ModelResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        procDefKey: { type: string }
+        version: { type: integer }
+        deployState: { type: string, description: DRAFT/DEPLOYED }
+        createdAt: { type: string, format: date-time }
+
+    ModelResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ModelResponse'
+
+    ModelVersionResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        version: { type: integer }
+        deployState: { type: string, description: DRAFT/DEPLOYED }
+        createdAt: { type: string, format: date-time }
+
+    DeployResponse:
+      type: object
+      properties:
+        modelId: { type: integer, format: int64 }
+        procDefKey: { type: string }
+        version: { type: integer }
+        deploymentId: { type: string }
+
+    DeployResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DeployResponse'
+
+    ModelResponsePageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/ModelResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    ModelVersionListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ModelVersionResponse'
+
+    # ===================== platform schemas =====================
+    PresignUploadRequest:
+      type: object
+      required: [fileName]
+      properties:
+        fileName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        watermarkPolicy: { type: string, description: 预留水印策略（合同/薪酬类敏感文件下载时启用） }
+        module: { type: string, description: 业务模块，用于对象键分目录 }
+
+    PresignUploadResponse:
+      type: object
+      properties:
+        fileId: { type: integer, format: int64 }
+        objectKey: { type: string }
+        uploadUrl: { type: string, description: PUT 预签名 URL；MinIO 未就绪时为 null }
+        degraded: { type: boolean, description: true=MinIO 未就绪，降级 }
+
+    PresignUploadResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PresignUploadResponse'
+
+    FileMetaResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        bucket: { type: string }
+        objectKey: { type: string }
+        fileName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        watermarkPolicy: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    FileMetaResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/FileMetaResponse'
+
+    FileDownloadResponse:
+      type: object
+      properties:
+        fileId: { type: integer, format: int64 }
+        downloadUrl: { type: string, description: GET 预签名 URL；MinIO 未就绪时为 null }
+        degraded: { type: boolean }
+
+    FileDownloadResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/FileDownloadResponse'
+
+    TemplateRequest:
+      type: object
+      required: [code, channel]
+      properties:
+        code: { type: string }
+        channel: { type: string, description: EMAIL/SMS/APP/WECOM }
+        subject: { type: string }
+        content: { type: string, description: '支持占位符，形式为花括号包裹的参数名' }
+
+    TemplateResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        code: { type: string }
+        channel: { type: string }
+        subject: { type: string }
+        content: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    TemplateResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TemplateResponse'
+
+    TemplateListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TemplateResponse'
+
+    RecordResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        userId: { type: integer, format: int64 }
+        templateId: { type: integer, format: int64 }
+        channel: { type: string }
+        sendStatus: { type: string, description: PENDING/SENT/FAILED }
+        sentAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    RecordPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/RecordResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    DictTypeRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        code: { type: string, description: 空则自动生成 }
+
+    DictTypeResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    DictTypeResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DictTypeResponse'
+
+    DictTypeListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DictTypeResponse'
+
+    DictItemRequest:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string }
+        value: { type: string, description: 空则取 label }
+        sort: { type: integer }
+
+    DictItemResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        typeCode: { type: string }
+        label: { type: string }
+        value: { type: string }
+        sort: { type: integer }
+
+    DictItemResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DictItemResponse'
+
+    DictItemListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DictItemResponse'
+
+    AuditLogResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        tenantId: { type: integer, format: int64 }
+        actorId: { type: integer, format: int64 }
+        action: { type: string }
+        resource: { type: string }
+        detail: { type: object }
+        ip: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    AuditLogPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/AuditLogResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    ConfigRequest:
+      type: object
+      properties:
+        configValue: { type: string }
+
+    ConfigResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        configKey: { type: string }
+        configValue: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    ConfigResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ConfigResponse'
+
+    ConfigListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConfigResponse'
+
+    ReportDefRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        code: { type: string, description: 空则自动生成 }
+        defJson: { type: string }
+
+    ReportDefResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        defJson: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    ReportDefResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportDefResponse'
+
+    ReportDefListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReportDefResponse'
+
+    ExportTaskRequest:
+      type: object
+      properties:
+        reportDefId: { type: integer, format: int64 }
+
+    ExportTaskResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        reportDefId: { type: integer, format: int64 }
+        status: { type: string, description: PENDING/RUNNING/DONE/FAILED }
+        fileId: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+
+    ExportTaskResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ExportTaskResponse'
+
+    ExportTaskPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/ExportTaskResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    # ---------------- att：考勤班组 / 班次 / 排班 ----------------
+    AttGroupRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: '总部职能考勤组' }
+        code: { type: string, example: 'HQ_FUNC' }
+        leaderEmpId: { type: integer, format: int64 }
+
+    AttGroupResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        leaderEmpId: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AttGroupEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AttGroupResponse'
+
+    AttGroupListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AttGroupResponse'
+
+    ShiftRequest:
+      type: object
+      required: [name, startTime, endTime]
+      properties:
+        name: { type: string, example: '行政班' }
+        code: { type: string, example: 'D001' }
+        startTime: { type: string, example: '09:00:00' }
+        endTime: { type: string, example: '18:00:00' }
+        flexible: { type: integer, enum: [0, 1], default: 0 }
+
+    ShiftResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        startTime: { type: string, example: '09:00:00' }
+        endTime: { type: string, example: '18:00:00' }
+        flexible: { type: integer, enum: [0, 1] }
+        crossDay: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ShiftEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ShiftResponse'
+
+    ShiftListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ShiftResponse'
+
+    AssignmentBatchRequest:
+      type: object
+      required: [empIds, shiftId, fromDate, toDate]
+      properties:
+        empIds: { type: array, items: { type: integer, format: int64 } }
+        shiftId: { type: integer, format: int64 }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+
+    AssignmentCycleRequest:
+      type: object
+      required: [empIds, shiftId, fromDate, toDate, pattern]
+      properties:
+        empIds: { type: array, items: { type: integer, format: int64 } }
+        shiftId: { type: integer, format: int64 }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        pattern: { type: string, enum: [DAILY, REST_ONE, BIG_SMALL_WEEK], example: 'REST_ONE' }
+
+    AssignmentResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        shiftId: { type: integer, format: int64 }
+        workDate: { type: string, format: date }
+        shiftName: { type: string }
+        startTime: { type: string, example: '09:00:00' }
+        endTime: { type: string, example: '18:00:00' }
+
+    AssignmentPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/AssignmentResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    AssignmentBatchResult:
+      type: object
+      properties:
+        requested: { type: integer }
+        created: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+
+    AssignmentBatchResultEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AssignmentBatchResult'
+
+    # ---------------- att：打卡 / 日考勤 / 异常 ----------------
+    PunchCreateRequest:
+      type: object
+      required: [empId, punchTime, type]
+      properties:
+        empId: { type: integer, format: int64 }
+        punchTime: { type: string, format: date-time }
+        type: { type: string, enum: [IN, OUT] }
+        source: { type: string, enum: [APP, DEVICE, GPS], default: APP }
+        location: { type: string, example: '深圳市南山区科技园' }
+        deviceId: { type: string }
+        attGroupId: { type: integer, format: int64 }
+
+    PunchResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        punchTime: { type: string, format: date-time }
+        type: { type: string }
+        source: { type: string }
+        location: { type: string }
+        deviceId: { type: string }
+        attGroupId: { type: integer, format: int64 }
+        status: { type: integer, enum: [0, 1] }
+        createdAt: { type: string, format: date-time }
+
+    PunchEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PunchResponse'
+
+    PunchPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/PunchResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    PunchTodayResponse:
+      type: object
+      properties:
+        empId: { type: integer, format: int64 }
+        workDate: { type: string, format: date }
+        shiftName: { type: string }
+        punchIn: { type: string, format: date-time }
+        punchOut: { type: string, format: date-time }
+        punchStatus: { type: string, enum: [NOT_PUNCHED, PUNCHED_IN, PUNCHED_OUT] }
+
+    PunchTodayEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PunchTodayResponse'
+
+    DailyComputeRequest:
+      type: object
+      required: [workDate]
+      properties:
+        workDate: { type: string, format: date }
+        empIds:
+          type: array
+          items: { type: integer, format: int64 }
+          description: 为空表示对该日有排班的全部员工重算
+
+    DailyComputeResult:
+      type: object
+      properties:
+        workDate: { type: string, format: date }
+        employeeCount: { type: integer }
+        normalCount: { type: integer }
+        lateCount: { type: integer }
+        earlyCount: { type: integer }
+        absentCount: { type: integer }
+        leaveCount: { type: integer }
+        newExceptionCount: { type: integer }
+
+    DailyComputeResultEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DailyComputeResult'
+
+    DailyAttendanceResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        workDate: { type: string, format: date }
+        employmentId: { type: integer, format: int64 }
+        attStatus: { type: string, enum: [NORMAL, LATE, EARLY, ABSENT, LEAVE] }
+        punchIn: { type: string, format: date-time }
+        punchOut: { type: string, format: date-time }
+        leaveHours: { type: number, format: decimal }
+        overtimeHours: { type: number, format: decimal }
+        updatedAt: { type: string, format: date-time }
+
+    DailyAttendanceEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DailyAttendanceResponse'
+
+    DailyAttendanceListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DailyAttendanceResponse'
+
+    DailyAttendancePageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/DailyAttendanceResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    ExceptionHandleRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [RESOLVE, IGNORE] }
+        remark: { type: string }
+
+    ExceptionBatchHandleRequest:
+      type: object
+      required: [ids, action]
+      properties:
+        ids: { type: array, items: { type: integer, format: int64 } }
+        action: { type: string, enum: [RESOLVE, IGNORE] }
+        remark: { type: string }
+
+    ExceptionHandleResult:
+      type: object
+      properties:
+        total: { type: integer }
+        success: { type: integer }
+        failedIds: { type: array, items: { type: integer, format: int64 } }
+
+    ExceptionHandleResultEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ExceptionHandleResult'
+
+    AttExceptionResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        workDate: { type: string, format: date }
+        exceptionType: { type: string, enum: [LATE, EARLY, MISSING_PUNCH, ABSENT] }
+        status: { type: string, enum: [OPEN, RESOLVED, IGNORED] }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    AttExceptionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AttExceptionResponse'
+
+    AttExceptionPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/AttExceptionResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    # ---------------- att：假期 ----------------
+    LeaveTypeRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: '年假' }
+        code: { type: string, example: 'ANNUAL' }
+        rules:
+          type: string
+          description: 额度/审批规则 JSON 字符串
+          example: '{"paid":true,"needProof":false,"minUnit":"0.5d","validMonths":12,"carryOverMax":5}'
+
+    LeaveTypeResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        code: { type: string }
+        rules: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LeaveTypeEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LeaveTypeResponse'
+
+    LeaveTypeListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LeaveTypeResponse'
+
+    QuotaGrantRequest:
+      type: object
+      required: [empId, leaveTypeId, period, amount]
+      properties:
+        empId: { type: integer, format: int64 }
+        leaveTypeId: { type: integer, format: int64 }
+        period: { type: string, example: '2026' }
+        amount: { type: number, format: decimal, example: 10.00 }
+
+    QuotaTransferRequest:
+      type: object
+      required: [empId, leaveTypeId, fromPeriod, toPeriod, amount]
+      properties:
+        empId: { type: integer, format: int64 }
+        leaveTypeId: { type: integer, format: int64 }
+        fromPeriod: { type: string, example: '2025' }
+        toPeriod: { type: string, example: '2026' }
+        amount: { type: number, format: decimal, example: 5.00 }
+
+    LeaveQuotaResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        leaveTypeId: { type: integer, format: int64 }
+        leaveTypeName: { type: string }
+        period: { type: string }
+        totalQuota: { type: number, format: decimal }
+        usedQuota: { type: number, format: decimal }
+        availableQuota: { type: number, format: decimal, description: 派生值，不落库 }
+
+    LeaveQuotaEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LeaveQuotaResponse'
+
+    LeaveQuotaListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LeaveQuotaResponse'
+
+    LeaveLedgerResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        leaveTypeId: { type: integer, format: int64 }
+        leaveTypeName: { type: string }
+        changeAmount: { type: number, format: decimal }
+        bizRef: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    LeaveLedgerListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LeaveLedgerResponse'
+
+    QuotaBalanceResponse:
+      type: object
+      properties:
+        empId: { type: integer, format: int64 }
+        quotas:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaveQuotaResponse'
+
+    QuotaBalanceEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/QuotaBalanceResponse'
+
+    LeaveCreateRequest:
+      type: object
+      required: [empId, leaveTypeId, startTime, endTime]
+      properties:
+        empId: { type: integer, format: int64 }
+        leaveTypeId: { type: integer, format: int64 }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        reason: { type: string, example: '家中有事' }
+
+    LeaveRevokeRequest:
+      type: object
+      required: [actualEndTime]
+      properties:
+        actualEndTime: { type: string, format: date-time }
+        reason: { type: string, example: '提前返岗' }
+
+    LeaveActionRequest:
+      type: object
+      properties:
+        remark: { type: string }
+
+    LeaveRequestResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        leaveTypeId: { type: integer, format: int64 }
+        leaveTypeName: { type: string }
+        bizKey: { type: string, example: 'att_leave:1912345678901234567' }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        days: { type: number, format: decimal }
+        reason: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, PROCESSING, APPROVED, REJECTED, CANCELLED]
+        procInstId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LeaveRequestEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LeaveRequestResponse'
+
+    LeaveRequestListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LeaveRequestResponse'
+
+    LeaveRequestPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/LeaveRequestResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    # ---------------- att：加班 / 出差 / 补卡 ----------------
+    OvertimeCreateRequest:
+      type: object
+      required: [empId, startTime, endTime]
+      properties:
+        empId: { type: integer, format: int64 }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        reason: { type: string }
+        mode:
+          type: string
+          enum: [BEFORE, AFTER]
+          default: BEFORE
+          description: BEFORE=事前审批，AFTER=事后补录；DDL 无独立列，以 reason 前缀承载
+
+    OvertimeActionRequest:
+      type: object
+      properties:
+        remark: { type: string }
+
+    OvertimeResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        bizKey: { type: string }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        hours: { type: number, format: decimal }
+        reason: { type: string }
+        mode: { type: string, enum: [BEFORE, AFTER] }
+        status: { type: string, enum: [DRAFT, PROCESSING, APPROVED, REJECTED, CANCELLED] }
+        procInstId: { type: string }
+        dayType: { type: string, enum: [WEEKDAY, WEEKEND, HOLIDAY] }
+        rate: { type: number, format: decimal, description: 派生倍率：工作日 1.5 / 休息日 2.0 / 节假日 3.0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    OvertimeEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/OvertimeResponse'
+
+    OvertimePageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/OvertimeResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    TripCreateRequest:
+      type: object
+      required: [empId, startTime, endTime, destination]
+      properties:
+        empId: { type: integer, format: int64 }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        destination: { type: string, example: '上海' }
+        reason: { type: string }
+
+    TripActionRequest:
+      type: object
+      properties:
+        remark: { type: string }
+
+    TripResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        bizKey: { type: string }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        destination: { type: string }
+        reason: { type: string }
+        status: { type: string, enum: [DRAFT, PROCESSING, APPROVED, REJECTED, CANCELLED] }
+        procInstId: { type: string }
+        subsidyDays: { type: number, format: decimal, description: 派生：自然日跨度（含首尾） }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TripEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TripResponse'
+
+    TripPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/TripResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    FixCreateRequest:
+      type: object
+      required: [empId, workDate, fixTime, type]
+      properties:
+        empId: { type: integer, format: int64 }
+        workDate: { type: string, format: date }
+        fixTime: { type: string, format: date-time }
+        type: { type: string, enum: [IN, OUT] }
+        reason: { type: string }
+
+    FixActionRequest:
+      type: object
+      properties:
+        remark: { type: string }
+
+    FixResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        bizKey: { type: string }
+        workDate: { type: string, format: date }
+        fixTime: { type: string, format: date-time }
+        type: { type: string }
+        reason: { type: string }
+        status: { type: string, enum: [DRAFT, PROCESSING, APPROVED, REJECTED, CANCELLED] }
+        procInstId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    FixEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/FixResponse'
+
+    FixPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/FixResponse' } }
+                page: { type: integer }
+                size: { type: integer }
+                total: { type: integer }
+
+    # ---------------- att：周期 / 月结 / 报表 ----------------
+    CycleRequest:
+      type: object
+      required: [periodCode, startDate, endDate]
+      properties:
+        periodCode: { type: string, example: '2026-01' }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+
+    CycleResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        periodCode: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        status: { type: string, enum: [OPEN, CLOSED] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CycleEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CycleResponse'
+
+    CycleListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/CycleResponse'
+
+    ClosingRunRequest:
+      type: object
+      required: [periodCode]
+      properties:
+        periodCode: { type: string, example: '2026-01' }
+
+    ClosingResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        periodCode: { type: string }
+        status: { type: string, enum: [INIT, RUNNING, DONE, FAILED] }
+        closedAt: { type: string, format: date-time }
+        pendingExceptionCount: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClosingEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ClosingResponse'
+
+    ClosingListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ClosingResponse'
+
+    ClosingDetailResponse:
+      type: object
+      properties:
+        periodCode: { type: string }
+        status: { type: string, enum: [INIT, RUNNING, DONE, FAILED] }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        employeeCount: { type: integer, format: int64 }
+        normalDays: { type: integer, format: int64 }
+        lateDays: { type: integer, format: int64 }
+        earlyDays: { type: integer, format: int64 }
+        absentDays: { type: integer, format: int64 }
+        leaveDays: { type: integer, format: int64 }
+        overtimeHours: { type: number, format: decimal }
+        leaveHours: { type: number, format: decimal }
+        pendingExceptionCount: { type: integer, format: int64 }
+        adjustmentCount: { type: integer, format: int64 }
+
+    ClosingDetailEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ClosingDetailResponse'
+
+    AdjustmentCreateRequest:
+      type: object
+      required: [empId, closingId, adjustType, amount]
+      properties:
+        empId: { type: integer, format: int64 }
+        closingId: { type: integer, format: int64 }
+        adjustType: { type: string, example: 'LEAVE_FIX' }
+        amount: { type: number, format: decimal, example: 1.00 }
+        reason: { type: string }
+
+    AdjustmentResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        empId: { type: integer, format: int64 }
+        closingId: { type: integer, format: int64 }
+        adjustType: { type: string }
+        amount: { type: number, format: decimal }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    AdjustmentEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AdjustmentResponse'
+
+    AdjustmentListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdjustmentResponse'
+
+    AttendanceRateItem:
+      type: object
+      properties:
+        empId: { type: integer, format: int64 }
+        workDays: { type: integer, format: int64 }
+        normalDays: { type: integer, format: int64 }
+        lateDays: { type: integer, format: int64 }
+        earlyDays: { type: integer, format: int64 }
+        absentDays: { type: integer, format: int64 }
+        leaveDays: { type: integer, format: int64 }
+        attendanceRate: { type: number, format: decimal }
+
+    AttendanceRateListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AttendanceRateItem'
+
+    OvertimeStatItem:
+      type: object
+      properties:
+        empId: { type: integer, format: int64 }
+        totalHours: { type: number, format: decimal }
+        times: { type: integer, format: int64 }
+
+    OvertimeStatListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/OvertimeStatItem'
+
+    LeaveConsumeItem:
+      type: object
+      properties:
+        leaveTypeId: { type: integer, format: int64 }
+        leaveTypeName: { type: string }
+        totalQuota: { type: number, format: decimal }
+        usedQuota: { type: number, format: decimal }
+        consumeRate: { type: number, format: decimal }
+
+    LeaveConsumeListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LeaveConsumeItem'
+
+    ApprovalCallbackRequest:
+      type: object
+      required: [bizType, bizKey, approved]
+      properties:
+        bizType: { type: string, enum: [ATT_LEAVE, ATT_OT, ATT_TRIP, ATT_FIX] }
+        bizKey: { type: string, example: 'att_leave:1912345678901234567' }
+        approved: { type: boolean }
+        procInstId: { type: string }
+        remark: { type: string }
+
+    ApprovalCallbackResponse:
+      type: object
+      properties:
+        bizType: { type: string }
+        bizKey: { type: string }
+        status: { type: string }
+        changed: { type: boolean, description: false 表示重复回调或单据非审批中 }
+
+    ApprovalCallbackResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ApprovalCallbackResponse'

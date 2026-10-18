@@ -1,0 +1,84 @@
+package com.hris.performance.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hris.performance.dto.CycleDtos.CycleCreateRequest;
+import com.hris.performance.dto.CycleDtos.CycleResponse;
+import com.hris.performance.dto.CycleDtos.CycleUpdateRequest;
+import com.hris.performance.entity.Cycle;
+import com.hris.performance.mapper.CycleMapper;
+import com.hris.common.dto.PageResult;
+import com.hris.common.exception.BizException;
+import com.hris.common.exception.ErrorCode;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+/**
+ * Cycle 服务（CRUD）。
+ */
+@Service
+public class CycleService {
+
+    private final CycleMapper mapper;
+
+    public CycleService(CycleMapper mapper) {
+        this.mapper = mapper;
+    }
+
+    public CycleResponse get(Long id) {
+        Cycle e = mapper.selectById(id);
+        if (e == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "Cycle 不存在");
+        }
+        return toResponse(e);
+    }
+
+    public PageResult<CycleResponse> list(long page, long size) {
+        IPage<Cycle> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
+        List<CycleResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
+        return new PageResult<>(records, page, size, pg.getTotal());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public CycleResponse create(CycleCreateRequest req) {
+        Cycle e = new Cycle();
+        e.setPlanId(req.planId());
+        e.setPeriodCode(req.periodCode());
+        e.setStartDate(req.startDate());
+        e.setEndDate(req.endDate());
+        e.setStatus(req.status());
+        mapper.insert(e);
+        return toResponse(e);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public CycleResponse update(Long id, CycleUpdateRequest req) {
+        Cycle e = mapper.selectById(id);
+        if (e == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "Cycle 不存在");
+        }
+        e.setPlanId(req.planId());
+        e.setPeriodCode(req.periodCode());
+        e.setStartDate(req.startDate());
+        e.setEndDate(req.endDate());
+        e.setStatus(req.status());
+        if (mapper.updateById(e) == 0) {
+            throw new BizException(ErrorCode.PRF_ERROR, "数据已被其他操作变更，请刷新后重试");
+        }
+        return toResponse(e);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        if (mapper.deleteById(id) == 0) {
+            throw new BizException(ErrorCode.NOT_FOUND, "Cycle 不存在");
+        }
+    }
+
+    private CycleResponse toResponse(Cycle e) {
+        return new CycleResponse(e.getId(), e.getPlanId(), e.getPeriodCode(), e.getStartDate(), e.getEndDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt());
+    }
+}

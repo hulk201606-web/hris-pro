@@ -1,0 +1,128 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: hris-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+    gateway:
+      # 一期 5 服务路由。注意：下游各服务 controller 已持有完整前缀
+      #（/api/v1/auth、/api/v1/org、/api/v1/emp、/api/v1/flow、/api/v1/plt、
+      #   二期 /api/v1/att、/api/v1/rcu、/api/v1/cmp、/api/v1/prf、/api/v1/kb），
+      # 因此此处【不 StripPrefix/不 RewritePath】，原样转发路径。
+      # ⚠ Spring Cloud Gateway 5.x（Cloud 2025.1）配置根已迁移：
+      #   spring.cloud.gateway.routes → spring.cloud.gateway.server.webflux.routes
+      #   旧键名会静默失效（路由不加载、请求 fallback 到静态资源 404）。
+      server:
+        webflux:
+          routes:
+            - id: hris-auth
+              uri: lb://hris-auth
+              predicates:
+                - Path=/api/v1/auth/**
+            - id: hris-org
+              uri: lb://hris-org
+              predicates:
+                - Path=/api/v1/org/**
+            - id: hris-employee
+              uri: lb://hris-employee
+              predicates:
+                - Path=/api/v1/emp/**
+            - id: hris-flow
+              uri: lb://hris-flow
+              predicates:
+                - Path=/api/v1/flow/**
+            - id: hris-platform
+              uri: lb://hris-platform
+              predicates:
+                - Path=/api/v1/plt/**
+            # ---- 二期新增服务（考勤/招聘/薪酬/绩效/知识库）----
+            - id: hris-attendance
+              uri: lb://hris-attendance
+              predicates:
+                - Path=/api/v1/att/**
+            - id: hris-recruit
+              uri: lb://hris-recruit
+              predicates:
+                - Path=/api/v1/rcu/**
+            - id: hris-compensation
+              uri: lb://hris-compensation
+              predicates:
+                - Path=/api/v1/cmp/**
+            - id: hris-performance
+              uri: lb://hris-performance
+              predicates:
+                - Path=/api/v1/prf/**
+            - id: hris-rag
+              uri: lb://hris-rag
+              predicates:
+                - Path=/api/v1/kb/**
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+  # 请求体/响应体编解码内存上限（10MB），超限由 RequestSizeGuardGlobalFilter 提前拒绝
+  codec:
+    max-in-memory-size: 10MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# 网关 JWT 验签：与 hris-auth 同源（HS256 + 同一 JWT_SECRET 环境变量 + 同一 issuer）。
+# 注意：hris-auth 的配置前缀是 auth.jwt，这里网关用 hris.jwt，但 secret 走同一个 JWT_SECRET 注入，
+# 均为必填、无默认值，弱密钥/缺省密钥由 JwtSecretGuard 拒绝启动。
+hris:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: hris-auth
+  gateway:
+    # 内部端点标识（公网经网关访问一律 20403 拒绝）
+    internal-path-marker: /internal/
+    # 请求体大小上限（字节），超限返回 413
+    max-body-size-bytes: 10485760
+    # 白名单路径（跳过 JWT 校验）；AntPathMatcher 语义
+    whitelist:
+      - /api/v1/auth/login
+      - /api/v1/auth/refresh
+      - /public/**
+      - /actuator/**
+      - /favicon.ico
+    # 全局 CORS（CorsWebFilter）
+    cors:
+      origins:
+        - ${CORS_ORIGIN:http://localhost:5173}
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Content-Type
+        - Authorization
+        - X-Trace-Id
+        - Idempotency-Key
+      allow-credentials: true
+      max-age-seconds: 86400
+    # Sentinel 端点限流（QPS 维度；IP 维度见 SentinelConfig 的 origin parser 预留）
+    rate-limit:
+      enabled: true
+      rules:
+        - path: /api/v1/auth/login
+          qps: 10
+        - path: /api/v1/auth/refresh
+          qps: 20
+
+logging:
+  level:
+    com.hris: info

@@ -1,0 +1,30 @@
+# ---------- 构建上下文裁剪 ----------
+# 目标：减少 docker build 上传量 + 防止宿主 target/污染镜像层
+.git
+.github
+.idea
+*.iml
+.vscode
+
+# 宿主构建产物（镜像内由 Maven 重新构建，避免平台差异导致的 stale jar）
+*/target
+target
+**/target
+
+# 本地运行态
+.tmp
+logs
+*.log
+/tmp/hris-logs
+
+# 前端与文档不影响镜像
+frontend/node_modules
+frontend/dist
+docs
+*.md
+
+# 环境与密钥（绝不入镜像）
+.env
+.env.*
+!.env.example
+docker-compose*.yml

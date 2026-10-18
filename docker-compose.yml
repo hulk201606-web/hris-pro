@@ -1,0 +1,201 @@
+# =====================================================================
+# 智云 HR (hris-pro) 开发联调环境 —— Docker Compose 一键拉起全链路中间件
+# 覆盖: Nacos / RocketMQ / MySQL / PostgreSQL / Redis / MinIO / Elasticsearch / Milvus
+# 用法:
+#   docker compose up -d                    # 一期必需：Nacos + RocketMQ + Redis（无 profile，默认拉起）
+#   docker compose --profile db up -d       # 追加容器内 MySQL / PostgreSQL
+#   docker compose --profile storage up -d  # 追加 MinIO
+#   docker compose --profile rag up -d      # 追加 ES + etcd + Milvus（二期）
+# 说明: ES 与 Milvus 为二期 RAG 依赖，一期可先注释（docs/02 §5、docs/11 §6.1 S0.2）
+# =====================================================================
+
+services:
+
+  # ---------- 注册与配置中心 ----------
+  nacos:
+    image: nacos/nacos-server:v3.1.1
+    container_name: hris-nacos
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      # v3.x 必须设置（即使 auth 关闭），Base64 编码，原文 ≥32 字节
+      NACOS_AUTH_TOKEN: "aHJpcy1kZXYtbmFjb3Mtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo="
+      NACOS_AUTH_IDENTITY_KEY: hrisDevIdentityKey
+      NACOS_AUTH_IDENTITY_VALUE: hrisDevIdentityValue
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+    networks: [hris-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8848/nacos/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # ---------- 消息队列（事件总线 / 事务消息 / RAG 管线） ----------
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: hris-rocketmq-namesrv
+    environment:
+      NODE_ROLE: nameserver
+    ports:
+      - "9876:9876"
+    networks: [hris-net]
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: hris-rocketmq-broker
+    environment:
+      NODE_ROLE: broker
+      # 传 broker.conf 参数（相对路径，工作目录为 .../bin）
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+    # 开发联调以 root 运行，避免 named volume 属主为 root 导致 store 目录不可写
+    user: root
+    depends_on:
+      - rocketmq-namesrv
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
+    volumes:
+      # 配置挂到镜像实际 conf 路径（rocketmq-5.3.1/conf）
+      - ./infra/rocketmq/broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+      - rocketmq-store:/home/rocketmq/store
+    command: ["-c", "../conf/broker.conf"]
+    networks: [hris-net]
+
+  # ---------- 数据库（双库支持，docs/ADR-006） ----------
+  # profiles: [db] —— 本机已有 MySQL 8.4 时不要拉起，会抢占 3306
+  mysql:
+    profiles: [db]
+    image: mysql:8.0
+    container_name: hris-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      TZ: UTC
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --default-time-zone=+00:00
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docs/db/schema-mysql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks: [hris-net]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # profiles: [db] —— 双库（PostgreSQL）验证时才拉起
+  postgres:
+    profiles: [db]
+    image: postgres:15-alpine
+    container_name: hris-postgres
+    environment:
+      POSTGRES_PASSWORD: root
+      TZ: UTC
+    command: ["postgres", "-c", "timezone=UTC"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./docs/db/schema-postgresql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks: [hris-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ---------- 缓存 / 分布式锁 / 限流 ----------
+  redis:
+    image: redis:7-alpine
+    container_name: hris-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks: [hris-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ---------- 对象存储（附件 / 简历 / 知识文件） ----------
+  # profiles: [storage, rag] —— 附件/简历存储；未就绪时 platform 降级为占位 URL；
+  #   rag profile 下作为 Milvus 的对象存储后端（milvus 依赖 minio）
+  minio:
+    profiles: [storage, rag]
+    image: minio/minio:latest
+    container_name: hris-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks: [hris-net]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ---------- 全文检索（二期 RAG 用，可注释） ----------
+  # profiles: [rag] —— 二期知识库全文检索
+  elasticsearch:
+    profiles: [rag]
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: hris-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks: [hris-net]
+
+  # ---------- 向量库（二期 RAG 用，可注释） ----------
+  # profiles: [rag] —— Milvus standalone：内嵌 etcd + 本地存储（无需外部 etcd/minio）。
+  #   说明：MinIO 官方镜像已迁出 Docker Hub（minio/minio 拉取失败），改用 Milvus 2.5
+  #   内嵌 etcd（ETCD_USE_EMBED）+ 本地文件存储（COMMON_STORAGETYPE=local），
+  #   单容器即可跑通，规避外部 etcd/minio 依赖。生产环境再切回外部 etcd + S3。
+  milvus:
+    profiles: [rag]
+    image: milvusdb/milvus:v2.5.0
+    container_name: hris-milvus
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    networks: [hris-net]
+
+networks:
+  hris-net:
+    driver: bridge
+
+volumes:
+  nacos-data:
+  rocketmq-store:
+  mysql-data:
+  pg-data:
+  redis-data:
+  minio-data:
+  es-data:
+  etcd-data:
+  milvus-data:

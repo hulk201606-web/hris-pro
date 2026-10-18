@@ -1,0 +1,19 @@
+# S0.4 引擎装配验证环境（test profile）—— 内存 H2，不依赖外部中间件
+spring:
+  datasource:
+    url: jdbc:h2:mem:flowtest;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+
+# Flowable 引擎：test 用自动建表（H2 schema 由 Flowable 提供）；生产用 DDL 基线管理（false）
+flowable:
+  database-schema-update: true
+  async-executor-activate: false
+  # 禁用 Event Registry（MVP 用不到，Flowable 8 默认启用会导致 "Event registry has not been initialized"）
+  eventregistry:
+    enabled: false
+
+logging:
+  level:
+    org.flowable: info

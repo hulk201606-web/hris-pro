@@ -1,0 +1,249 @@
+# =====================================================================
+# 智云 HR (hris-pro) 应用编排 —— 12 个微服务容器化部署
+#
+# 前置：先起中间件（docker compose up -d，Nacos/RocketMQ/Redis）
+#       数据库若用容器内的，加 --profile db；用外部 MySQL 则在 .env 覆盖 DB_HOST
+#
+# 用法：
+#   1) 构建镜像（一条命令构建全部 12 个服务）：
+#      bash docker/build-all.sh
+#   2) 准备环境变量：
+#      cp .env.example .env && 编辑 .env（DB_PASSWORD / JWT_SECRET 必填）
+#   3) 拉起：
+#      docker compose -f docker-compose.yml -f docker-compose.app.yml up -d
+#   4) 查看：docker compose -f ... ps / logs -f gateway
+#
+# 约定（与本地脚本 scripts/run-one.sh 一致）：
+#   - 网关 8080；微服务 8101..8110；服务名 = 模块名，网关内用服务名直连
+#   - 密钥一律走 .env 注入，仓库内不硬编码（JwtSecretGuard 启动即校验）
+#   - 各服务 application.yml 只识别整体 DB_URL（不做 HOST/NAME 拼装），故逐服务注入完整 JDBC URL
+#   - 依赖用 service_healthy 串起启动顺序（Nacos/Redis/RocketMQ）
+#   - MySQL（db profile）/Milvus（rag profile）用 required:false 声明为「可选依赖」：
+#     compose 对未激活 profile 的服务会直接报错，标注可选后既能在容器内拉起时保证顺序，
+#     也能在 DB_HOST/MILVUS_HOST 指向外部实例时正常编排（compose 会降级为警告）
+# =====================================================================
+
+x-app-common: &app-common
+  image: hris/${APP_TAG:-hris-pro}:${APP_VERSION:-latest}
+  restart: unless-stopped
+  networks: [hris-net]
+  # 日志直接进 docker stdout，由 docker logging 轮转，避免容器内再落盘
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+  environment: &app-env
+    TZ: Asia/Shanghai
+    DB_USERNAME: ${DB_USERNAME:-root}
+    DB_PASSWORD: ${DB_PASSWORD:?必须设置 DB_PASSWORD（见 .env.example）}
+    # 各服务 application.yml 只识别整体 DB_URL 变量（不做 HOST/NAME 拼装），
+    # 因此必须为每个服务注入完整 JDBC URL；DB_URL_HOST 覆盖为 mysql 或外部实例地址。
+    DB_URL_HOST: ${DB_URL_HOST:-mysql}
+    DB_URL_PORT: ${DB_URL_PORT:-3306}
+    NACOS_ADDR: nacos:8848
+    JWT_SECRET: ${JWT_SECRET:?必须设置 JWT_SECRET（≥32 字节，见 .env.example）}
+    SPRING_DATA_REDIS_HOST: redis
+    ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+  # 容器内无 curl/wget 时的探针退化：依赖 Actuator 由 compose healthcheck 覆盖
+
+services:
+
+  # ---------- 网关（唯一对外入口） ----------
+  gateway:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-gateway }
+    image: hris/gateway:${APP_VERSION:-latest}
+    container_name: hris-gateway
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${PORT_GATEWAY:-8080}:8080"
+    depends_on:
+      nacos: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  # ---------- 认证与授权 ----------
+  auth:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-auth }
+    image: hris/auth:${APP_VERSION:-latest}
+    container_name: hris-auth
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/auth_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+
+  # ---------- 组织与主数据 ----------
+  org:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-org }
+    image: hris/org:${APP_VERSION:-latest}
+    container_name: hris-org
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/org_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+
+  # ---------- 员工档案 ----------
+  employee:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-employee }
+    image: hris/employee:${APP_VERSION:-latest}
+    container_name: hris-employee
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/emp_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+
+  # ---------- 流程引擎 ----------
+  flow:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-flow }
+    image: hris/flow:${APP_VERSION:-latest}
+    container_name: hris-flow
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/flow_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+
+  # ---------- 平台（文件/字典/通知） ----------
+  platform:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-platform }
+    image: hris/platform:${APP_VERSION:-latest}
+    container_name: hris-platform
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/plt_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+
+  # ---------- 考勤 ----------
+  attendance:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-attendance }
+    image: hris/attendance:${APP_VERSION:-latest}
+    container_name: hris-attendance
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/att_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+
+  # ---------- 招聘 ----------
+  recruit:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-recruit }
+    image: hris/recruit:${APP_VERSION:-latest}
+    container_name: hris-recruit
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/rcu_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+      employee: { condition: service_started }
+
+  # ---------- 薪酬（含密域） ----------
+  compensation:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-compensation }
+    image: hris/compensation:${APP_VERSION:-latest}
+    container_name: hris-compensation
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/cmp_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+      employee: { condition: service_started }
+      attendance: { condition: service_started }
+
+  # ---------- 绩效 ----------
+  performance:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-performance }
+    image: hris/performance:${APP_VERSION:-latest}
+    container_name: hris-performance
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/prf_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+      employee: { condition: service_started }
+
+  # ---------- 知识库 / RAG ----------
+  rag:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args: { MODULE: hris-rag }
+    image: hris/rag:${APP_VERSION:-latest}
+    container_name: hris-rag
+    environment:
+      <<: *app-env
+      SERVER_PORT: 8080
+      DB_URL: jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/rag_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      # 无 Key 时降级占位向量，索引重建链路仍可用（docs/15 §14）
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      MILVUS_HOST: ${MILVUS_HOST:-milvus}
+      MILVUS_PORT: ${MILVUS_PORT:-19530}
+    depends_on:
+      nacos: { condition: service_healthy }
+      mysql: { condition: service_started, required: false }
+      employee: { condition: service_started }
+      milvus: { condition: service_started, required: false }

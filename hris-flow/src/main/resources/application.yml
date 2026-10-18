@@ -1,0 +1,52 @@
+server:
+  port: 8104
+
+spring:
+  application:
+    name: hris-flow
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/flow_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: ${DB_DRIVER:com.mysql.cj.jdbc.Driver}
+
+# Flowable 引擎（S0.4 验证：database-schema-update 用 false 由 DDL 基线管理；验证阶段可用 true 自动建表）
+flowable:
+  database-schema-update: false
+  async-executor-activate: false
+  # 禁用 Event Registry（MVP 用不到）
+  eventregistry:
+    enabled: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    com.hris: info
+    org.flowable: info
+
+# ---- 健康检查探针（K8s liveness/readiness；不暴露 env/beans/heapdump 等敏感端点）----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

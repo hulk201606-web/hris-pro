@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/test">
+    <!-- S0.4 最小流程：验证 Flowable 7.2 在 Boot 4.0 下的引擎装配与实例运行 -->
+    <process id="hello" name="最小装配验证流程" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="f1" sourceRef="start" targetRef="approve"/>
+        <userTask id="approve" name="审批" flowable:assignee="approver"/>
+        <sequenceFlow id="f2" sourceRef="approve" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

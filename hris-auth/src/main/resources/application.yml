@@ -1,0 +1,54 @@
+server:
+  port: 8101
+
+spring:
+  application:
+    name: hris-auth
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+  # 数据库连接经环境变量注入，双库二选一（docs/ADR-006）
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/auth_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: ${DB_DRIVER:com.mysql.cj.jdbc.Driver}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+auth:
+  jwt:
+    # HS256 密钥，至少 32 字节；必填，生产经环境变量/KMS 注入（无默认值，弱密钥拒绝启动）
+    secret: ${JWT_SECRET}
+    issuer: hris-auth
+    # access 15min / refresh 7d（docs/08 §1）
+    access-ttl-seconds: 900
+    refresh-ttl-seconds: 604800
+
+logging:
+  level:
+    com.hris: info
+
+# ---- 健康检查探针（K8s liveness/readiness；不暴露 env/beans/heapdump 等敏感端点）----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

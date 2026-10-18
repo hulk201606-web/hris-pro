@@ -1,0 +1,30 @@
+{
+  "name": "hris-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "智云 HR 多租户 SaaS 人力系统管理端 + 员工自助端前端",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "type-check": "vue-tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "ant-design-vue": "^4.0.0",
+    "axios": "^1.0.0",
+    "pinia": "^2.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^7.0.0",
+    "vue-tsc": "^2.2.8"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

@@ -1,0 +1,25 @@
+package com.hris.performance.dto;
+
+import jakarta.validation.constraints.NotNull;
+import java.time.LocalDateTime;
+
+/**
+ * OkrObjective DTO（由 DDL 自动生成）。
+ */
+public final class OkrObjectiveDtos {
+
+    private OkrObjectiveDtos() {
+    }
+
+    /** 创建请求。 */
+    public record OkrObjectiveCreateRequest(@NotNull(message = "cycleId 不能为空") Long cycleId, @NotNull(message = "empId 不能为空") Long empId, @NotNull(message = "objective 不能为空") String objective, String keyResults) {
+    }
+
+    /** 更新请求。 */
+    public record OkrObjectiveUpdateRequest(Long cycleId, Long empId, String objective, String keyResults) {
+    }
+
+    /** 响应。 */
+    public record OkrObjectiveResponse(Long id, Long cycleId, Long empId, String objective, String keyResults, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    }
+}

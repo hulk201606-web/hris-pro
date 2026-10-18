@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/generic">
+
+    <!--
+      通用单节点审批模板（MVP 预置，FLW-F-019 的 17 条模板按域后续追加）。
+      审批人由发起时变量 assignee 动态注入（docs/04 §4 简化版：指定人/流程变量 assignee）。
+    -->
+    <process id="GENERIC_APPROVAL" name="通用审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="approve"/>
+        <userTask id="approve" name="审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="approve" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>
