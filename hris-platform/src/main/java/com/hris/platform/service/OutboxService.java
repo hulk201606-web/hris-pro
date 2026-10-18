@@ -62,9 +62,11 @@ public class OutboxService {
 
     /** 查询待投递事件（调度器轮询入口，MVP 预留）。 */
     public List<SysOutboxMessage> listPending(int limit) {
+        // limit 钳制到 >=1：与 flow 侧 EventOutboxService.dispatchPending 对齐，
+        // 否则 limit<=0 会拼出 "LIMIT 0"/"LIMIT -1" 这类非法 SQL 导致轮询报错
         return mapper.selectList(new LambdaQueryWrapper<SysOutboxMessage>()
                 .eq(SysOutboxMessage::getState, STATE_PENDING)
                 .orderByAsc(SysOutboxMessage::getCreatedAt)
-                .last("LIMIT " + limit));
+                .last("LIMIT " + Math.max(1, limit)));
     }
 }
