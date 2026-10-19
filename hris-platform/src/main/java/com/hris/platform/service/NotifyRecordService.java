@@ -23,6 +23,7 @@ public class NotifyRecordService {
         this.mapper = mapper;
     }
 
+    /** 按用户 / 渠道 / 发送状态分页查询通知记录。 */
     public PageResult<RecordResponse> query(Long userId, String channel, String sendStatus,
                                             long page, long size) {
         LambdaQueryWrapper<SysNotifyRecord> qw = new LambdaQueryWrapper<>();

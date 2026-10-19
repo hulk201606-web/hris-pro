@@ -28,6 +28,7 @@ public class SpaceMemberService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询知识空间成员详情，不存在则抛 NOT_FOUND。 */
     public SpaceMemberResponse get(Long id) {
         SpaceMember e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class SpaceMemberService {
         return toResponse(e);
     }
 
+    /** 分页查询知识空间成员列表。 */
     public PageResult<SpaceMemberResponse> list(long page, long size) {
         IPage<SpaceMember> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<SpaceMemberResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建知识空间成员。 */
     @Transactional(rollbackFor = Exception.class)
     public SpaceMemberResponse create(SpaceMemberCreateRequest req) {
         SpaceMember e = new SpaceMember();
@@ -52,6 +55,7 @@ public class SpaceMemberService {
         return toResponse(e);
     }
 
+    /** 更新知识空间成员（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public SpaceMemberResponse update(Long id, SpaceMemberUpdateRequest req) {
         SpaceMember e = mapper.selectById(id);
@@ -67,6 +71,7 @@ public class SpaceMemberService {
         return toResponse(e);
     }
 
+    /** 删除知识空间成员（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

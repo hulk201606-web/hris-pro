@@ -6,9 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * 月结调整项（att_closing_adjustment）。锁账后的差异不改历史，作为调整项进入下期。
- *
- * <p>idx(tenant_id, emp_id, closing_id) 支撑按人按批次回溯调整流水（docs/12 §5.4）。</p>
+ * 月结调整项（域：考勤，分层：实体/DO）。月结锁账后唯一可影响下期的差异通道（红冲语义），记录补款/扣款类型与金额。
  */
 @TableName("att_closing_adjustment")
 public class ClosingAdjustment extends BaseEntity {

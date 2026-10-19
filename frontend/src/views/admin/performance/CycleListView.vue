@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-考核周期列表：CRUD（周期编码 / 方案 / 起止日期），
+ * 走 EntityCrudPage 组件 + /prf/cycles 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createCycle,

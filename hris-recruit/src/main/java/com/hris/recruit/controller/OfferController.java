@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Offer 端点。
+ * Offer 端点：录用意向 CRUD，含薪酬带宽校验字段。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/offers")
@@ -32,6 +34,7 @@ public class OfferController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:offer:read")
     @GetMapping
     public R<PageResult<OfferResponse>> list(
@@ -40,24 +43,28 @@ public class OfferController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:offer:read")
     @GetMapping("/{id}")
     public R<OfferResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:offer:write")
     @PostMapping
     public R<OfferResponse> create(@Valid @RequestBody OfferCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:offer:write")
     @PutMapping("/{id}")
     public R<OfferResponse> update(@PathVariable Long id, @Valid @RequestBody OfferUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:offer:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

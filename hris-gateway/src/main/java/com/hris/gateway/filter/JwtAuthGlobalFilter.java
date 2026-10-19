@@ -40,6 +40,17 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         this.errorWriter = errorWriter;
     }
 
+    /**
+     * JWT 认证过滤器（ORDER=-600）：
+     * <ol>
+     *   <li>白名单已标记 ATTR_SKIP_AUTH=true 时直接放行（登录/刷新/健康检查）；</li>
+     *   <li>无 Authorization Bearer 头 → 401 UNAUTHORIZED；</li>
+     *   <li>调用 JwtTokenVerifier.verifyAccess 做 HS256 验签 + issuer/类型校验，失败 → 401；</li>
+     *   <li>丢弃客户端伪造的 X-Tenant-Id/X-User-Id/X-User-Roles/X-User-Perms 头，
+     *       以 token 中 claims 为准重写（防跨租户/越权探测）；</li>
+     *   <li>主体写入交换属性与 Reactor Context，供 AccessLog 与下游透传。</li>
+     * </ol>
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         if (Boolean.TRUE.equals(exchange.getAttribute(GatewayConstants.ATTR_SKIP_AUTH))) {

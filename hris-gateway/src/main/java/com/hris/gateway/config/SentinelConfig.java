@@ -30,6 +30,10 @@ public class SentinelConfig implements InitializingBean {
         this.props = props;
     }
 
+    /**
+     * Bean 初始化完成后：注册客户端 IP 解析器（供 Sentinel origin 维度统计），
+     * 若配置启用限流则按规则列表加载 FlowRule（端点维度 QPS）；未启用则跳过并打 info 日志。
+     */
     @Override
     public void afterPropertiesSet() {
         WebFluxCallbackManager.setRequestOriginParser(SentinelConfig::resolveClientIp);
@@ -44,6 +48,9 @@ public class SentinelConfig implements InitializingBean {
         log.info("sentinel gateway flow rules loaded: {}", rules.size());
     }
 
+    /**
+     * 把配置中的限流规则转换为 Sentinel FlowRule：资源名=请求路径， grade=QPS， limitApp=default。
+     */
     private FlowRule toFlowRule(HrisGatewayProperties.Rule r) {
         FlowRule rule = new FlowRule(r.getPath());
         rule.setGrade(RuleConstant.FLOW_GRADE_QPS);
@@ -52,6 +59,10 @@ public class SentinelConfig implements InitializingBean {
         return rule;
     }
 
+    /**
+     * 解析客户端真实 IP：优先取 X-Forwarded-For 第一个 IP（经反向代理），
+     * 否则取直连 RemoteAddress；解析不到返回 "unknown"。
+     */
     private static String resolveClientIp(ServerWebExchange exchange) {
         ServerHttpRequest request = exchange.getRequest();
         String forwarded = request.getHeaders().getFirst("X-Forwarded-For");

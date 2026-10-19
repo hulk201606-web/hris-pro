@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-知识空间列表：CRUD（空间名称 / 编码 / 描述），
+ * 走 EntityCrudPage 组件 + /kb/spaces 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createSpace,

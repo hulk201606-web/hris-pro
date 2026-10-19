@@ -31,6 +31,7 @@ public class DailyAttendanceController {
     public DailyAttendanceController(DailyAttendanceService dailyAttendanceService) {
         this.dailyAttendanceService = dailyAttendanceService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<DailyAttendanceResponse>> list(
@@ -42,6 +43,7 @@ public class DailyAttendanceController {
             @RequestParam(defaultValue = "20") long size) {
         return R.ok(dailyAttendanceService.list(empId, from, to, attStatus, page, size));
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{empId}/{workDate}")
     public R<DailyAttendanceResponse> get(@PathVariable Long empId,

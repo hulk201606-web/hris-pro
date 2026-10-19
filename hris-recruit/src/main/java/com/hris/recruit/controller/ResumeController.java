@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Resume 端点。
+ * 简历端点：候选人简历附件与解析结果维护。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/resumes")
@@ -32,6 +34,7 @@ public class ResumeController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:resume:read")
     @GetMapping
     public R<PageResult<ResumeResponse>> list(
@@ -40,24 +43,28 @@ public class ResumeController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:resume:read")
     @GetMapping("/{id}")
     public R<ResumeResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:resume:write")
     @PostMapping
     public R<ResumeResponse> create(@Valid @RequestBody ResumeCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:resume:write")
     @PutMapping("/{id}")
     public R<ResumeResponse> update(@PathVariable Long id, @Valid @RequestBody ResumeUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:resume:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_okr_objective（由 DDL 自动生成）
+ * OKR 目标（域：绩效，分层：实体/DO）。员工周期内的 O 与 KR 列表（JSON），与 Goal 并行支持 OKR 考核模式。
  */
 @TableName("prf_okr_objective")
 public class OkrObjective extends BaseEntity {

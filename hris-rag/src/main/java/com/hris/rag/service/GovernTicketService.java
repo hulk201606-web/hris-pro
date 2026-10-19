@@ -28,6 +28,7 @@ public class GovernTicketService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询治理工单详情，不存在则抛 NOT_FOUND。 */
     public GovernTicketResponse get(Long id) {
         GovernTicket e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class GovernTicketService {
         return toResponse(e);
     }
 
+    /** 分页查询治理工单列表。 */
     public PageResult<GovernTicketResponse> list(long page, long size) {
         IPage<GovernTicket> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<GovernTicketResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建治理工单。 */
     @Transactional(rollbackFor = Exception.class)
     public GovernTicketResponse create(GovernTicketCreateRequest req) {
         GovernTicket e = new GovernTicket();
@@ -53,6 +56,7 @@ public class GovernTicketService {
         return toResponse(e);
     }
 
+    /** 更新治理工单（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public GovernTicketResponse update(Long id, GovernTicketUpdateRequest req) {
         GovernTicket e = mapper.selectById(id);
@@ -69,6 +73,7 @@ public class GovernTicketService {
         return toResponse(e);
     }
 
+    /** 删除治理工单（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

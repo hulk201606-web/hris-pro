@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * cmp_employee_pay（由 DDL 自动生成）
+ * 员工薪资档案（域：薪酬，分层：实体/DO，密域）。记录员工定薪金额与银行账号，密级：salaryAmountCipher/bankAccountCipher 为密文存储，非授权视图仅返回 salaryAmountMask/bankAccountMask 掩码；读取须具备 cmp:salary:read 权限。
  */
 @TableName("cmp_employee_pay")
 public class EmployeePay extends BaseEntity {

@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * cmp_payroll_detail（由 DDL 自动生成）
+ * 算薪明细（域：薪酬，分层：实体/DO，密域）。单员工单次算薪的逐项金额明细，amountCipher/netAmountCipher 为密文，非授权视图返回 mask 掩码。
  */
 @TableName("cmp_payroll_detail")
 public class PayrollDetail extends BaseEntity {

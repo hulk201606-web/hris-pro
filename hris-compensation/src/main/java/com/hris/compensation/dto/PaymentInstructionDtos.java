@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * PaymentInstruction DTO（由 DDL 自动生成）。
+ * 发放指令相关 DTO（域：薪酬，分层：DTO/接口契约）。银行发放指令的查询/执行结构。
  */
 public final class PaymentInstructionDtos {
 

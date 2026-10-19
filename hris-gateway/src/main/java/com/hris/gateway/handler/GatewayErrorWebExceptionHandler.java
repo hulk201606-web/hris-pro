@@ -31,6 +31,11 @@ public class GatewayErrorWebExceptionHandler implements ErrorWebExceptionHandler
         this.errorWriter = errorWriter;
     }
 
+    /**
+     * 网关全局异常入口（@Order(-1)，优先于 Boot 默认处理器）：
+     * Sentinel BlockException 重新抛出交由 SCA 限流处理器接管；其余异常按类型解析 HTTP 状态码，
+     * 再映射为 ErrorCode 枚举，通过 GatewayErrorWriter 写出统一 R 响应体。
+     */
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         // 限流类 BlockException 交由 SCA 的 SentinelBlockExceptionHandler 处理：
@@ -43,6 +48,11 @@ public class GatewayErrorWebExceptionHandler implements ErrorWebExceptionHandler
         return errorWriter.write(exchange, status, resolveCode(status));
     }
 
+    /**
+     * 按异常类型解析 HTTP 状态码：ErrorResponse（含 NoResourceFoundException/ResponseStatusException）
+     * 取其声明状态；ConnectException → 503；TimeoutException → 504；其余 → 500。
+     * 关键：先取 ErrorResponse 可避免把"路径不存在"误判为 500 系统错误。
+     */
     private HttpStatus resolveStatus(Throwable ex) {
         // 先按 ErrorResponse 取状态码：ResponseStatusException 与「无 handler / 无路由」抛出的
         // NoResourceFoundException 都实现了它。不作这层判断时，访问不存在的路径会被
@@ -67,6 +77,10 @@ public class GatewayErrorWebExceptionHandler implements ErrorWebExceptionHandler
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
+    /**
+     * HTTP 状态码 → 业务错误码映射：404→NOT_FOUND、401→UNAUTHORIZED、403→FORBIDDEN、
+     * 429→RATE_LIMITED，其余 → SYSTEM_ERROR。与 Servlet 侧 GlobalExceptionHandler 语义对齐。
+     */
     private ErrorCode resolveCode(HttpStatus status) {
         return switch (status.value()) {
             case 404 -> ErrorCode.NOT_FOUND;

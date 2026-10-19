@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-目标列表：CRUD（目标标题 / 周期 / 员工 / 权重），
+ * 走 EntityCrudPage 组件 + /prf/goals 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createGoal,

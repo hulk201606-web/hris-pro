@@ -33,6 +33,7 @@ public class ExceptionController {
     public ExceptionController(ExceptionService exceptionService) {
         this.exceptionService = exceptionService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<ExceptionResponse>> list(

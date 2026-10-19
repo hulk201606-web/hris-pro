@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-薪酬核算批次列表：CRUD（周期 / 薪酬组 / 状态 / 核算人），
+ * 走 EntityCrudPage 组件 + /cmp/payroll-runs 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createPayrollRun,

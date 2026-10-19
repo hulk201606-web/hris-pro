@@ -27,6 +27,10 @@ public class OrgInternalController {
         this.reportLineService = reportLineService;
     }
 
+    /**
+     * 编制校验（内部端点，供员工域入职/调动前置调用）：按当前季度计算缺口，
+     * 返回 allowed 是否放行及 shortfall 缺口人数。
+     */
     @GetMapping("/hc/check")
     public R<HcCheckResponse> check(@RequestParam("dept") Long dept,
                                     @RequestParam("position") Long position,
@@ -34,6 +38,7 @@ public class OrgInternalController {
         return R.ok(headcountService.check(dept, position, count));
     }
 
+    /** 汇报链解析（内部端点）：返回某员工自上级起逐级向上的员工 ID 链，供 rag/权限数据范围使用。 */
     @GetMapping("/reportline/{empId}")
     public R<List<Long>> reportline(@PathVariable Long empId) {
         return R.ok(reportLineService.resolve(empId));

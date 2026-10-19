@@ -6,12 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * 考勤异常（att_exception）。日考勤计算产出的待处理事项。
- *
- * <p>注意：本类是业务实体（对应 att_exception 表），并非异常类型，命名沿用 docs/03-03 §3
- * 核心实体清单中的 AttendanceException。</p>
- *
- * <p>idx(tenant_id, emp_id, work_date, status) 支撑异常工作台按人按日筛选（docs/12 §5.4）。</p>
+ * 考勤异常单（域：考勤，分层：实体/DO）。记录日结判定的迟到/早退/缺卡/旷工等异常，状态机 OPEN→RESOLVED/IGNORED，月结锁账前必须清零。
  */
 @TableName("att_exception")
 public class AttendanceException extends BaseEntity {

@@ -30,11 +30,13 @@ public class EmployeeInternalController {
         this.preHireService = preHireService;
     }
 
+    /** 员工档案简报（内部端点）：供 org 汇报线解析等跨域调用，返回姓名/工号/状态/部门/岗位/直属上级。 */
     @GetMapping("/{id}/profile-brief")
     public R<Map<String, Object>> profileBrief(@PathVariable Long id) {
         return R.ok(employeeService.profileBrief(id));
     }
 
+    /** 生成待入职自助办理链接（内部端点）：为候选人预建档后生成一次性 pre-hire 链接。 */
     @PostMapping("/pre-hire-links")
     public R<PreHireLinkResponse> preHireLink(@RequestParam Long empId) {
         return R.ok(preHireService.createLink(empId));

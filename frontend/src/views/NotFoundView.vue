@@ -1,4 +1,8 @@
 <script setup lang="ts">
+
+/**
+ * 404 页面：匹配未命中路由时展示，提供返回自助首页按钮。
+ */
 import { useRouter } from 'vue-router';
 
 const router = useRouter();

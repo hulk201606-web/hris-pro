@@ -31,6 +31,7 @@ public class ClosingController {
     public ClosingController(MonthlyClosingService monthlyClosingService) {
         this.monthlyClosingService = monthlyClosingService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<List<ClosingResponse>> list() {

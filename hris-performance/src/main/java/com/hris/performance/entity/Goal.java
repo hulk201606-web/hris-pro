@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * prf_goal（由 DDL 自动生成）
+ * 绩效目标（域：绩效，分层：实体/DO）。员工周期内的目标项（标题/权重/目标值/结果值），是绩效评分的输入。
  */
 @TableName("prf_goal")
 public class Goal extends BaseEntity {

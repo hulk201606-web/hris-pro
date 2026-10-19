@@ -31,11 +31,19 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /**
+     * 业务异常兜底：HTTP 200，body.code=e.code，message=e.message。
+     * 业务异常视为"预期内"错误，不打 ERROR 日志（由调用方自行记录）。
+     */
     @ExceptionHandler(BizException.class)
     public ResponseEntity<R<Void>> handleBiz(BizException e) {
         return ResponseEntity.ok(R.fail(e.getCode(), e.getMessage()));
     }
 
+    /**
+     * @RequestBody @Valid 校验失败：HTTP 400，取第一个字段错误拼「字段 消息」，
+     * code=10001 PARAM_INVALID。
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<R<Void>> handleValid(MethodArgumentNotValidException e) {
         FieldError fe = e.getBindingResult().getFieldError();
@@ -44,6 +52,9 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(R.fail(ErrorCode.PARAM_INVALID.getCode(), msg));
     }
 
+    /**
+     * 表单/查询参数绑定校验失败：同 handleValid，HTTP 400 + code=10001。
+     */
     @ExceptionHandler(BindException.class)
     public ResponseEntity<R<Void>> handleBind(BindException e) {
         FieldError fe = e.getBindingResult().getFieldError();
@@ -52,6 +63,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(R.fail(ErrorCode.PARAM_INVALID.getCode(), msg));
     }
 
+    /**
+     * 未捕获异常兜底：HTTP 500，code=50001 SYSTEM_ERROR，message 不回显堆栈（避免泄露内部信息），
+     * 完整堆栈打 ERROR 日志并携带 traceId 供排障。
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<R<Void>> handleOther(Exception e) {
         log.error("unhandled exception", e);

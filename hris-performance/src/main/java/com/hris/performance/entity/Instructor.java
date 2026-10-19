@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_instructor（由 DDL 自动生成）
+ * 讲师（域：绩效/培训，分层：实体/DO）。内部讲师主档（关联员工 ID）。
  */
 @TableName("prf_instructor")
 public class Instructor extends BaseEntity {

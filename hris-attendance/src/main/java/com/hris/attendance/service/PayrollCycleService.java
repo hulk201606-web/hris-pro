@@ -43,6 +43,7 @@ public class PayrollCycleService {
     public CycleResponse get(Long id) {
         return toResponse(require(id));
     }
+    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
     @Transactional(rollbackFor = Exception.class)
     public CycleResponse create(CycleRequest req) {
@@ -61,6 +62,7 @@ public class PayrollCycleService {
         cycleMapper.insert(cycle);
         return toResponse(cycle);
     }
+    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
     @Transactional(rollbackFor = Exception.class)
     public CycleResponse update(Long id, CycleRequest req) {

@@ -28,22 +28,26 @@ public class GroupController {
     public GroupController(GroupService groupService) {
         this.groupService = groupService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<List<GroupResponse>> list() {
         return R.ok(groupService.list());
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<GroupResponse> get(@PathVariable Long id) {
         return R.ok(groupService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:group:write")
     @PostMapping
     public R<GroupResponse> create(@Valid @RequestBody GroupRequest req) {
         return R.ok(groupService.create(req));
     }
+    /** 按 ID 更新记录。权限点见 @RequirePerm；乐观锁防并发覆盖。 */
 
     @RequirePerm("att:group:write")
     @PutMapping("/{id}")

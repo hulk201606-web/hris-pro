@@ -28,22 +28,26 @@ public class PayrollCycleController {
     public PayrollCycleController(PayrollCycleService payrollCycleService) {
         this.payrollCycleService = payrollCycleService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<List<CycleResponse>> list() {
         return R.ok(payrollCycleService.list());
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<CycleResponse> get(@PathVariable Long id) {
         return R.ok(payrollCycleService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:cycle:write")
     @PostMapping
     public R<CycleResponse> create(@Valid @RequestBody CycleRequest req) {
         return R.ok(payrollCycleService.create(req));
     }
+    /** 按 ID 更新记录。权限点见 @RequirePerm；乐观锁防并发覆盖。 */
 
     @RequirePerm("att:cycle:write")
     @PutMapping("/{id}")

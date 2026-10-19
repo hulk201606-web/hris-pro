@@ -4,9 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.hris.common.entity.BaseEntity;
 
 /**
- * 考勤班组（att_group）。按部门/人群划分，承载工作制、打卡方式与时区策略。
- *
- * <p>uk(tenant_id, code) 保证租户内班组编码唯一（docs/12 §5.4）。</p>
+ * 考勤组（域：考勤，分层：实体/DO）。按部门/班组划分的打卡管理单元，员工归属考勤组后按组规则打卡。
  */
 @TableName("att_group")
 public class AttGroup extends BaseEntity {

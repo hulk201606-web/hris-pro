@@ -31,6 +31,11 @@ public class RequestSizeGuardGlobalFilter implements GlobalFilter, Ordered {
         this.errorWriter = errorWriter;
     }
 
+    /**
+     * 请求体大小守卫（ORDER=-850）：解析 Content-Length，超过 maxBodySizeBytes（默认 10MB）
+     * 直接 413 PAYLOAD_TOO_LARGE，避免大报文打满 WebFlux 编解码内存。
+     * Content-Length 缺失或非法时不拦截，交由下游框架按实际读取处理。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String contentLength = exchange.getRequest().getHeaders().getFirst("Content-Length");

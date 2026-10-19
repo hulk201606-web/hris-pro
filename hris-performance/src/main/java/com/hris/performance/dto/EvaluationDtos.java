@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * Evaluation DTO（由 DDL 自动生成）。
+ * 评估结果相关 DTO（域：绩效，分层：DTO/接口契约）。评分/评语提交与查询的请求与响应结构。
  */
 public final class EvaluationDtos {
 

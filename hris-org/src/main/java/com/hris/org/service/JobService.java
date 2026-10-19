@@ -24,10 +24,12 @@ public class JobService {
         this.mapper = mapper;
     }
 
+    /** 查询全部职务字典。 */
     public List<CatalogResponse> list() {
         return mapper.selectList(null).stream().map(this::toResponse).toList();
     }
 
+    /** 新建职务：编码缺省按 job 前缀生成，落库前校验编码唯一。 */
     public CatalogResponse create(CatalogRequest req) {
         String code = CodeUtil.normalize(req.code());
         if (code == null || code.isBlank()) {
@@ -42,6 +44,7 @@ public class JobService {
         return toResponse(e);
     }
 
+    /** 更新职务：仅名称与启停状态可变更，编码作为身份标识不可改。 */
     public CatalogResponse update(Long id, CatalogRequest req) {
         OrgJob e = mapper.selectById(id);
         if (e == null) {
@@ -57,6 +60,7 @@ public class JobService {
         return toResponse(e);
     }
 
+    /** 删除职务（物理删除，删除前校验存在性）。 */
     public void delete(Long id) {
         if (mapper.selectById(id) == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "职务不存在");

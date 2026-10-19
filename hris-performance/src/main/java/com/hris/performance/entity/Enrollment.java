@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_enrollment（由 DDL 自动生成）
+ * 报名记录（域：绩效/培训，分层：实体/DO）。员工报名某培训班次，状态机 ENROLLED→COMPLETED/WITHDRAWN。
  */
 @TableName("prf_enrollment")
 public class Enrollment extends BaseEntity {

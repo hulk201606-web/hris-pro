@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * Cycle DTO（由 DDL 自动生成）。
+ * 绩效周期相关 DTO（域：绩效，分层：DTO/接口契约）。周期创建/更新/响应结构，含状态机字段。
  */
 public final class CycleDtos {
 

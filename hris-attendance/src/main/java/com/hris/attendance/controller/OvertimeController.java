@@ -31,6 +31,7 @@ public class OvertimeController {
     public OvertimeController(OvertimeService overtimeService) {
         this.overtimeService = overtimeService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<OvertimeResponse>> list(
@@ -42,11 +43,13 @@ public class OvertimeController {
             @RequestParam(defaultValue = "20") long size) {
         return R.ok(overtimeService.list(empId, status, from, to, page, size));
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<OvertimeResponse> get(@PathVariable Long id) {
         return R.ok(overtimeService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:overtime:write")
     @PostMapping

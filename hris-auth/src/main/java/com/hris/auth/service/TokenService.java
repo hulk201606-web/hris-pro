@@ -57,6 +57,11 @@ public class TokenService {
         this.refreshTtlSeconds = props.getRefreshTtlSeconds();
     }
 
+    /**
+     * 签发 access 令牌（HS256，默认 15 分钟）：
+     * claims 含 sub=userId、tenant_id、emp_id、username、status、roles、perms、typ=access。
+     * 显式固定 HS256 算法，避免密钥轮换后 jjwt 按长度自动切到 HS384/512。
+     */
     public String issueAccess(LoginUser user) {
         Date now = new Date();
         return Jwts.builder()
@@ -78,6 +83,10 @@ public class TokenService {
                 .compact();
     }
 
+    /**
+     * 签发 refresh 令牌（HS256，默认 7 天）：claims 仅含 sub/userId、tenant_id、typ=refresh、jti。
+     * jti 同时写入进程内 refreshStore（ConcurrentHashMap），用于轮换与重用检测。
+     */
     public String issueRefresh(Long userId, Long tenantId) {
         Date now = new Date();
         long exp = now.getTime() + refreshTtlSeconds * 1000;
@@ -95,6 +104,10 @@ public class TokenService {
                 .compact();
     }
 
+    /**
+     * 解析 access 令牌：验签 + issuer + 类型校验 + 黑名单检查。
+     * 黑名单命中（已登出/已禁用）抛 20401 UNAUTHORIZED。
+     */
     public LoginUser parseAccess(String token) {
         Claims c = parse(token);
         if (!TYPE_ACCESS.equals(c.get(CLAIM_TYPE, String.class))) {
@@ -156,14 +169,20 @@ public class TokenService {
         }
     }
 
+    /** @return access 令牌有效期（秒），供 TokenResponse.expiresIn 返回前端 */
     public long accessTtlSeconds() {
         return accessTtlSeconds;
     }
 
+    /** @return refresh 令牌有效期（秒），供 TokenResponse.refreshExpiresIn 返回前端 */
     public long refreshTtlSeconds() {
         return refreshTtlSeconds;
     }
 
+    /**
+     * 底层解析：HS256 验签 + issuer 校验，JwtException/IllegalArgumentException 统一包装为
+     * BizException(20401 UNAUTHORIZED)，避免把 jjwt 内部异常类型暴露给上层。
+     */
     private Claims parse(String token) {
         try {
             return Jwts.parser()
@@ -177,6 +196,10 @@ public class TokenService {
         }
     }
 
+    /**
+     * 把 JWT claims 反序列化为 LoginUser：Number 类型 claims 安全转 Long/Integer，
+     * roles/perms 经 castStrings 转 List<String>。
+     */
     private LoginUser toLoginUser(Claims c) {
         Long userId = Long.parseLong(c.getSubject());
         Long tenantId = ((Number) c.get(CLAIM_TENANT_ID)).longValue();
@@ -189,6 +212,9 @@ public class TokenService {
                 castStrings(c.get(CLAIM_ROLES)), castStrings(c.get(CLAIM_PERMS)));
     }
 
+    /**
+     * 安全地把 claims 中的 List 值转为 List<String>，非 List 时返回空集合。
+     */
     @SuppressWarnings("unchecked")
     private List<String> castStrings(Object v) {
         if (v instanceof List<?> list) {

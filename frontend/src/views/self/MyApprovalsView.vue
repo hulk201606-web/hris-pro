@@ -1,4 +1,10 @@
 <script setup lang="ts">
+
+/**
+ * 我的审批页：聚合跨流程待办任务列表（GET /flow/tasks/todo），
+ * 支持同意 / 驳回操作（POST /flow/tasks/{id}/approve|reject）。
+ * bizType 映射为中文业务名展示。
+ */
 import { onMounted, reactive, ref } from 'vue';
 import { Modal, message } from 'ant-design-vue';
 import { approveTask, fetchTodoTasks, rejectTask } from '../../api/flow';

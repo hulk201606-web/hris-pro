@@ -6,9 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * 薪酬取数周期（att_payroll_cycle）。支持自然月、上月 21 日至本月 20 日等切分方式。
- *
- * <p>uk(tenant_id, period_code) 保证周期编码唯一；月结以 period_code 关联（docs/12 §5.4）。</p>
+ * 薪资核算周期（域：考勤，分层：实体/DO）。定义算薪月份的起止日期与状态，是考勤月结与薪酬算薪的时间锚点。
  */
 @TableName("att_payroll_cycle")
 public class PayrollCycle extends BaseEntity {

@@ -3,10 +3,7 @@ package com.hris.compensation.dto;
 import java.time.LocalDateTime;
 
 /**
- * 薪酬密域 DTO（CMP_SALARY_FORBIDDEN 下沉，OPEN-DECISIONS Phase 2 薪酬密域）。
- *
- * <p>密文字段（*Cipher）不再随通用 CRUD 响应暴露，仅掩码可读；
- * 密文统一经专用端点读取，权限点 cmp:salary:read，缺权限抛 CMP_SALARY_FORBIDDEN(54001)。</p>
+ * 密域读取响应 DTO（域：薪酬，分层：DTO/密域专用）。SalarySecretService 专用响应，同时携带 cipher 明文与 mask 掩码，调用方须通过 cmp:salary:read 校验。
  */
 public final class SalarySecretDtos {
 

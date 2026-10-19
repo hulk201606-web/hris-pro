@@ -4,10 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.hris.common.entity.BaseEntity;
 
 /**
- * 假种（att_leave_type）。年假/病假/事假等，按租户自定义。
- *
- * <p>rules 以 JSON 字符串存放额度与审批策略（带薪、证明要求、最小单位 0.5h/0.5d、
- * 司龄阶梯、有效期与结转上限），禁止在代码里硬编码折算公式（docs/03-03 §4）。</p>
+ * 假期类型（域：考勤，分层：实体/DO）。定义年假/病假/事假等类型及其规则（带薪/无薪/上限天数）。
  */
 @TableName("att_leave_type")
 public class LeaveType extends BaseEntity {

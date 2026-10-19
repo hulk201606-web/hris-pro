@@ -29,6 +29,12 @@ public class AuthContextFilter extends OncePerRequestFilter {
     public static final String HEADER_PERMS = "X-User-Perms";
     public static final String HEADER_ROLES = "X-User-Roles";
 
+    /**
+     * 从网关透传的内部头还原权限上下文：X-User-Id / X-Tenant-Id / X-User-Perms / X-User-Roles。
+     * 这些头由网关 JwtAuthGlobalFilter 验签后写入，公网请求无法伪造；缺失时 perms/roles 为空集合，
+     * 受 @RequirePerm 保护的端点会被 PermAspect 以 20403 拒绝。
+     * finally 块清理 ThreadLocal，防止线程复用导致上下文串号。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {

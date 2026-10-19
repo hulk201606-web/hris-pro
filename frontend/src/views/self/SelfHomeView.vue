@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 自助首页：欢迎语 + 快捷入口（请假/加班/补卡/我的审批）+ 待办数量。
+ * 调用 GET /flow/tasks/todo 聚合跨流程待办数。
+ */
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Component } from 'vue';

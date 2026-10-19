@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDateTime;
 
 /**
- * 考勤班组 DTO（ATT-F-001 考勤组与政策）。
+ * 考勤组相关 DTO（域：考勤，分层：DTO/接口契约）。考勤组创建/更新/查询的请求与响应结构。
  */
 public final class GroupDtos {
 

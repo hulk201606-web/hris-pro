@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 /**
- * 班次 DTO（ATT-F-002 固定/弹性/跨天班次）。
+ * 班次定义相关 DTO（域：考勤，分层：DTO/接口契约）。班次创建/更新/查询的请求与响应结构。
  */
 public final class ShiftDtos {
 

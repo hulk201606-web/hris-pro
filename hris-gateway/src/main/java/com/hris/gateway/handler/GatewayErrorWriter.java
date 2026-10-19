@@ -62,6 +62,11 @@ public class GatewayErrorWriter {
         }
     }
 
+    /**
+     * 解析 traceId：优先取交换属性（TraceIdGlobalFilter 已写入），
+     * 其次取请求头 X-Trace-Id，最后兜底生成 UUID（去横线）。
+     * WebFlux 下不依赖 hris-common 的 TraceContext（ThreadLocal 跨响应式线程不可靠）。
+     */
     private String resolveTraceId(ServerWebExchange exchange) {
         Object attr = exchange.getAttribute(GatewayConstants.ATTR_TRACE_ID);
         if (attr != null) {

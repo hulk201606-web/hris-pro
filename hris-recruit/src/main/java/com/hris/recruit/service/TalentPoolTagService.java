@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * TalentPoolTag 服务（CRUD）。
+ * 人才库标签（TalentPoolTag）：给候选人打标签，支撑人才库分群与复用。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class TalentPoolTagService {
@@ -28,6 +30,7 @@ public class TalentPoolTagService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public TalentPoolTagResponse get(Long id) {
         TalentPoolTag e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class TalentPoolTagService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<TalentPoolTagResponse> list(long page, long size) {
         IPage<TalentPoolTag> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<TalentPoolTagResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public TalentPoolTagResponse create(TalentPoolTagCreateRequest req) {
         TalentPoolTag e = new TalentPoolTag();
@@ -51,6 +56,7 @@ public class TalentPoolTagService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public TalentPoolTagResponse update(Long id, TalentPoolTagUpdateRequest req) {
         TalentPoolTag e = mapper.selectById(id);
@@ -65,6 +71,7 @@ public class TalentPoolTagService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

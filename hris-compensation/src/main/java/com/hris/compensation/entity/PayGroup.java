@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * cmp_pay_group（由 DDL 自动生成）
+ * 薪资组（域：薪酬，分层：实体/DO）。按发薪频率/币种分组的员工集合，算薪按薪资组批量执行。
  */
 @TableName("cmp_pay_group")
 public class PayGroup extends BaseEntity {

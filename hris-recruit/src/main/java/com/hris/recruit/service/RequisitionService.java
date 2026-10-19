@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Requisition 服务（CRUD）。
+ * 招聘需求单（Requisition）：招聘流程起点，记录部门/岗位/招聘人数/原因与状态，批准后驱动职位发布。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class RequisitionService {
@@ -28,6 +30,7 @@ public class RequisitionService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public RequisitionResponse get(Long id) {
         Requisition e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class RequisitionService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<RequisitionResponse> list(long page, long size) {
         IPage<Requisition> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<RequisitionResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public RequisitionResponse create(RequisitionCreateRequest req) {
         Requisition e = new Requisition();
@@ -55,6 +60,7 @@ public class RequisitionService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public RequisitionResponse update(Long id, RequisitionUpdateRequest req) {
         Requisition e = mapper.selectById(id);
@@ -73,6 +79,7 @@ public class RequisitionService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

@@ -19,6 +19,10 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
 
     public static final int ORDER = -1000;
 
+    /**
+     * 入口 traceId 过滤器（ORDER=-1000，最外层）：从 X-Trace-Id 取链路 ID（无则生成 32 位 UUID），
+     * 写入交换属性、响应头 X-Trace-Id 与 Reactor Context，供后续过滤器、错误处理与日志复用。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String incoming = exchange.getRequest().getHeaders().getFirst(GatewayConstants.HEADER_TRACE_ID);

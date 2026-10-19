@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_evaluation（由 DDL 自动生成）
+ * 评估结果（域：绩效，分层：实体/DO）。单次评估任务的评分与评语 JSON。
  */
 @TableName("prf_evaluation")
 public class Evaluation extends BaseEntity {

@@ -58,6 +58,10 @@ public class JwtTokenVerifier {
         return new GatewayPrincipal(userId, tenantId, empId, roles, perms);
     }
 
+    /**
+     * 安全地把 JWT claims 中的 List 值转为 List<String>（jjwt 反序列化后元素类型不可靠），
+     * 非 List 时返回空集合，避免 NPE。
+     */
     @SuppressWarnings("unchecked")
     private List<String> castStrings(Object value) {
         if (value instanceof List<?> list) {

@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * PayGrade DTO（由 DDL 自动生成）。
+ * 薪级相关 DTO（域：薪酬，分层：DTO/接口契约）。薪级创建/更新/查询的请求与响应结构。
  */
 public final class PayGradeDtos {
 

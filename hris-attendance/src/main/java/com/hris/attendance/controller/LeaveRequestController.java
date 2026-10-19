@@ -36,6 +36,7 @@ public class LeaveRequestController {
         this.leaveRequestService = leaveRequestService;
         this.leaveQueryService = leaveQueryService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<LeaveResponse>> list(
@@ -47,11 +48,13 @@ public class LeaveRequestController {
             @RequestParam(defaultValue = "20") long size) {
         return R.ok(leaveQueryService.list(empId, status, from, to, page, size));
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<LeaveResponse> get(@PathVariable Long id) {
         return R.ok(leaveQueryService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:leave:write")
     @PostMapping

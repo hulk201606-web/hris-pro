@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * SocialFundProfile DTO（由 DDL 自动生成）。
+ * 社保公积金档案相关 DTO（域：薪酬，分层：DTO/接口契约）。社保/公积金缴纳基数配置的创建/更新/查询结构。
  */
 public final class SocialFundProfileDtos {
 

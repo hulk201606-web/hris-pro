@@ -26,6 +26,10 @@ public class HeadcountService {
         this.mapper = mapper;
     }
 
+    /**
+     * 编制查询：可按部门/岗位/季度（yyyyQn）过滤，返回额度、已占用、空缺、占用率。
+     * occupied 由员工入职/离职流程回写。
+     */
     public List<HeadcountUsage> query(Long deptId, Long positionId, String period) {
         LambdaQueryWrapper<OrgHeadcount> qw = new LambdaQueryWrapper<>();
         if (deptId != null) {
@@ -40,6 +44,9 @@ public class HeadcountService {
         return mapper.selectList(qw).stream().map(this::toUsage).toList();
     }
 
+    /**
+     * 设定编制额度：部门+岗位+季度三元组唯一，已存在则覆盖 quota，否则新建且 occupied=0。
+     */
     @Transactional(rollbackFor = Exception.class)
     public HeadcountUsage set(HeadcountRequest req) {
         OrgHeadcount existing = mapper.selectOne(new LambdaQueryWrapper<OrgHeadcount>()

@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 我的信息页：拉取当前登录员工档案（GET /emp/me），只读展示
+ * 基本信息 / 雇佣信息 / 汇报线 / 合同信息。
+ */
 import { onMounted, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { fetchMyProfile } from '../../api/employee';

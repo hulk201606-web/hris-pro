@@ -21,6 +21,15 @@ import java.util.Set;
 @ConditionalOnClass(name = "org.aspectj.lang.annotation.Aspect")
 public class PermAspect {
 
+    /**
+     * 环绕 @RequirePerm 标注的方法：从 AuthContextHolder 取当前用户 perms 集合，
+     * 校验是否包含注解声明的权限点（模块:资源:动作）。
+     * perms 为空或不包含所需权限点时抛 BizException(20403 FORBIDDEN)，
+     * 实现后端强制垂直越权拦截（非前端隐藏按钮的软限制）。
+     *
+     * @param pjp         切点
+     * @param requirePerm 权限点注解实例，value() 形如 org:headcount:write
+     */
     @Around("@annotation(requirePerm)")
     public Object around(ProceedingJoinPoint pjp, RequirePerm requirePerm) throws Throwable {
         Set<String> perms = AuthContextHolder.getPerms();

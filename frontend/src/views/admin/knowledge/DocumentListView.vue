@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-文档管理列表：CRUD（标题 / 所属空间 / 文档类型 / 标题指纹），
+ * 走 EntityCrudPage 组件 + /kb/documents 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createDocument,

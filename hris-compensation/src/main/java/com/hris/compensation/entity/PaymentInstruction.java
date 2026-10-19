@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * cmp_payment_instruction（由 DDL 自动生成）
+ * 发放指令（域：薪酬，分层：实体/DO）。算薪完成后生成的银行发放指令，状态机 PENDING→PAID/FAILED。
  */
 @TableName("cmp_payment_instruction")
 public class PaymentInstruction extends BaseEntity {

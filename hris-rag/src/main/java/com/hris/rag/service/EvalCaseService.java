@@ -28,6 +28,7 @@ public class EvalCaseService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询评测用例详情，不存在则抛 NOT_FOUND。 */
     public EvalCaseResponse get(Long id) {
         EvalCase e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class EvalCaseService {
         return toResponse(e);
     }
 
+    /** 分页查询评测用例列表。 */
     public PageResult<EvalCaseResponse> list(long page, long size) {
         IPage<EvalCase> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<EvalCaseResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建评测用例。 */
     @Transactional(rollbackFor = Exception.class)
     public EvalCaseResponse create(EvalCaseCreateRequest req) {
         EvalCase e = new EvalCase();
@@ -53,6 +56,7 @@ public class EvalCaseService {
         return toResponse(e);
     }
 
+    /** 更新评测用例（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public EvalCaseResponse update(Long id, EvalCaseUpdateRequest req) {
         EvalCase e = mapper.selectById(id);
@@ -69,6 +73,7 @@ public class EvalCaseService {
         return toResponse(e);
     }
 
+    /** 删除评测用例（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

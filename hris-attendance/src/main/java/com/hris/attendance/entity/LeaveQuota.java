@@ -6,12 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * 假期额度（att_leave_quota）。员工在某周期（如 2026）某假种下的额度余额。
- *
- * <p>uk(tenant_id, emp_id, leave_type_id, period) 保证同一周期仅一条额度行，
- * 发放走 upsert 累加（docs/12 §5.4）。</p>
- *
- * <p>注意：DDL 无 frozen_quota 列，MVP 不支持审批期冻结（见 OPEN-DECISIONS）。</p>
+ * 假期额度（域：考勤，分层：实体/DO）。员工某假期类型在某周期的总额度与已用额度，按年/季重置。
  */
 @TableName("att_leave_quota")
 public class LeaveQuota extends BaseEntity {

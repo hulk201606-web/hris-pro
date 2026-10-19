@@ -50,6 +50,16 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * 账号密码登录完整链路：
+     * <ol>
+     *   <li>按 tenantCode 查 AuthTenant（平台级表，绕过租户插件），校验存在且状态=正常；</li>
+     *   <li>设置 TraceContext.tenantId，按 username 查 AuthUser，校验存在且未禁用；</li>
+     *   <li>Argon2id 校验密码，失败抛 20401（不区分"用户不存在"与"密码错误"防枚举）；</li>
+     *   <li>加载用户角色/权限点构建 LoginUser，签发 access + refresh 令牌对。</li>
+     * </ol>
+     * 审计日志由 @AuditLog 切面输出。
+     */
     @AuditLog(value = "登录", module = "auth")
     public TokenResponse login(LoginRequest req) {
         AuthTenant tenant = tenantMapper.findByCode(req.tenantCode().trim().toLowerCase());
@@ -84,6 +94,10 @@ public class AuthService {
         }
     }
 
+    /**
+     * 刷新令牌：校验 refresh 签名/类型/未撤销/未重用 → 查用户状态 → 消费旧 jti（轮换）
+     * → 重建 LoginUser → 签发新 access + 新 refresh。旧 refresh 再次使用会命中重用检测抛 401。
+     */
     public TokenResponse refresh(RefreshRequest req) {
         TokenService.RefreshToken rt = tokenService.parseRefresh(req.refreshToken());
         TraceContext.setTenantId(rt.tenantId());
@@ -106,10 +120,17 @@ public class AuthService {
         }
     }
 
+    /**
+     * 登出：把 access jti 加入黑名单（TTL 内即时失效），refresh jti 移除并加入黑名单。
+     */
     public void logout(String accessToken, LogoutRequest req) {
         tokenService.revoke(accessToken, req == null ? null : req.refreshToken());
     }
 
+    /**
+     * 组装当前用户完整摘要：用户基本信息 + 角色列表 + 权限点集合 + 数据权限规则 + 租户品牌。
+     * 数据权限按角色 ID 反查 roleCode 后返回。
+     */
     public MeResponse me(LoginUser current) {
         TraceContext.setTenantId(current.tenantId());
         try {
@@ -140,11 +161,18 @@ public class AuthService {
         }
     }
 
+    /**
+     * 按当前用户权限点集合派生菜单树（模块=一级、资源=二级、动作=按钮）。
+     */
     public List<MenuNode> menus(LoginUser current) {
         List<String> perms = userAuthService.permsOf(current.userId());
         return menuService.build(perms);
     }
 
+    /**
+     * 根据 AuthUser + tenantId 构建 LoginUser：加载角色编码集合与权限点集合，
+     * 供 JWT claims 写入与 AuthContext 使用。
+     */
     private LoginUser buildLoginUser(AuthUser user, Long tenantId) {
         List<String> roleCodes = userAuthService.rolesOf(user.getId()).stream()
                 .map(AuthRole::getCode).toList();
@@ -153,6 +181,9 @@ public class AuthService {
                 user.getUsername(), user.getStatus(), roleCodes, perms);
     }
 
+    /**
+     * 按数据权限规则的 roleId 反查角色编码，用于 MeResponse 输出 roleCode 字段。
+     */
     private String roleCodeOf(List<AuthRole> roles, AuthDataScope scope) {
         for (AuthRole role : roles) {
             if (role.getId().equals(scope.getRoleId())) {

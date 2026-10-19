@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * prf_forced_rule（由 DDL 自动生成）
+ * 强制分布规则（域：绩效，分层：实体/DO）。绩效评级的强制分布比例（如 S 10%/A 20%），校准时执行。
  */
 @TableName("prf_forced_rule")
 public class ForcedRule extends BaseEntity {

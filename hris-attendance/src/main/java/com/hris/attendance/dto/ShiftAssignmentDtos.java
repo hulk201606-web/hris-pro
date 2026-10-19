@@ -9,7 +9,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * 排班 DTO（ATT-F-003 日历视图批量排班 + 周期模板）。
+ * 排班分配相关 DTO（域：考勤，分层：DTO/接口契约）。批量排班/周期排班的请求与响应结构。
  */
 public final class ShiftAssignmentDtos {
 

@@ -7,12 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 请假单（att_leave_request）。关联 flow 审批，通过后生效并扣减额度。
- *
- * <p>状态流转：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED（docs/03-03 ATT-F-010/014）。
- * 跨月按日切片分摊（§4 关键规则）。</p>
- *
- * <p>uk(tenant_id, biz_key) 保证幂等；idx(tenant_id, emp_id, status) 支撑互斥校验。</p>
+ * 请假申请（域：考勤，分层：实体/DO）。员工提交请假时段与天数，走审批流，通过后扣减额度并在日结中记 LEAVE。
  */
 @TableName("att_leave_request")
 public class LeaveRequest extends BaseEntity {

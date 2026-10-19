@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 登录页：租户编码 + 账号 + 密码表单，提交后调用 POST /auth/login。
+ * 登录成功后写入 Pinia user store 与本地令牌，跳转 redirect 参数或自助首页。
+ */
 import { reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';

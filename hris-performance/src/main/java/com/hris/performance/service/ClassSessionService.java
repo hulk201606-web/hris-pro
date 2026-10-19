@@ -28,6 +28,7 @@ public class ClassSessionService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
     public ClassSessionResponse get(Long id) {
         ClassSession e = mapper.selectById(id);
         if (e == null) {
@@ -36,11 +37,13 @@ public class ClassSessionService {
         return toResponse(e);
     }
 
+    /** 分页查询记录列表。 */
     public PageResult<ClassSessionResponse> list(long page, long size) {
         IPage<ClassSession> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<ClassSessionResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
+    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
     @Transactional(rollbackFor = Exception.class)
     public ClassSessionResponse create(ClassSessionCreateRequest req) {
@@ -52,6 +55,7 @@ public class ClassSessionService {
         mapper.insert(e);
         return toResponse(e);
     }
+    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
     @Transactional(rollbackFor = Exception.class)
     public ClassSessionResponse update(Long id, ClassSessionUpdateRequest req) {
@@ -68,6 +72,7 @@ public class ClassSessionService {
         }
         return toResponse(e);
     }
+    /** 按主键删除记录，不存在抛 NOT_FOUND。 */
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {

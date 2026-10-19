@@ -8,9 +8,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 日考勤结果（att_daily_attendance）。每日计算的最终归集，供月结与薪酬取数。
- *
- * <p>uk(tenant_id, emp_id, work_date) 保证一人一日一条结果，重算走 upsert（docs/12 §5.4）。</p>
+ * 日考勤结果（域：考勤，分层：实体/DO）。按员工+工作日聚合打卡/请假/加班后的日结状态（NORMAL/LATE/EARLY/ABSENT/LEAVE），uk(tenant_id,emp_id,work_date) 幂等 upsert。
  */
 @TableName("att_daily_attendance")
 public class DailyAttendance extends BaseEntity {

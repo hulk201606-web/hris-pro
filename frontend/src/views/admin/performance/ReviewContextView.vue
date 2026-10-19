@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-评估上下文页：输入员工 ID 拉取档案简报（部门 / 汇报线 / 在职状态），
+ * 供绩效评估单上下文展示使用。
+ */
 import EmployeeContextPanel from '../../../components/admin/EmployeeContextPanel.vue';
 import { fetchReviewContext } from '../../../api/performance';
 </script>

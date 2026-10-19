@@ -6,9 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalTime;
 
 /**
- * 班次（att_shift）。固定/弹性班次，含上下班时刻。
- *
- * <p>跨天班次判定：end_time <= start_time 视为次日下班（docs/03-03 ATT-F-002）。</p>
+ * 班次定义（域：考勤，分层：实体/DO）。定义上下班时间与是否弹性，如标准班 09:00-18:00。
  */
 @TableName("att_shift")
 public class Shift extends BaseEntity {

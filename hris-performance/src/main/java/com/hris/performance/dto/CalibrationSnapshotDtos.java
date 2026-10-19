@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * CalibrationSnapshot DTO（由 DDL 自动生成）。
+ * 校准快照相关 DTO（域：绩效，分层：DTO/接口契约）。快照查询与回溯的数据结构。
  */
 public final class CalibrationSnapshotDtos {
 

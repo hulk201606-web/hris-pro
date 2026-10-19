@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Interview 服务（CRUD）。
+ * 面试安排（Interview）：为某投递记录安排一轮面试，含轮次、计划时间、面试官 ID 列表与面试状态。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class InterviewService {
@@ -28,6 +30,7 @@ public class InterviewService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public InterviewResponse get(Long id) {
         Interview e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class InterviewService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<InterviewResponse> list(long page, long size) {
         IPage<Interview> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<InterviewResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public InterviewResponse create(InterviewCreateRequest req) {
         Interview e = new Interview();
@@ -54,6 +59,7 @@ public class InterviewService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public InterviewResponse update(Long id, InterviewUpdateRequest req) {
         Interview e = mapper.selectById(id);
@@ -71,6 +77,7 @@ public class InterviewService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

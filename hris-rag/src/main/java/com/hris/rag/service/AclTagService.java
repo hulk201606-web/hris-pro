@@ -28,6 +28,7 @@ public class AclTagService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询ACL 标签详情，不存在则抛 NOT_FOUND。 */
     public AclTagResponse get(Long id) {
         AclTag e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class AclTagService {
         return toResponse(e);
     }
 
+    /** 分页查询ACL 标签列表。 */
     public PageResult<AclTagResponse> list(long page, long size) {
         IPage<AclTag> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<AclTagResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建ACL 标签。 */
     @Transactional(rollbackFor = Exception.class)
     public AclTagResponse create(AclTagCreateRequest req) {
         AclTag e = new AclTag();
@@ -52,6 +55,7 @@ public class AclTagService {
         return toResponse(e);
     }
 
+    /** 更新ACL 标签（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public AclTagResponse update(Long id, AclTagUpdateRequest req) {
         AclTag e = mapper.selectById(id);
@@ -67,6 +71,7 @@ public class AclTagService {
         return toResponse(e);
     }
 
+    /** 删除ACL 标签（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

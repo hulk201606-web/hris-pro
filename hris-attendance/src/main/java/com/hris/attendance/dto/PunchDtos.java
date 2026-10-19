@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 打卡 DTO（ATT-F-004 打卡采集 / ATT-F-007 实时考勤状态）。
+ * 打卡相关 DTO（域：考勤，分层：DTO/接口契约）。打卡提交/当日打卡查询的请求与响应结构。
  */
 public final class PunchDtos {
 

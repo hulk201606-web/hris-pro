@@ -32,6 +32,11 @@ public class TransferService {
         this.lifecycleCaseService = lifecycleCaseService;
     }
 
+    /**
+     * 发起调动办理：校验员工为在职（ACTIVE），对目标部门/岗位做编制校验，
+     * 组装目标部门/岗位/职级/直属上级载荷，创建 EMP_TRANSFER 单。生效日之前不改变员工主状态，
+     * 生效后经待生效事务（PendingTransaction）落新雇佣关系。
+     */
     public LifecycleCaseResponse create(TransferRequest req) {
         Employee emp = require(req.empId());
         if (!EmployeeStatus.ACTIVE.equals(EmployeeStatus.fromCode(emp.getStatus()))) {

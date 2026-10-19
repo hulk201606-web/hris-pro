@@ -6,11 +6,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
- * 时长换算工具（请假天数 / 加班小时）。
- *
- * <p>说明：与 util/CodeUtil 同属本模块确需的公共无状态工具；请假、加班、月结、报表四处
- * 都要做同一套「毫秒 → 小时（2 位小数 HALF_UP）→ 天（8 小时/天）」换算，
- * 抽出的目的是保证四个域算出来的口径完全一致，避免四舍五入差导致对账不平。</p>
+ * 时间金额工具类（域：考勤，分层：工具/Util）。统一 BigDecimal 时长归一化（null→0、保留 2 位小数），避免 NPE 与精度漂移。
  */
 public final class TimeAmountUtil {
 

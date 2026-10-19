@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-假种列表：简单 CRUD（假种名称 / 编码 / 规则 JSON），
+ * 走 SimpleCrudPage 组件 + /att/leave-types 接口。
+ */
 import SimpleCrudPage from '../../../components/admin/SimpleCrudPage.vue';
 import { createLeaveType, listLeaveTypes, updateLeaveType } from '../../../api/attendance';
 import type { CrudColumn, CrudField, SimpleCrudApi } from '../../../types/admin';

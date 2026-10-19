@@ -45,6 +45,16 @@ public class AccountService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * 入职建号（内部 Feign 调用）：
+     * <ol>
+     *   <li>校验租户存在且状态=正常（findByIdIgnoreTenant 绕过租户插件）；</li>
+     *   <li>临时设置 TraceContext.tenantId（内部调用无请求头上下文），finally 清理；</li>
+     *   <li>用户名小写化后查重，已存在抛 10001；</li>
+     *   <li>Argon2id 加密初始密码，插入 auth_user；</li>
+     *   <li>按 roleCodes 匹配角色并写入 auth_user_role 关联。</li>
+     * </ol>
+     */
     @AuditLog(value = "入职建号", module = "auth")
     public AccountCreateResponse create(AccountCreateRequest req) {
         AuthTenant tenant = tenantMapper.findByIdIgnoreTenant(req.tenantId());
@@ -74,6 +84,10 @@ public class AccountService {
         }
     }
 
+    /**
+     * 离职禁用账号：临时设置 TraceContext.tenantId，按 employeeId 查账号，置 status=0。
+     * 账号不存在抛 10002 NOT_FOUND。
+     */
     @AuditLog(value = "离职禁用账号", module = "auth")
     public void disable(Long tenantId, Long employeeId) {
         TraceContext.setTenantId(tenantId);
@@ -90,6 +104,10 @@ public class AccountService {
         }
     }
 
+    /**
+     * 按角色编码集合匹配 auth_role，逐条写入 auth_user_role 关联。
+     * roleCodes 为空时跳过（不分配任何角色）。
+     */
     private void assignRoles(Long userId, List<String> roleCodes) {
         if (roleCodes == null || roleCodes.isEmpty()) {
             return;

@@ -26,6 +26,10 @@ public class WhitelistGlobalFilter implements GlobalFilter, Ordered {
         this.props = props;
     }
 
+    /**
+     * 白名单过滤器（ORDER=-800）：用 AntPathMatcher 匹配配置中的白名单路径（登录/刷新/公开资源/健康检查等），
+     * 命中则在交换属性写入 ATTR_SKIP_AUTH=true，由后续 JwtAuthGlobalFilter 读取该标记决定是否跳过 JWT 校验。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();

@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-职位需求列表：CRUD（需求编号 / 部门 / 岗位 / 招聘人数），
+ * 走 EntityCrudPage 组件 + /rcu/requisitions 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createRequisition,

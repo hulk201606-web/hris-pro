@@ -25,6 +25,7 @@ public class ExportTaskService {
         this.mapper = mapper;
     }
 
+    /** 创建异步导出任务（写入 outbox 由消费者执行）。 */
     public ExportTaskResponse create(ExportTaskRequest req) {
         SysExportTask t = new SysExportTask();
         t.setReportDefId(req.reportDefId());
@@ -33,6 +34,7 @@ public class ExportTaskService {
         return toResponse(t);
     }
 
+    /** 按状态分页查询导出任务。 */
     public PageResult<ExportTaskResponse> query(String status, long page, long size) {
         LambdaQueryWrapper<SysExportTask> qw = new LambdaQueryWrapper<>();
         if (status != null && !status.isBlank()) {

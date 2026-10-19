@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * prf_class_session（由 DDL 自动生成）
+ * 培训班次（域：绩效/培训，分层：实体/DO）。某门课程的一期开课实例（时间/容量/讲师）。
  */
 @TableName("prf_class_session")
 public class ClassSession extends BaseEntity {

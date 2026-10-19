@@ -24,11 +24,13 @@ public class ReportService {
         this.mapper = mapper;
     }
 
+    /** 查询全部报表定义。 */
     public List<ReportDefResponse> list() {
         return mapper.selectList(new LambdaQueryWrapper<SysReportDef>().orderByAsc(SysReportDef::getCode))
                 .stream().map(this::toResponse).toList();
     }
 
+    /** 新建报表定义。 */
     public ReportDefResponse create(ReportDefRequest req) {
         String code = CodeUtil.normalize(req.code());
         if (code == null || code.isBlank()) {
@@ -43,6 +45,7 @@ public class ReportService {
         return toResponse(e);
     }
 
+    /** 更新报表定义（乐观锁防并发覆盖）。 */
     public ReportDefResponse update(Long id, ReportDefRequest req) {
         SysReportDef e = require(id);
         if (req.name() != null && !req.name().isBlank()) {
@@ -55,6 +58,7 @@ public class ReportService {
         return toResponse(e);
     }
 
+    /** 删除报表定义（逻辑删除）。 */
     public void delete(Long id) {
         require(id);
         mapper.deleteById(id);

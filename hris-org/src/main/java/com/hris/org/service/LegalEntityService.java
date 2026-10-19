@@ -23,10 +23,12 @@ public class LegalEntityService {
         this.mapper = mapper;
     }
 
+    /** 查询全部法人主体（组织主数据的法定实体层，组织树/雇佣关系均挂在法人主体下）。 */
     public List<CatalogResponse> list() {
         return mapper.selectList(null).stream().map(this::toResponse).toList();
     }
 
+    /** 新建法人主体：USCC 转大写，默认币种 CNY、状态有效。 */
     public CatalogResponse create(CatalogRequest req) {
         OrgLegalEntity e = new OrgLegalEntity();
         e.setName(req.name().trim());
@@ -37,6 +39,7 @@ public class LegalEntityService {
         return toResponse(e);
     }
 
+    /** 更新法人主体：仅名称与启停状态可变更。 */
     public CatalogResponse update(Long id, CatalogRequest req) {
         OrgLegalEntity e = mapper.selectById(id);
         if (e == null) {

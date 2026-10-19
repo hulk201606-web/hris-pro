@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 日考勤 DTO（ATT-F-008 日考勤计算 / ATT-F-009 迟到宽限与分级）。
+ * 日考勤相关 DTO（域：考勤，分层：DTO/接口契约）。日考勤计算触发/结果/分页查询的请求与响应结构。
  */
 public final class DailyDtos {
 

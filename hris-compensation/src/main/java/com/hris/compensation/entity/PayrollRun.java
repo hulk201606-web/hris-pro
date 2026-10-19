@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * cmp_payroll_run（由 DDL 自动生成）
+ * 算薪批次（域：薪酬，分层：实体/DO）。状态机 DRAFT→CALCULATING→LOCKED→PAID→ARCHIVED，锁单后不可修改。
  */
 @TableName("cmp_payroll_run")
 public class PayrollRun extends BaseEntity {

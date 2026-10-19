@@ -3,10 +3,7 @@ package com.hris.attendance.dto;
 import java.math.BigDecimal;
 
 /**
- * 考勤报表 DTO（ATT-F-025 部门出勤率 / 加班时长 / 假期消耗）。
- *
- * <p>注意：DDL 的 att_daily_attendance 无 dept_id 列，且员工域未提供按部门批量取人的内部接口，
- * 因此 MVP 按员工维度聚合；部门维度待二期补员工域接口后叠加（见 OPEN-DECISIONS）。</p>
+ * 考勤报表相关 DTO（域：考勤，分层：DTO/接口契约）。假期消耗统计等报表数据结构。
  */
 public final class ReportDtos {
 

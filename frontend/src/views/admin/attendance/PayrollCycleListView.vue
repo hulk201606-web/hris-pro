@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-薪酬取数周期列表：CRUD + 封存动作（close，封存后不可变更），
+ * 走 SimpleCrudPage 组件 + /att/payroll-cycles 接口。
+ */
 import { computed } from 'vue';
 import { Modal, message } from 'ant-design-vue';
 import SimpleCrudPage from '../../../components/admin/SimpleCrudPage.vue';

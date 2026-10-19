@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * cmp_social_fund_profile（由 DDL 自动生成）
+ * 社保公积金档案（域：薪酬，分层：实体/DO）。员工社保/公积金缴纳基数与比例配置。
  */
 @TableName("cmp_social_fund_profile")
 public class SocialFundProfile extends BaseEntity {

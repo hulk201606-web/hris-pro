@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * EvalTask DTO（由 DDL 自动生成）。
+ * 评估任务相关 DTO（域：绩效，分层：DTO/接口契约）。任务指派/提交/查询的请求与响应结构。
  */
 public final class EvalTaskDtos {
 

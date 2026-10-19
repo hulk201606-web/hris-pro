@@ -33,6 +33,11 @@ public class OnboardingService {
         this.lifecycleCaseService = lifecycleCaseService;
     }
 
+    /**
+     * 发起入职办理：校验员工为待入职（PENDING），调用组织域做编制校验（不足抛 EMP_HEADCOUNT_SHORT），
+     * 组装法人/部门/岗位/职级/雇佣类型/直属上级/初始账号等载荷，创建 EMP_ONBOARD 生命周期单并驱动流程引擎。
+     * username 缺省取工号，password 缺省生成随机 12 位初密。
+     */
     public LifecycleCaseResponse create(OnboardRequest req) {
         Employee emp = require(req.empId());
         if (!EmployeeStatus.PENDING.equals(EmployeeStatus.fromCode(emp.getStatus()))) {

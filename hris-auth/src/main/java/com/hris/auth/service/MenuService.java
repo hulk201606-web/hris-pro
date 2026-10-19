@@ -17,6 +17,10 @@ public class MenuService {
 
     private static final Map<String, String> MODULE_NAMES = moduleNames();
 
+    /**
+     * 由权限点集合派生菜单树：按冒号切分 模块:资源:动作，
+     * 模块=一级节点（MODULE_NAMES 映射中文名）、资源=二级节点、动作=三级按钮节点。
+     */
     public List<MenuNode> build(List<String> perms) {
         Map<String, Map<String, List<String>>> modules = new LinkedHashMap<>();
         for (String perm : perms) {
@@ -48,6 +52,7 @@ public class MenuService {
         return tree;
     }
 
+    /** 内置模块编码 → 中文名映射表（auth/org/emp/att/rcu/cmp/prf/flow/rag/plt）。 */
     private static Map<String, String> moduleNames() {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("auth", "认证与权限");

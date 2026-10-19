@@ -24,10 +24,12 @@ public class GradeService {
         this.mapper = mapper;
     }
 
+    /** 查询全部职级字典（含所属职级带 ID）。 */
     public List<CatalogResponse> list() {
         return mapper.selectList(null).stream().map(this::toResponse).toList();
     }
 
+    /** 新建职级：编码缺省按 grade 前缀生成，校验编码唯一，可挂职级带。 */
     public CatalogResponse create(CatalogRequest req) {
         String code = CodeUtil.normalize(req.code());
         if (code == null || code.isBlank()) {
@@ -43,6 +45,7 @@ public class GradeService {
         return toResponse(e);
     }
 
+    /** 更新职级：名称、所属职级带、启停状态可变更。 */
     public CatalogResponse update(Long id, CatalogRequest req) {
         OrgGrade e = mapper.selectById(id);
         if (e == null) {
@@ -61,6 +64,7 @@ public class GradeService {
         return toResponse(e);
     }
 
+    /** 删除职级（物理删除，删除前校验存在性）。 */
     public void delete(Long id) {
         if (mapper.selectById(id) == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "职级不存在");

@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * cmp_pay_item（由 DDL 自动生成）
+ * 薪资项目（域：薪酬，分层：实体/DO）。工资条上的每一项（基本工资/绩效奖金/社保/个税等），含计算公式。
  */
 @TableName("cmp_pay_item")
 public class PayItem extends BaseEntity {

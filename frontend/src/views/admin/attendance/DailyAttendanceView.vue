@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-日考勤明细页：按日期 / 员工筛选日考勤结果列表，
+ * 支持手动触发重算（POST /att/daily/compute，需 att:daily:compute 权限）。
+ */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { SearchOutlined, SyncOutlined } from '@ant-design/icons-vue';

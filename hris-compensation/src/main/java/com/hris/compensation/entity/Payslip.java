@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * cmp_payslip（由 DDL 自动生成）
+ * 工资单（域：薪酬，分层：实体/DO，密域）。发放给员工的月度工资单，netPayCipher 为实发金额密文，非授权视图返回 netPayMask；发送状态 UNSENT→SENT。
  */
 @TableName("cmp_payslip")
 public class Payslip extends BaseEntity {

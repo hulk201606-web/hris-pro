@@ -7,10 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 补卡单（att_fix_request）。遗漏打卡后补录，受月度次数限制。
- *
- * <p>状态流转：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED（docs/03-03 ATT-F-019）。
- * 月度上限见 {@code FixRequestService#MONTHLY_LIMIT}。</p>
+ * 补卡申请（域：考勤，分层：实体/DO）。缺卡员工申请补录上下班打卡，走审批流后生效，状态机 DRAFT→APPROVING→APPROVED/REJECTED。
  */
 @TableName("att_fix_request")
 public class FixRequest extends BaseEntity {

@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Application 服务（CRUD）。
+ * 投递记录（Application）：候选人对某职位发布的一次申请，含招聘阶段 stage 与投递状态，是面试/Offer 流程的挂载点。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class ApplicationService {
@@ -28,6 +30,7 @@ public class ApplicationService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public ApplicationResponse get(Long id) {
         Application e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class ApplicationService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<ApplicationResponse> list(long page, long size) {
         IPage<Application> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<ApplicationResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public ApplicationResponse create(ApplicationCreateRequest req) {
         Application e = new Application();
@@ -54,6 +59,7 @@ public class ApplicationService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public ApplicationResponse update(Long id, ApplicationUpdateRequest req) {
         Application e = mapper.selectById(id);
@@ -71,6 +77,7 @@ public class ApplicationService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

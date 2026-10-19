@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-候选人列表：CRUD（姓名 / 脱敏手机号 / 邮箱 / 阶段），
+ * 走 EntityCrudPage 组件 + /rcu/candidates 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createCandidate,

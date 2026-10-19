@@ -28,6 +28,7 @@ public class DocumentService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询文档详情，不存在则抛 NOT_FOUND。 */
     public DocumentResponse get(Long id) {
         Document e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class DocumentService {
         return toResponse(e);
     }
 
+    /** 分页查询文档列表。 */
     public PageResult<DocumentResponse> list(long page, long size) {
         IPage<Document> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<DocumentResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建文档。 */
     @Transactional(rollbackFor = Exception.class)
     public DocumentResponse create(DocumentCreateRequest req) {
         Document e = new Document();
@@ -54,6 +57,7 @@ public class DocumentService {
         return toResponse(e);
     }
 
+    /** 更新文档（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public DocumentResponse update(Long id, DocumentUpdateRequest req) {
         Document e = mapper.selectById(id);
@@ -71,6 +75,7 @@ public class DocumentService {
         return toResponse(e);
     }
 
+    /** 删除文档（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

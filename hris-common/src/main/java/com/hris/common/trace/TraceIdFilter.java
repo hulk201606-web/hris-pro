@@ -25,6 +25,12 @@ public class TraceIdFilter extends OncePerRequestFilter {
     public static final String HEADER_TENANT_ID = "X-Tenant-Id";
     public static final String HEADER_USER_ID = "X-User-Id";
 
+    /**
+     * 入口过滤器：从 X-Trace-Id 取链路 ID（无则生成 32 位 UUID），写入 TraceContext 与 SLF4J MDC；
+     * 同时解析 X-Tenant-Id / X-User-Id（仅网关透传内部头有效，公网直连忽略非法值），
+     * 供 MyBatis-Plus 租户插件与 MetaObjectHandler 自动填充使用。
+     * 响应头回写 X-Trace-Id，finally 清理 ThreadLocal 与 MDC。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {

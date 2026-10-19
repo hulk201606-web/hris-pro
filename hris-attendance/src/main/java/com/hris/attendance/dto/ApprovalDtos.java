@@ -4,10 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 审批回调 DTO（flow 服务回调 /internal/att/approval-callback）。
- *
- * <p>biz_type 取 ATT_LEAVE / ATT_OT / ATT_TRIP / ATT_FIX；回调按 biz_key 幂等，
- * 重复回调（网络重试）不改变已终态的单据。</p>
+ * 审批回调相关 DTO（域：考勤，分层：DTO/接口契约）。承载工作流引擎审批结果回调的请求与响应结构。
  */
 public final class ApprovalDtos {
 

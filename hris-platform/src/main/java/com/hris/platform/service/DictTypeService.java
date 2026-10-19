@@ -24,11 +24,13 @@ public class DictTypeService {
         this.mapper = mapper;
     }
 
+    /** 查询全部字典类型。 */
     public List<DictTypeResponse> list() {
         return mapper.selectList(new LambdaQueryWrapper<SysDictType>().orderByAsc(SysDictType::getCode))
                 .stream().map(this::toResponse).toList();
     }
 
+    /** 新建字典类型。 */
     public DictTypeResponse create(DictTypeRequest req) {
         String code = CodeUtil.normalize(req.code());
         if (code == null || code.isBlank()) {
@@ -42,6 +44,7 @@ public class DictTypeService {
         return toResponse(e);
     }
 
+    /** 更新字典类型（乐观锁防并发覆盖）。 */
     public DictTypeResponse update(Long id, DictTypeRequest req) {
         SysDictType e = require(id);
         if (req.name() != null && !req.name().isBlank()) {
@@ -51,6 +54,7 @@ public class DictTypeService {
         return toResponse(e);
     }
 
+    /** 删除字典类型（逻辑删除）。 */
     public void delete(Long id) {
         require(id);
         mapper.deleteById(id);

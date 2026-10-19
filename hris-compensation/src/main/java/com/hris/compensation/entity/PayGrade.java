@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * cmp_pay_grade（由 DDL 自动生成）
+ * 薪级（域：薪酬，分层：实体/DO）。职级体系中的薪资区间（min~max），定薪时校验定薪额落在区间内。
  */
 @TableName("cmp_pay_grade")
 public class PayGrade extends BaseEntity {

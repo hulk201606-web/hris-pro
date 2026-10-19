@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 月结 DTO（ATT-F-023 考勤月结 / ATT-F-024 月结红冲与调整）。
+ * 考勤月结相关 DTO（域：考勤，分层：DTO/接口契约）。月结批次列表/明细/执行/调整项的请求与响应结构。
  */
 public final class ClosingDtos {
 

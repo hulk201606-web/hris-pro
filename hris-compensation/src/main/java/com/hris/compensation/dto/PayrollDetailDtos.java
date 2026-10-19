@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * PayrollDetail DTO（由 DDL 自动生成）。
+ * 算薪明细相关 DTO（域：薪酬，分层：DTO/接口契约，密域）。单员工算薪逐项明细的查询结构，金额字段密文/掩码双列。
  */
 public final class PayrollDetailDtos {
 

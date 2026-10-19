@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * prf_cycle（由 DDL 自动生成）
+ * 绩效周期（域：绩效，分层：实体/DO）。状态机 NOT_STARTED→IN_PROGRESS→SELF_REVIEW→MANAGER_REVIEW→CALIBRATION→ARCHIVED。
  */
 @TableName("prf_cycle")
 public class Cycle extends BaseEntity {

@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * Appeal DTO（由 DDL 自动生成）。
+ * 绩效申诉相关 DTO（域：绩效，分层：DTO/接口契约）。申诉创建/查询/处理的请求与响应结构。
  */
 public final class AppealDtos {
 

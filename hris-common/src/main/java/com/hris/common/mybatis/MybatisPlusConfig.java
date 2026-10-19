@@ -27,6 +27,16 @@ import java.time.LocalDateTime;
 @ConditionalOnClass(TenantLineInnerInterceptor.class)
 public class MybatisPlusConfig {
 
+    /**
+     * 装配 MyBatis-Plus 拦截器链（顺序敏感）：
+     * <ol>
+     *   <li>{@link TenantLineInnerInterceptor}：从 TraceContext 取 tenantId，
+     *       自动在所有 SQL 上追加 {@code AND tenant_id = ?} 条件，实现 ORM 层租户隔离兜底；
+     *       平台级表需 {@code @InterceptorIgnore(tenantLine="true")} 显式绕过。</li>
+     *   <li>{@link OptimisticLockerInnerInterceptor}：基于 BaseEntity.version 字段做乐观锁。</li>
+     *   <li>{@link PaginationInnerInterceptor}：分页插件，运行时自动按数据源方言适配 MySQL/PG。</li>
+     * </ol>
+     */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
@@ -60,6 +70,11 @@ public class MybatisPlusConfig {
         return interceptor;
     }
 
+    /**
+     * 公共字段自动填充：插入时填充 createdAt/updatedAt/createdBy/updatedBy，
+     * 更新时填充 updatedAt/updatedBy。userId 从 TraceContext 取，无上下文（如启动任务）填 0。
+     * 时间戳由应用层维护，避免 MySQL ON UPDATE / PG 触发器双库行为不一致。
+     */
     @Bean
     public MetaObjectHandler metaObjectHandler() {
         return new MetaObjectHandler() {

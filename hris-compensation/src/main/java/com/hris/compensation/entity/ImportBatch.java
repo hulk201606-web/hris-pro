@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * cmp_import_batch（由 DDL 自动生成）
+ * 导入批次（域：薪酬，分层：实体/DO）。批量导入薪资数据的批次记录（成功/失败行数），状态机 PENDING→PROCESSING→DONE/FAILED。
  */
 @TableName("cmp_import_batch")
 public class ImportBatch extends BaseEntity {

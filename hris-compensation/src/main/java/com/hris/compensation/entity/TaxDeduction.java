@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * cmp_tax_deduction（由 DDL 自动生成）
+ * 个税专项附加扣除（域：薪酬，分层：实体/DO，密域）。员工个税专项附加扣除信息，deductionAmountCipher 为密文存储。
  */
 @TableName("cmp_tax_deduction")
 public class TaxDeduction extends BaseEntity {

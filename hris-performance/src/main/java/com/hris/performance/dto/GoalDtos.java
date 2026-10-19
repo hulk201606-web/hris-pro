@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Goal DTO（由 DDL 自动生成）。
+ * 绩效目标相关 DTO（域：绩效，分层：DTO/接口契约）。目标设定/更新/结果录入的请求与响应结构。
  */
 public final class GoalDtos {
 

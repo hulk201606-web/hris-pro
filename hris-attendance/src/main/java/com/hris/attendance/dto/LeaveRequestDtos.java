@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 请假单 DTO（ATT-F-010 请假申请 / ATT-F-014 代理与冲销）。
+ * 请假申请相关 DTO（域：考勤，分层：DTO/接口契约）。请假单创建/查询/审批的请求与响应结构。
  */
 public final class LeaveRequestDtos {
 

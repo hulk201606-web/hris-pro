@@ -24,10 +24,12 @@ public class PositionService {
         this.mapper = mapper;
     }
 
+    /** 查询全部岗位字典（岗位是组织编制与雇佣关系的载体，与部门多对多通过编制挂钩）。 */
     public List<CatalogResponse> list() {
         return mapper.selectList(null).stream().map(this::toResponse).toList();
     }
 
+    /** 新建岗位：编码缺省按 pos 前缀生成，校验编码唯一。 */
     public CatalogResponse create(CatalogRequest req) {
         String code = CodeUtil.normalize(req.code());
         if (code == null || code.isBlank()) {
@@ -42,6 +44,7 @@ public class PositionService {
         return toResponse(e);
     }
 
+    /** 更新岗位：仅名称与启停状态可变更。 */
     public CatalogResponse update(Long id, CatalogRequest req) {
         OrgPosition e = mapper.selectById(id);
         if (e == null) {
@@ -57,6 +60,7 @@ public class PositionService {
         return toResponse(e);
     }
 
+    /** 删除岗位（物理删除，删除前校验存在性）。 */
     public void delete(Long id) {
         if (mapper.selectById(id) == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "岗位不存在");

@@ -28,6 +28,7 @@ public class OkrObjectiveService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
     public OkrObjectiveResponse get(Long id) {
         OkrObjective e = mapper.selectById(id);
         if (e == null) {
@@ -36,11 +37,13 @@ public class OkrObjectiveService {
         return toResponse(e);
     }
 
+    /** 分页查询记录列表。 */
     public PageResult<OkrObjectiveResponse> list(long page, long size) {
         IPage<OkrObjective> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<OkrObjectiveResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
+    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
     @Transactional(rollbackFor = Exception.class)
     public OkrObjectiveResponse create(OkrObjectiveCreateRequest req) {
@@ -52,6 +55,7 @@ public class OkrObjectiveService {
         mapper.insert(e);
         return toResponse(e);
     }
+    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
     @Transactional(rollbackFor = Exception.class)
     public OkrObjectiveResponse update(Long id, OkrObjectiveUpdateRequest req) {
@@ -68,6 +72,7 @@ public class OkrObjectiveService {
         }
         return toResponse(e);
     }
+    /** 按主键删除记录，不存在抛 NOT_FOUND。 */
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {

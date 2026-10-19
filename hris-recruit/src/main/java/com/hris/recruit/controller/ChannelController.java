@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Channel 端点。
+ * 招聘渠道端点：渠道字典 CRUD，用于投递归因。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/channels")
@@ -32,6 +34,7 @@ public class ChannelController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:channel:read")
     @GetMapping
     public R<PageResult<ChannelResponse>> list(
@@ -40,24 +43,28 @@ public class ChannelController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:channel:read")
     @GetMapping("/{id}")
     public R<ChannelResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:channel:write")
     @PostMapping
     public R<ChannelResponse> create(@Valid @RequestBody ChannelCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:channel:write")
     @PutMapping("/{id}")
     public R<ChannelResponse> update(@PathVariable Long id, @Valid @RequestBody ChannelUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:channel:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

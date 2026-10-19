@@ -35,21 +35,25 @@ public class DeptController {
         this.deptService = deptService;
     }
 
+    /** 部门列表/树查询：tree=true 返回嵌套部门树，否则返回扁平的当前生效部门列表（按物化路径排序）。 */
     @GetMapping("/depts")
     public R<List<DeptNode>> list(@RequestParam(defaultValue = "false") boolean tree) {
         return R.ok(deptService.query(tree));
     }
 
+    /** 新建部门：自动生成物化路径，校验树深度（≤8 层）与部门编码唯一；父部门为空则建根节点。 */
     @PostMapping("/depts")
     public R<DeptNode> create(@Valid @RequestBody DeptRequest req) {
         return R.ok(deptService.create(req));
     }
 
+    /** 更新部门：变更前先写 org_dept_history 快照；父部门变更时重算物化路径，部门编码不可修改。 */
     @PutMapping("/depts/{id}")
     public R<DeptNode> update(@PathVariable Long id, @Valid @RequestBody DeptRequest req) {
         return R.ok(deptService.update(id, req));
     }
 
+    /** 部门历史快照：at 为空取当日；优先取历史表，无快照时用现行部门现拼一份。 */
     @GetMapping("/depts/{id}/snapshot")
     public R<Map<String, Object>> snapshot(
             @PathVariable Long id,
@@ -57,6 +61,10 @@ public class DeptController {
         return R.ok(deptService.snapshot(id, at));
     }
 
+    /**
+     * 发起组织调整申请（权限点 org:dept:adjust）：落历史快照并驱动流程引擎（ORG_ADJUST），
+     * 返回业务键 bizKey 与流程实例 ID；MVP 下流程调用降级不阻断落单。
+     */
     @RequirePerm("org:dept:adjust")
     @PostMapping("/depts/adjust-requests")
     public R<AdjustRequestResponse> adjust(@Valid @RequestBody AdjustRequestCreate req) {

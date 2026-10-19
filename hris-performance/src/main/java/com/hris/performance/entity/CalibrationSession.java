@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_calibration_session（由 DDL 自动生成）
+ * 校准会话（域：绩效，分层：实体/DO）。部门级评级校准会议，用于拉齐评分尺度，状态机 PLANNED→IN_PROGRESS→DONE。
  */
 @TableName("prf_calibration_session")
 public class CalibrationSession extends BaseEntity {

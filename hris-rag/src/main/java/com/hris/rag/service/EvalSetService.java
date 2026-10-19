@@ -28,6 +28,7 @@ public class EvalSetService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询评测集详情，不存在则抛 NOT_FOUND。 */
     public EvalSetResponse get(Long id) {
         EvalSet e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class EvalSetService {
         return toResponse(e);
     }
 
+    /** 分页查询评测集列表。 */
     public PageResult<EvalSetResponse> list(long page, long size) {
         IPage<EvalSet> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<EvalSetResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建评测集。 */
     @Transactional(rollbackFor = Exception.class)
     public EvalSetResponse create(EvalSetCreateRequest req) {
         EvalSet e = new EvalSet();
@@ -51,6 +54,7 @@ public class EvalSetService {
         return toResponse(e);
     }
 
+    /** 更新评测集（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public EvalSetResponse update(Long id, EvalSetUpdateRequest req) {
         EvalSet e = mapper.selectById(id);
@@ -65,6 +69,7 @@ public class EvalSetService {
         return toResponse(e);
     }
 
+    /** 删除评测集（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

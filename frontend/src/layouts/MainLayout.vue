@@ -1,4 +1,10 @@
 <script setup lang="ts">
+
+/**
+ * 自助端布局：顶部导航 + 左侧自助菜单 + 内容区。
+ * 面向员工自助服务（请假/加班/补卡/我的审批/我的薪酬），
+ * 路由前缀 /self。菜单当前为静态配置，后续由后端菜单树驱动。
+ */
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Component } from 'vue';

@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 考勤异常 DTO（ATT-F-020 异常处理工作台）。
+ * 考勤异常相关 DTO（域：考勤，分层：DTO/接口契约）。异常单列表/批量处理的请求与响应结构。
  */
 public final class ExceptionDtos {
 

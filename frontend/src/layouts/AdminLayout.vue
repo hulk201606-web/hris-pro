@@ -1,4 +1,10 @@
 <script setup lang="ts">
+
+/**
+ * 管理端布局：左侧菜单 + 顶栏（租户名 / 用户下拉 / 折叠）。
+ * 菜单由后端 GET /auth/menus 菜单树经 admin-menu.ts 注册表派生，
+ * 未授权或未命中注册表的菜单不展示。路由前缀 /admin。
+ */
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {

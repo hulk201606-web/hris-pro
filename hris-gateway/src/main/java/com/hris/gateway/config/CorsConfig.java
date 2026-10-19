@@ -12,6 +12,11 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 @Configuration
 public class CorsConfig {
 
+    /**
+     * 装配全局 CORS 过滤器（WebFlux 侧）：允许来源/方法/头从配置读取，
+     * 生产环境禁止 {@code origin: "*"}，仅放行配置中显式列出的前端域名；
+     * allowCredentials=true 时浏览器才允许携带 Cookie/Authorization 跨域。
+     */
     @Bean
     public CorsWebFilter corsWebFilter(HrisGatewayProperties props) {
         CorsConfiguration config = new CorsConfiguration();

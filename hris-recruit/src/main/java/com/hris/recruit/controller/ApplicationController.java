@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Application 端点。
+ * 投递记录端点：候选人对职位发布的申请管理，含招聘阶段与状态流转。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/applications")
@@ -32,6 +34,7 @@ public class ApplicationController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:application:read")
     @GetMapping
     public R<PageResult<ApplicationResponse>> list(
@@ -40,24 +43,28 @@ public class ApplicationController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:application:read")
     @GetMapping("/{id}")
     public R<ApplicationResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:application:write")
     @PostMapping
     public R<ApplicationResponse> create(@Valid @RequestBody ApplicationCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:application:write")
     @PutMapping("/{id}")
     public R<ApplicationResponse> update(@PathVariable Long id, @Valid @RequestBody ApplicationUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:application:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

@@ -23,6 +23,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     public static final int ORDER = -900;
 
+    /**
+     * 请求日志过滤器（ORDER=-900，最外层业务过滤器）：放行链路后在 doFinally 钩子中
+     * 打印 method/path/status/traceId/tenantId/userId/costMs。置于 JWT 认证之前，
+     * 确保被 401/403/413/429 拒绝的请求也会留下访问日志。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         long start = System.currentTimeMillis();

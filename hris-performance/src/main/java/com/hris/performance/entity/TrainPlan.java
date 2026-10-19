@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * prf_train_plan（由 DDL 自动生成）
+ * 培训计划（域：绩效/培训，分层：实体/DO）。年度/季度培训计划（名称/起止日期）。
  */
 @TableName("prf_train_plan")
 public class TrainPlan extends BaseEntity {

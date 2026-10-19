@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * PayrollAdjustment DTO（由 DDL 自动生成）。
+ * 算薪调整项相关 DTO（域：薪酬，分层：DTO/接口契约，密域）。手工补款/扣款的创建/查询结构。
  */
 public final class PayrollAdjustmentDtos {
 

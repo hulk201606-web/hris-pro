@@ -30,6 +30,7 @@ public class PunchController {
     public PunchController(PunchService punchService) {
         this.punchService = punchService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<PunchResponse>> list(

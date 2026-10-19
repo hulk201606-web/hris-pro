@@ -28,6 +28,7 @@ public class CalibrationSessionService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
     public CalibrationSessionResponse get(Long id) {
         CalibrationSession e = mapper.selectById(id);
         if (e == null) {
@@ -36,11 +37,13 @@ public class CalibrationSessionService {
         return toResponse(e);
     }
 
+    /** 分页查询记录列表。 */
     public PageResult<CalibrationSessionResponse> list(long page, long size) {
         IPage<CalibrationSession> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<CalibrationSessionResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
+    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
     @Transactional(rollbackFor = Exception.class)
     public CalibrationSessionResponse create(CalibrationSessionCreateRequest req) {
@@ -51,6 +54,7 @@ public class CalibrationSessionService {
         mapper.insert(e);
         return toResponse(e);
     }
+    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
     @Transactional(rollbackFor = Exception.class)
     public CalibrationSessionResponse update(Long id, CalibrationSessionUpdateRequest req) {
@@ -66,6 +70,7 @@ public class CalibrationSessionService {
         }
         return toResponse(e);
     }
+    /** 按主键删除记录，不存在抛 NOT_FOUND。 */
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {

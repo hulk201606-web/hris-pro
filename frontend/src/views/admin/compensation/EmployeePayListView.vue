@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-员工薪酬档列表：CRUD（员工 ID / 薪酬组 / 薪级 / 生效日期），
+ * 走 EntityCrudPage 组件 + /cmp/employee-pays 接口。
+ */
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import {
   createEmployeePay,

@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_plan（由 DDL 自动生成）
+ * 绩效计划（域：绩效，分层：实体/DO）。绩效管理方案模板（考核方式/权重规则），周期创建时引用。
  */
 @TableName("prf_plan")
 public class Plan extends BaseEntity {

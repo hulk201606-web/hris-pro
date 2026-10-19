@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 占位页：尚未接入的自助模块（我的薪酬 / 我的假期等）临时展示，
+ * 通过 props.title 传入页面名，提示「建设中」。
+ */
 import { ToolOutlined } from '@ant-design/icons-vue';
 
 defineProps<{ title: string }>();

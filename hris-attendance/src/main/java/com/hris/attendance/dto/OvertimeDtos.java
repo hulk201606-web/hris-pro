@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 加班单 DTO（ATT-F-016 加班申请与统计）。
+ * 加班申请相关 DTO（域：考勤，分层：DTO/接口契约）。加班单创建/查询/审批的请求与响应结构。
  */
 public final class OvertimeDtos {
 

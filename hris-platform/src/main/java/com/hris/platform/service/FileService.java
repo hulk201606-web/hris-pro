@@ -37,6 +37,7 @@ public class FileService {
         this.minioProperties = minioProperties;
     }
 
+    /** 生成 MinIO 直传预签名 URL，同时落文件元数据。 */
     public PresignUploadResponse presignUpload(PresignUploadRequest req) {
         String bucket = minioProperties.getBucket();
         String objectKey = buildObjectKey(req.fileName(), req.module());
@@ -54,10 +55,12 @@ public class FileService {
         return new PresignUploadResponse(meta.getId(), objectKey, uploadUrl, uploadUrl == null);
     }
 
+    /** 按文件 ID 查询元数据。 */
     public FileMetaResponse getMeta(Long id) {
         return toMeta(require(id));
     }
 
+    /** 生成下载预签名 URL。 */
     public FileDownloadResponse download(Long id) {
         SysFileMeta meta = require(id);
         String url = minioStorage.presignGet(meta.getBucket(), meta.getObjectKey(), DOWNLOAD_EXPIRY_SECONDS);

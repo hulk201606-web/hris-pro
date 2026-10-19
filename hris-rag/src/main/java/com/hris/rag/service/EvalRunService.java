@@ -28,6 +28,7 @@ public class EvalRunService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询评测运行记录详情，不存在则抛 NOT_FOUND。 */
     public EvalRunResponse get(Long id) {
         EvalRun e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class EvalRunService {
         return toResponse(e);
     }
 
+    /** 分页查询评测运行记录列表。 */
     public PageResult<EvalRunResponse> list(long page, long size) {
         IPage<EvalRun> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<EvalRunResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建评测运行记录。 */
     @Transactional(rollbackFor = Exception.class)
     public EvalRunResponse create(EvalRunCreateRequest req) {
         EvalRun e = new EvalRun();
@@ -52,6 +55,7 @@ public class EvalRunService {
         return toResponse(e);
     }
 
+    /** 更新评测运行记录（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public EvalRunResponse update(Long id, EvalRunUpdateRequest req) {
         EvalRun e = mapper.selectById(id);
@@ -67,6 +71,7 @@ public class EvalRunService {
         return toResponse(e);
     }
 
+    /** 删除评测运行记录（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_appeal（由 DDL 自动生成）
+ * 绩效申诉（域：绩效，分层：实体/DO）。员工对评估结果发起申诉，走审批流，状态机 OPEN→PROCESSING→RESOLVED/REJECTED。
  */
 @TableName("prf_appeal")
 public class Appeal extends BaseEntity {

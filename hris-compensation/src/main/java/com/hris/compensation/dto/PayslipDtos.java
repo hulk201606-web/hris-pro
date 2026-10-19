@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * Payslip DTO（由 DDL 自动生成）。
+ * 工资单相关 DTO（域：薪酬，分层：DTO/接口契约，密域）。工资单查询/发送结构，实发金额密文/掩码双列。
  */
 public final class PayslipDtos {
 

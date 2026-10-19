@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-班次列表：简单 CRUD（班次名称 / 上下班时间 / 弹性 / 跨天），
+ * 走 SimpleCrudPage 组件 + /att/shifts 接口。
+ */
 import SimpleCrudPage from '../../../components/admin/SimpleCrudPage.vue';
 import { createShift, listShifts, updateShift } from '../../../api/attendance';
 import type { CrudColumn, CrudField, SimpleCrudApi } from '../../../types/admin';

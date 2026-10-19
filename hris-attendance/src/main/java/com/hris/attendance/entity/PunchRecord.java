@@ -6,12 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * 打卡记录（att_punch_record）。按 punch_time 月分区存储（docs/12 §5.4）。
- *
- * <p>幂等：uk(tenant_id, emp_id, punch_time) 保证同一员工同一时刻只有一条记录，
- * 高峰期重复提交由唯一键冲突兜底（docs/09 打卡洪峰）。</p>
- *
- * <p>注意：本表为分区表，pk 为 (id, punch_time)，查询必须带 punch_time 区间以命中分区。</p>
+ * 打卡记录（域：考勤，分层：实体/DO）。员工每次上下班打卡的原始流水（时间/来源/定位/设备），是日结的数据源头。
  */
 @TableName("att_punch_record")
 public class PunchRecord extends BaseEntity {

@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Channel 服务（CRUD）。
+ * 招聘渠道（Channel）：招聘来源渠道字典（内推/猎头/招聘网站等），用于投递归因。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class ChannelService {
@@ -28,6 +30,7 @@ public class ChannelService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public ChannelResponse get(Long id) {
         Channel e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class ChannelService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<ChannelResponse> list(long page, long size) {
         IPage<Channel> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<ChannelResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public ChannelResponse create(ChannelCreateRequest req) {
         Channel e = new Channel();
@@ -51,6 +56,7 @@ public class ChannelService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public ChannelResponse update(Long id, ChannelUpdateRequest req) {
         Channel e = mapper.selectById(id);
@@ -65,6 +71,7 @@ public class ChannelService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

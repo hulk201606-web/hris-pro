@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * PayItem DTO（由 DDL 自动生成）。
+ * 薪资项目相关 DTO（域：薪酬，分层：DTO/接口契约）。薪资项目（工资条项）创建/更新/查询的请求与响应结构。
  */
 public final class PayItemDtos {
 

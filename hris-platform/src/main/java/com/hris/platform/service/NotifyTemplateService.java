@@ -26,6 +26,7 @@ public class NotifyTemplateService {
         this.mapper = mapper;
     }
 
+    /** 按渠道查询通知模板列表。 */
     public List<TemplateResponse> list(String channel) {
         LambdaQueryWrapper<SysNotifyTemplate> qw = new LambdaQueryWrapper<>();
         if (channel != null && !channel.isBlank()) {
@@ -35,6 +36,7 @@ public class NotifyTemplateService {
         return mapper.selectList(qw).stream().map(this::toResponse).toList();
     }
 
+    /** 新建通知模板。 */
     public TemplateResponse create(TemplateRequest req) {
         String code = CodeUtil.normalize(req.code());
         String channel = normalizeChannel(req.channel());
@@ -48,6 +50,7 @@ public class NotifyTemplateService {
         return toResponse(e);
     }
 
+    /** 更新通知模板（乐观锁防并发覆盖）。 */
     public TemplateResponse update(Long id, TemplateRequest req) {
         SysNotifyTemplate e = require(id);
         if (req.subject() != null) {
@@ -60,6 +63,7 @@ public class NotifyTemplateService {
         return toResponse(e);
     }
 
+    /** 删除通知模板（逻辑删除）。 */
     public void delete(Long id) {
         require(id);
         mapper.deleteById(id);

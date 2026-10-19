@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * Instructor DTO（由 DDL 自动生成）。
+ * 讲师相关 DTO（域：绩效/培训，分层：DTO/接口契约）。讲师主档的请求与响应结构。
  */
 public final class InstructorDtos {
 

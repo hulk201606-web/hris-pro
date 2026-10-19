@@ -31,6 +31,7 @@ public class TripController {
     public TripController(TripService tripService) {
         this.tripService = tripService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<TripResponse>> list(
@@ -42,11 +43,13 @@ public class TripController {
             @RequestParam(defaultValue = "20") long size) {
         return R.ok(tripService.list(empId, status, from, to, page, size));
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<TripResponse> get(@PathVariable Long id) {
         return R.ok(tripService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:trip:write")
     @PostMapping

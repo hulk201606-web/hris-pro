@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * TrainPlan DTO（由 DDL 自动生成）。
+ * 培训计划相关 DTO（域：绩效/培训，分层：DTO/接口契约）。培训计划创建/更新/查询的请求与响应结构。
  */
 public final class TrainPlanDtos {
 

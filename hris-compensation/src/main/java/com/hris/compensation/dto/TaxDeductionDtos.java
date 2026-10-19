@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * TaxDeduction DTO（由 DDL 自动生成）。
+ * 个税专项附加扣除相关 DTO（域：薪酬，分层：DTO/接口契约，密域）。专项附加扣除信息的创建/更新/查询结构。
  */
 public final class TaxDeductionDtos {
 

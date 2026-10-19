@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * ForcedRule DTO（由 DDL 自动生成）。
+ * 强制分布规则相关 DTO（域：绩效，分层：DTO/接口契约）。评级比例配置的请求与响应结构。
  */
 public final class ForcedRuleDtos {
 

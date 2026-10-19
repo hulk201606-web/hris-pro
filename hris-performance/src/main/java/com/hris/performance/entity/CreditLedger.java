@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * prf_credit_ledger（由 DDL 自动生成）
+ * 学分台账（域：绩效/培训，分层：实体/DO）。员工培训修读学分累计，与晋升/年度考核挂钩。
  */
 @TableName("prf_credit_ledger")
 public class CreditLedger extends BaseEntity {

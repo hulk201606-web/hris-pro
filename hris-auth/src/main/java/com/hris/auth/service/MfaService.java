@@ -25,6 +25,10 @@ public class MfaService {
         this.userMapper = userMapper;
     }
 
+    /**
+     * 绑定 MFA：生成 20 字节随机 Base32 密钥写入 auth_user.mfa_secret，
+     * 返回密钥原文与 otpauth:// URI（供 Google Authenticator 扫码）。
+     */
     @AuditLog(value = "绑定 MFA", module = "auth")
     public MfaBindResponse bind(LoginUser current) {
         AuthUser user = requireUser(current.userId());
@@ -35,6 +39,10 @@ public class MfaService {
         return new MfaBindResponse(secret, url);
     }
 
+    /**
+     * 校验 TOTP 动态码：未绑定抛 20410 SECOND_AUTH_REQUIRED，码错误抛 20410。
+     * 用于薪酬/导出等敏感操作的二次认证。
+     */
     public void verify(LoginUser current, String code) {
         AuthUser user = requireUser(current.userId());
         if (user.getMfaSecret() == null || user.getMfaSecret().isBlank()) {
@@ -45,6 +53,7 @@ public class MfaService {
         }
     }
 
+    /** 按 userId 查用户，不存在抛 20401 UNAUTHORIZED。 */
     private AuthUser requireUser(Long userId) {
         AuthUser user = userMapper.selectById(userId);
         if (user == null) {

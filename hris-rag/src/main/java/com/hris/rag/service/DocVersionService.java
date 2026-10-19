@@ -28,6 +28,7 @@ public class DocVersionService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询文档版本详情，不存在则抛 NOT_FOUND。 */
     public DocVersionResponse get(Long id) {
         DocVersion e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class DocVersionService {
         return toResponse(e);
     }
 
+    /** 分页查询文档版本列表。 */
     public PageResult<DocVersionResponse> list(long page, long size) {
         IPage<DocVersion> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<DocVersionResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建文档版本。 */
     @Transactional(rollbackFor = Exception.class)
     public DocVersionResponse create(DocVersionCreateRequest req) {
         DocVersion e = new DocVersion();
@@ -54,6 +57,7 @@ public class DocVersionService {
         return toResponse(e);
     }
 
+    /** 更新文档版本（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public DocVersionResponse update(Long id, DocVersionUpdateRequest req) {
         DocVersion e = mapper.selectById(id);
@@ -71,6 +75,7 @@ public class DocVersionService {
         return toResponse(e);
     }
 
+    /** 删除文档版本（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

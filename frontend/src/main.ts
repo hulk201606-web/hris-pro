@@ -1,3 +1,7 @@
+/**
+ * 应用入口：挂载 Vue 根组件，注册 Pinia / Vue Router / Ant Design Vue，
+ * 并全局注册 v-perm 权限指令。加载设计令牌与全局样式。
+ */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import Antd from 'ant-design-vue';

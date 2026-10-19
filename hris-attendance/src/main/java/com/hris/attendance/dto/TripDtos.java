@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 出差单 DTO（ATT-F-017 出差申请，补贴天数输出给 CMP）。
+ * 出差申请相关 DTO（域：考勤，分层：DTO/接口契约）。出差单创建/查询/审批的请求与响应结构。
  */
 public final class TripDtos {
 

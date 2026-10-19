@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Candidate 服务（CRUD）。
+ * 候选人主档（Candidate）：人才库核心实体，记录姓名/手机/邮箱（密文+掩码）与候选人状态（待筛选/面试中/Offer/已入职/已淘汰）。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class CandidateService {
@@ -28,6 +30,7 @@ public class CandidateService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public CandidateResponse get(Long id) {
         Candidate e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class CandidateService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<CandidateResponse> list(long page, long size) {
         IPage<Candidate> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<CandidateResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public CandidateResponse create(CandidateCreateRequest req) {
         Candidate e = new Candidate();
@@ -54,6 +59,7 @@ public class CandidateService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public CandidateResponse update(Long id, CandidateUpdateRequest req) {
         Candidate e = mapper.selectById(id);
@@ -71,6 +77,7 @@ public class CandidateService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

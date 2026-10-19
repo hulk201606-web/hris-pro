@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * OkrObjective DTO（由 DDL 自动生成）。
+ * OKR 目标相关 DTO（域：绩效，分层：DTO/接口契约）。O 与 KR 录入/查询的请求与响应结构。
  */
 public final class OkrObjectiveDtos {
 

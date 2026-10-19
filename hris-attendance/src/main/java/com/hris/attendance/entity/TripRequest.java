@@ -6,10 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * 出差单（att_trip_request）。行程与补贴天数输出给薪酬域（docs/03-03 ATT-F-017）。
- *
- * <p>状态流转：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED。
- * 与请假互斥：提交前校验同员工审批通过的请假单是否与行程区间重叠。</p>
+ * 出差申请（域：考勤，分层：实体/DO）。员工出差时段与目的地，审批通过后日结记出差（不扣假）。
  */
 @TableName("att_trip_request")
 public class TripRequest extends BaseEntity {

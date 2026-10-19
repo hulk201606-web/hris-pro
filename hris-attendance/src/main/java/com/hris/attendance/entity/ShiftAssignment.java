@@ -6,9 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * 排班（att_shift_assignment）。员工在某工作日绑定的班次。
- *
- * <p>uk(tenant_id, emp_id, work_date) 保证一人一日仅一条排班（docs/12 §5.4）。</p>
+ * 排班分配（域：考勤，分层：实体/DO）。某员工某日命中的具体班次，是日结判定迟到/早退的基准。
  */
 @TableName("att_shift_assignment")
 public class ShiftAssignment extends BaseEntity {

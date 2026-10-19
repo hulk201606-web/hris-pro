@@ -27,6 +27,10 @@ public class RegularizationService {
         this.lifecycleCaseService = lifecycleCaseService;
     }
 
+    /**
+     * 发起转正办理：校验员工为试用（PROBATION），组装转正日期与评语载荷，创建
+     * EMP_REGULAR 生命周期单。转正生效后状态机将 PROBATION→ACTIVE（正式在职）。
+     */
     public LifecycleCaseResponse create(RegularizeRequest req) {
         Employee emp = require(req.empId());
         if (!EmployeeStatus.PROBATION.equals(EmployeeStatus.fromCode(emp.getStatus()))) {

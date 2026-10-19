@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_calibration_snapshot（由 DDL 自动生成）
+ * 校准快照（域：绩效，分层：实体/DO）。校准会议前后的评分快照 JSON，支持回溯与争议复盘。
  */
 @TableName("prf_calibration_snapshot")
 public class CalibrationSnapshot extends BaseEntity {

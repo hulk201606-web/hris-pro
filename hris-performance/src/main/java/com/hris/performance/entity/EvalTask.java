@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 
 
 /**
- * prf_eval_task（由 DDL 自动生成）
+ * 评估任务（域：绩效，分层：实体/DO）。周期内指派给评估人的待评任务（自评/上级评/同事评），状态机 PENDING→SUBMITTED。
  */
 @TableName("prf_eval_task")
 public class EvalTask extends BaseEntity {

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDateTime;
 
 /**
- * 假种 DTO（ATT-F-011 假期类型配置）。
+ * 假期类型相关 DTO（域：考勤，分层：DTO/接口契约）。假期类型创建/更新/查询的请求与响应结构。
  */
 public final class LeaveTypeDtos {
 

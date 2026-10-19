@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-Offer 列表：CRUD + 录用建档动作（onboard，跨域转员工预建档），
+ * 走 EntityCrudPage 组件 + /rcu/offers 接口。
+ */
 import { computed } from 'vue';
 import { Modal, message } from 'ant-design-vue';
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';

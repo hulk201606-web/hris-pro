@@ -55,6 +55,10 @@ public class DeptService {
         return asTree ? buildTree(nodes) : nodes;
     }
 
+    /**
+     * 新建部门：校验父部门存在与树深度（≤8 层），部门编码缺省按 d 前缀生成并校验唯一，
+     * 用雪花 ID 拼物化路径 path（父.path + "." + id）。事务内单表插入。
+     */
     @Transactional(rollbackFor = Exception.class)
     public DeptNode create(DeptRequest req) {
         long parentId = req.parentId() == null ? 0L : req.parentId();
@@ -85,6 +89,10 @@ public class DeptService {
         return toNode(dept);
     }
 
+    /**
+     * 更新部门：先写历史快照（writeSnapshot），再按需更新名称/负责人/生效日/状态。
+     * 父部门变更时重算物化路径并校验深度；部门编码作为版本身份标识不允许修改。
+     */
     @Transactional(rollbackFor = Exception.class)
     public DeptNode update(Long id, DeptRequest req) {
         OrgDept dept = deptMapper.selectById(id);

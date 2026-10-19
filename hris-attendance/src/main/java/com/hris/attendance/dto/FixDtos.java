@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 补卡单 DTO（ATT-F-019 补打卡申请，月度次数限制）。
+ * 补卡申请相关 DTO（域：考勤，分层：DTO/接口契约）。补卡申请创建/查询/审批的请求与响应结构。
  */
 public final class FixDtos {
 

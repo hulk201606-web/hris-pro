@@ -28,6 +28,7 @@ public class SpaceService {
         this.mapper = mapper;
     }
 
+    /** 按主键查询知识空间详情，不存在则抛 NOT_FOUND。 */
     public SpaceResponse get(Long id) {
         Space e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +37,14 @@ public class SpaceService {
         return toResponse(e);
     }
 
+    /** 分页查询知识空间列表。 */
     public PageResult<SpaceResponse> list(long page, long size) {
         IPage<Space> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<SpaceResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建知识空间。 */
     @Transactional(rollbackFor = Exception.class)
     public SpaceResponse create(SpaceCreateRequest req) {
         Space e = new Space();
@@ -52,6 +55,7 @@ public class SpaceService {
         return toResponse(e);
     }
 
+    /** 更新知识空间（乐观锁防并发覆盖）。 */
     @Transactional(rollbackFor = Exception.class)
     public SpaceResponse update(Long id, SpaceUpdateRequest req) {
         Space e = mapper.selectById(id);
@@ -67,6 +71,7 @@ public class SpaceService {
         return toResponse(e);
     }
 
+    /** 删除知识空间（逻辑删除）。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

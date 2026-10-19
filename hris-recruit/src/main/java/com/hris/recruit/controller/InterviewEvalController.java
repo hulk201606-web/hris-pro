@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * InterviewEval 端点。
+ * 面试评价端点：面试官打分/评语 CRUD。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/interview-evals")
@@ -32,6 +34,7 @@ public class InterviewEvalController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:interview-eval:read")
     @GetMapping
     public R<PageResult<InterviewEvalResponse>> list(
@@ -40,24 +43,28 @@ public class InterviewEvalController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:interview-eval:read")
     @GetMapping("/{id}")
     public R<InterviewEvalResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:interview-eval:write")
     @PostMapping
     public R<InterviewEvalResponse> create(@Valid @RequestBody InterviewEvalCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:interview-eval:write")
     @PutMapping("/{id}")
     public R<InterviewEvalResponse> update(@PathVariable Long id, @Valid @RequestBody InterviewEvalUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:interview-eval:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

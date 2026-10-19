@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Course DTO（由 DDL 自动生成）。
+ * 课程相关 DTO（域：绩效/培训，分层：DTO/接口契约）。课程创建/更新/查询的请求与响应结构。
  */
 public final class CourseDtos {
 

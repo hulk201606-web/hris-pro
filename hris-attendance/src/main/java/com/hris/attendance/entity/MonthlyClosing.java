@@ -6,10 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * 考勤月结批次（att_monthly_closing）。锁账后本期结果不可逆。
- *
- * <p>状态流转：INIT → RUNNING → DONE / FAILED（docs/03-03 ATT-F-023）。
- * 前置校验：周期内未决异常单必须为 0；锁账后差异只能走下期调整项（ATT-F-024）。</p>
+ * 月结批次（域：考勤，分层：实体/DO）。状态机 INIT→RUNNING→DONE/FAILED，锁账后历史日考勤不可改，供薪酬域取数。
  */
 @TableName("att_monthly_closing")
 public class MonthlyClosing extends BaseEntity {

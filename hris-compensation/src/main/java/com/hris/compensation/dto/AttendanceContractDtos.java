@@ -5,10 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 考勤域内部契约的本地副本（字段与 hris-attendance 对齐，docs/07）。
- *
- * <p>跨域响应体在补偿域重新声明为本地 record，避免模块间编译期耦合；
- * JSON 反序列化按字段名映射，字段变更需同步两处。</p>
+ * 考勤域跨服务契约 DTO（域：薪酬，分层：DTO/Feign 契约）。薪酬域通过 Feign 调用考勤域时的内部数据结构（月结汇总/日明细）。
  */
 public final class AttendanceContractDtos {
 

@@ -43,6 +43,11 @@ public class SalarySecretService {
         this.taxDeductionMapper = taxDeductionMapper;
     }
 
+    /**
+     * 密域读取：按 ID 查询工资单。
+     * <p>先校验密域权限 cmp:salary:read，缺失抛 CMP_SALARY_FORBIDDEN(54001)。
+     * 响应同时携带 netPayCipher（实发明文）与 netPayMask（掩码），非授权视图仅渲染掩码。</p>
+     */
     public PayslipSecretResponse payslip(Long id) {
         requireSalaryPerm();
         Payslip e = payslipMapper.selectById(id);
@@ -53,6 +58,10 @@ public class SalarySecretService {
                 e.getUpdatedAt());
     }
 
+    /**
+     * 密域读取：按 ID 查询算薪明细。
+     * <p>校验 cmp:salary:read 后返回 amountCipher/netAmountCipher（应发/实发明文）与对应掩码列。</p>
+     */
     public PayrollDetailSecretResponse payrollDetail(Long id) {
         requireSalaryPerm();
         PayrollDetail e = payrollDetailMapper.selectById(id);
@@ -63,6 +72,10 @@ public class SalarySecretService {
                 e.getNetAmountCipher(), e.getNetAmountMask(), e.getUpdatedAt());
     }
 
+    /**
+     * 密域读取：按 ID 查询员工薪资档案。
+     * <p>校验 cmp:salary:read 后返回 salaryAmountCipher（定薪明文）/bankAccountCipher（银行账号明文）与对应掩码列。</p>
+     */
     public EmployeePaySecretResponse employeePay(Long id) {
         requireSalaryPerm();
         EmployeePay e = employeePayMapper.selectById(id);
@@ -73,6 +86,10 @@ public class SalarySecretService {
                 e.getSalaryAmountMask(), e.getBankAccountCipher(), e.getBankAccountMask(), e.getUpdatedAt());
     }
 
+    /**
+     * 密域读取：按 ID 查询个税专项附加扣除。
+     * <p>校验 cmp:salary:read 后返回 deductionAmountCipher（扣除金额明文）与掩码列。</p>
+     */
     public TaxDeductionSecretResponse taxDeduction(Long id) {
         requireSalaryPerm();
         TaxDeduction e = taxDeductionMapper.selectById(id);

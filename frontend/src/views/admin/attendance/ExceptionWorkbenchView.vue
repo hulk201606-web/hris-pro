@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-考勤异常工作台：迟到 / 早退 / 缺卡等异常列表，
+ * 支持单条或批量认定（RESOLVE）/ 豁免（IGNORE），需 att:exception:handle 权限。
+ */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { SearchOutlined } from '@ant-design/icons-vue';

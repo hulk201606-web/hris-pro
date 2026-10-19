@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * InterviewEval 服务（CRUD）。
+ * 面试评价（InterviewEval）：面试官对某次面试的打分/评语，支撑录用决策。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class InterviewEvalService {
@@ -28,6 +30,7 @@ public class InterviewEvalService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public InterviewEvalResponse get(Long id) {
         InterviewEval e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class InterviewEvalService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<InterviewEvalResponse> list(long page, long size) {
         IPage<InterviewEval> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<InterviewEvalResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public InterviewEvalResponse create(InterviewEvalCreateRequest req) {
         InterviewEval e = new InterviewEval();
@@ -54,6 +59,7 @@ public class InterviewEvalService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public InterviewEvalResponse update(Long id, InterviewEvalUpdateRequest req) {
         InterviewEval e = mapper.selectById(id);
@@ -71,6 +77,7 @@ public class InterviewEvalService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

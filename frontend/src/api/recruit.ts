@@ -1,3 +1,8 @@
+/**
+ * 招聘域 API 封装（后端 hris-recruit 模块）。
+ * 覆盖：职位需求（requisitions）/ 候选人（candidates）/ Offer（offers）CRUD，
+ *       以及 Offer 录用建档（onboard，跨域联动员工预建档）。
+ */
 import { del, get, post, put } from './http';
 import { isMockEnabled } from './mock';
 import { adminMock } from './admin-mock';
@@ -6,21 +11,25 @@ import type { Candidate, Offer, Requisition } from '../types/admin';
 
 /* ---------------------------- 职位需求 ---------------------------- */
 
+/** 分页查询职位需求（GET /rcu/requisitions） */
 export function listRequisitions(page: number, size: number): Promise<PageResult<Requisition>> {
   if (isMockEnabled()) return adminMock.listRequisitions(page, size);
   return get<PageResult<Requisition>>('/rcu/requisitions', { page, size });
 }
 
+/** 新建职位需求（POST /rcu/requisitions） */
 export function createRequisition(data: Record<string, unknown>): Promise<Requisition> {
   if (isMockEnabled()) return adminMock.createRequisition(data as any);
   return post<Requisition>('/rcu/requisitions', data);
 }
 
+/** 更新职位需求（PUT /rcu/requisitions/{id}） */
 export function updateRequisition(id: number, data: Record<string, unknown>): Promise<Requisition> {
   if (isMockEnabled()) return adminMock.updateRequisition(id, data as any);
   return put<Requisition>(`/rcu/requisitions/${id}`, data);
 }
 
+/** 删除职位需求（DELETE /rcu/requisitions/{id}） */
 export function deleteRequisition(id: number): Promise<void> {
   if (isMockEnabled()) return adminMock.removeRequisition(id);
   return del<void>(`/rcu/requisitions/${id}`);
@@ -28,21 +37,25 @@ export function deleteRequisition(id: number): Promise<void> {
 
 /* ---------------------------- 候选人 ---------------------------- */
 
+/** 分页查询候选人（GET /rcu/candidates） */
 export function listCandidates(page: number, size: number): Promise<PageResult<Candidate>> {
   if (isMockEnabled()) return adminMock.listCandidates(page, size);
   return get<PageResult<Candidate>>('/rcu/candidates', { page, size });
 }
 
+/** 新建候选人（POST /rcu/candidates） */
 export function createCandidate(data: Record<string, unknown>): Promise<Candidate> {
   if (isMockEnabled()) return adminMock.createCandidate(data as any);
   return post<Candidate>('/rcu/candidates', data);
 }
 
+/** 更新候选人（PUT /rcu/candidates/{id}） */
 export function updateCandidate(id: number, data: Record<string, unknown>): Promise<Candidate> {
   if (isMockEnabled()) return adminMock.updateCandidate(id, data as any);
   return put<Candidate>(`/rcu/candidates/${id}`, data);
 }
 
+/** 删除候选人（DELETE /rcu/candidates/{id}） */
 export function deleteCandidate(id: number): Promise<void> {
   if (isMockEnabled()) return adminMock.removeCandidate(id);
   return del<void>(`/rcu/candidates/${id}`);
@@ -50,21 +63,25 @@ export function deleteCandidate(id: number): Promise<void> {
 
 /* ---------------------------- Offer ---------------------------- */
 
+/** 分页查询 Offer（GET /rcu/offers） */
 export function listOffers(page: number, size: number): Promise<PageResult<Offer>> {
   if (isMockEnabled()) return adminMock.listOffers(page, size);
   return get<PageResult<Offer>>('/rcu/offers', { page, size });
 }
 
+/** 新建 Offer（POST /rcu/offers） */
 export function createOffer(data: Record<string, unknown>): Promise<Offer> {
   if (isMockEnabled()) return adminMock.createOffer(data as any);
   return post<Offer>('/rcu/offers', data);
 }
 
+/** 更新 Offer（PUT /rcu/offers/{id}） */
 export function updateOffer(id: number, data: Record<string, unknown>): Promise<Offer> {
   if (isMockEnabled()) return adminMock.updateOffer(id, data as any);
   return put<Offer>(`/rcu/offers/${id}`, data);
 }
 
+/** 删除 Offer（DELETE /rcu/offers/{id}） */
 export function deleteOffer(id: number): Promise<void> {
   if (isMockEnabled()) return adminMock.removeOffer(id);
   return del<void>(`/rcu/offers/${id}`);

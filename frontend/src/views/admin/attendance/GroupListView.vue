@@ -1,4 +1,9 @@
 <script setup lang="ts">
+
+/**
+ * 管理端-考勤组列表：简单 CRUD（考勤组名称 / 编码 / 组长），
+ * 走 SimpleCrudPage 组件 + /att/groups 接口。
+ */
 import SimpleCrudPage from '../../../components/admin/SimpleCrudPage.vue';
 import { createGroup, listGroups, updateGroup } from '../../../api/attendance';
 import type { CrudColumn, CrudField, SimpleCrudApi } from '../../../types/admin';

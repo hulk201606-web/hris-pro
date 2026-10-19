@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * Enrollment DTO（由 DDL 自动生成）。
+ * 报名记录相关 DTO（域：绩效/培训，分层：DTO/接口契约）。报名/退报/完成的请求与响应结构。
  */
 public final class EnrollmentDtos {
 

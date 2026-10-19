@@ -7,13 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 加班单（att_overtime_request）。事前审批与事后补录双模式。
- *
- * <p>状态流转：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED（docs/03-03 ATT-F-016）。</p>
- *
- * <p>注意：DDL 无倍率列与加班类型列，倍率按工作日/休息日/法定节假日在查询时派生，
- * 加班模式（事前/补录）落在 reason 前缀约定之外则由调用方以 mode 入参传入后写入 reason，
- * MVP 不新增列（见 OPEN-DECISIONS）。</p>
+ * 加班申请（域：考勤，分层：实体/DO）。员工申请加班时段与时长，审批通过后在日结中累计加班时长。
  */
 @TableName("att_overtime_request")
 public class OvertimeRequest extends BaseEntity {

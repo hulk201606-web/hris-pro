@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 假期额度 DTO（ATT-F-012 额度引擎 / ATT-F-013 台账与结转 / ATT-F-015 余额自助）。
+ * 假期额度相关 DTO（域：考勤，分层：DTO/接口契约）。额度发放/结转/查询的请求与响应结构。
  */
 public final class LeaveQuotaDtos {
 

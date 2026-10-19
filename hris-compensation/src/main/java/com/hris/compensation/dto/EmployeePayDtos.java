@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * EmployeePay DTO（由 DDL 自动生成）。
+ * 员工薪资档案相关 DTO（域：薪酬，分层：DTO/接口契约，密域）。定薪记录的创建/更新/响应结构，密文字段仅授权视图可见明文。
  */
 public final class EmployeePayDtos {
 

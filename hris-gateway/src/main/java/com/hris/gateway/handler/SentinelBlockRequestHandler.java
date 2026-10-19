@@ -23,6 +23,10 @@ public class SentinelBlockRequestHandler implements BlockRequestHandler {
         this.errorWriter = errorWriter;
     }
 
+    /**
+     * Sentinel 限流被触发时的响应：HTTP 429 + R 格式 body（code=10429 RATE_LIMITED）。
+     * SCA 的 WebFlux 适配检测到本 Bean 后自动注册为 block handler，无需手动配置。
+     */
     @Override
     public Mono<ServerResponse> handleRequest(ServerWebExchange exchange, Throwable ex) {
         return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)

@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * TalentPoolTag 端点。
+ * 人才库标签端点：候选人标签 CRUD。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/talent-pool-tags")
@@ -32,6 +34,7 @@ public class TalentPoolTagController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:talent-pool-tag:read")
     @GetMapping
     public R<PageResult<TalentPoolTagResponse>> list(
@@ -40,24 +43,28 @@ public class TalentPoolTagController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:talent-pool-tag:read")
     @GetMapping("/{id}")
     public R<TalentPoolTagResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:talent-pool-tag:write")
     @PostMapping
     public R<TalentPoolTagResponse> create(@Valid @RequestBody TalentPoolTagCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:talent-pool-tag:write")
     @PutMapping("/{id}")
     public R<TalentPoolTagResponse> update(@PathVariable Long id, @Valid @RequestBody TalentPoolTagUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:talent-pool-tag:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

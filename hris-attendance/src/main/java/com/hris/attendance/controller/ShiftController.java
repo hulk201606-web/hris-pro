@@ -28,22 +28,26 @@ public class ShiftController {
     public ShiftController(ShiftService shiftService) {
         this.shiftService = shiftService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<List<ShiftResponse>> list() {
         return R.ok(shiftService.list());
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<ShiftResponse> get(@PathVariable Long id) {
         return R.ok(shiftService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:shift:write")
     @PostMapping
     public R<ShiftResponse> create(@Valid @RequestBody ShiftRequest req) {
         return R.ok(shiftService.create(req));
     }
+    /** 按 ID 更新记录。权限点见 @RequirePerm；乐观锁防并发覆盖。 */
 
     @RequirePerm("att:shift:write")
     @PutMapping("/{id}")

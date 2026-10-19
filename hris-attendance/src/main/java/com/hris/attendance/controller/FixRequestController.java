@@ -31,6 +31,7 @@ public class FixRequestController {
     public FixRequestController(FixRequestService fixRequestService) {
         this.fixRequestService = fixRequestService;
     }
+    /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping
     public R<PageResult<FixResponse>> list(
@@ -42,11 +43,13 @@ public class FixRequestController {
             @RequestParam(defaultValue = "20") long size) {
         return R.ok(fixRequestService.list(empId, status, from, to, page, size));
     }
+    /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @GetMapping("/{id}")
     public R<FixResponse> get(@PathVariable Long id) {
         return R.ok(fixRequestService.get(id));
     }
+    /** 新建记录。权限点见 @RequirePerm；请求体经 @Valid 校验。 */
 
     @RequirePerm("att:fix:write")
     @PostMapping

@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * CreditLedger DTO（由 DDL 自动生成）。
+ * 学分台账相关 DTO（域：绩效/培训，分层：DTO/接口契约）。学分累计/查询的数据结构。
  */
 public final class CreditLedgerDtos {
 

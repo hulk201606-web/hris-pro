@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * CalibrationSession DTO（由 DDL 自动生成）。
+ * 校准会话相关 DTO（域：绩效，分层：DTO/接口契约）。校准会议创建/查询/状态流转的请求与响应结构。
  */
 public final class CalibrationSessionDtos {
 

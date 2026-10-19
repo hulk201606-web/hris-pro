@@ -27,6 +27,11 @@ public class ResignationService {
         this.lifecycleCaseService = lifecycleCaseService;
     }
 
+    /**
+     * 发起离职办理：校验员工为在职（ACTIVE）或试用（PROBATION），组装离职类型/原因载荷，
+     * 创建 EMP_RESIGN 生命周期单，以最后工作日为生效日。流程通过后状态机落 RESIGNING，
+     * 最后工作日到期后转 RESIGNED 终态。
+     */
     public LifecycleCaseResponse create(ResignRequest req) {
         Employee emp = require(req.empId());
         EmployeeStatus status = EmployeeStatus.fromCode(emp.getStatus());

@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * ClassSession DTO（由 DDL 自动生成）。
+ * 培训班次相关 DTO（域：绩效/培训，分层：DTO/接口契约）。班次创建/更新/查询的请求与响应结构。
  */
 public final class ClassSessionDtos {
 

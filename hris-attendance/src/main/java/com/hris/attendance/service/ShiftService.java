@@ -37,6 +37,7 @@ public class ShiftService {
     public ShiftResponse get(Long id) {
         return toResponse(require(id));
     }
+    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
     @Transactional(rollbackFor = Exception.class)
     public ShiftResponse create(ShiftRequest req) {
@@ -56,6 +57,7 @@ public class ShiftService {
         shiftMapper.insert(shift);
         return toResponse(shift);
     }
+    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
     @Transactional(rollbackFor = Exception.class)
     public ShiftResponse update(Long id, ShiftRequest req) {

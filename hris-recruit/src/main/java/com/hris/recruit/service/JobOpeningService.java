@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * JobOpening 服务（CRUD）。
+ * 职位发布（JobOpening）：由招聘需求单批准后对外发布的职位，含职位编码/标题/描述/发布时间与上下架状态。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class JobOpeningService {
@@ -28,6 +30,7 @@ public class JobOpeningService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public JobOpeningResponse get(Long id) {
         JobOpening e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class JobOpeningService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<JobOpeningResponse> list(long page, long size) {
         IPage<JobOpening> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<JobOpeningResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public JobOpeningResponse create(JobOpeningCreateRequest req) {
         JobOpening e = new JobOpening();
@@ -55,6 +60,7 @@ public class JobOpeningService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public JobOpeningResponse update(Long id, JobOpeningUpdateRequest req) {
         JobOpening e = mapper.selectById(id);
@@ -73,6 +79,7 @@ public class JobOpeningService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

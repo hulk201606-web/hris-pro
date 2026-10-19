@@ -3,11 +3,7 @@ package com.hris.attendance.util;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 
 /**
- * 业务编码生成工具（请假/加班/出差/补卡单号 + 标识字段规范化）。
- *
- * <p>说明：本模块确有 util 包，理由为四类申请单（leave/overtime/trip/fix）共用同一套
- * 「biz_key 生成 + 编码 trim/lower 规范化」逻辑，若不抽出将在 4 个 service 中重复复制。
- * 与 hris-org / hris-employee 的 util/CodeUtil 约定保持一致（docs/12 §2 第 11 条）。</p>
+ * 编码工具类（域：考勤，分层：工具/Util）。业务单据编号生成（请假单号/加班单号等）。
  */
 public final class CodeUtil {
 

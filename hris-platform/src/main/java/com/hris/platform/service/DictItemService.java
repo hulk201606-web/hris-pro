@@ -35,6 +35,7 @@ public class DictItemService {
         this.typeMapper = typeMapper;
     }
 
+    /** 按字典类型编码查询字典项列表。 */
     public List<DictItemResponse> listByType(String typeCode) {
         String code = normalize(typeCode);
         return itemMapper.selectList(new LambdaQueryWrapper<SysDictItem>()
@@ -44,6 +45,7 @@ public class DictItemService {
                 .stream().map(this::toResponse).toList();
     }
 
+    /** 在指定字典类型下新建字典项。 */
     public DictItemResponse create(String typeCode, DictItemRequest req) {
         String code = normalize(typeCode);
         requireTypeExists(code);
@@ -61,6 +63,7 @@ public class DictItemService {
         return toResponse(e);
     }
 
+    /** 更新字典项（乐观锁防并发覆盖）。 */
     public DictItemResponse update(Long id, DictItemRequest req) {
         SysDictItem e = require(id);
         if (req.label() != null && !req.label().isBlank()) {
@@ -73,6 +76,7 @@ public class DictItemService {
         return toResponse(e);
     }
 
+    /** 删除字典项（逻辑删除）。 */
     public void delete(Long id) {
         SysDictItem e = require(id);
         assertNotReferenced(e.getTypeCode(), e.getValue());

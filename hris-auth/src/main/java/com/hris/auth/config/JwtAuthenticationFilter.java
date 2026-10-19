@@ -29,6 +29,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.tokenService = tokenService;
     }
 
+    /**
+     * 解析 Authorization Bearer 令牌：成功则写入 TraceContext（tenantId/userId，供 MyBatis-Plus 租户插件）
+     * 与 AuthContext（LoginUser，供 Service 层读当前用户）；令牌缺失或无效时静默放行，
+     * 受保护端点由 Controller 经 requireLogin() 判空后返回 401。
+     * finally 清理 AuthContext ThreadLocal，避免线程复用串号。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {

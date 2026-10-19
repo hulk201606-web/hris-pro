@@ -23,12 +23,14 @@ public class TenantConfigService {
         this.mapper = mapper;
     }
 
+    /** 查询当前租户的全部配置项。 */
     public List<ConfigResponse> list() {
         return mapper.selectList(new LambdaQueryWrapper<SysTenantConfig>()
                         .orderByAsc(SysTenantConfig::getConfigKey))
                 .stream().map(this::toResponse).toList();
     }
 
+    /** 按主键查询租户配置详情，不存在则抛 NOT_FOUND。 */
     public ConfigResponse get(String key) {
         return toResponse(requireByKey(key));
     }
@@ -49,6 +51,7 @@ public class TenantConfigService {
         return toResponse(e);
     }
 
+    /** 删除指定配置项。 */
     public void delete(String key) {
         SysTenantConfig e = requireByKey(key);
         mapper.deleteById(e.getId());

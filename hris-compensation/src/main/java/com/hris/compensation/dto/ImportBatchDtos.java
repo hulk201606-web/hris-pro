@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 /**
- * ImportBatch DTO（由 DDL 自动生成）。
+ * 导入批次相关 DTO（域：薪酬，分层：DTO/接口契约）。导入批次创建/查询/状态的请求与响应结构。
  */
 public final class ImportBatchDtos {
 

@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * prf_course（由 DDL 自动生成）
+ * 课程（域：绩效/培训，分层：实体/DO）。培训课程主数据（名称/学时）。
  */
 @TableName("prf_course")
 public class Course extends BaseEntity {

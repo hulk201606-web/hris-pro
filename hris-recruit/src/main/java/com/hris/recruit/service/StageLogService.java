@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * StageLog 服务（CRUD）。
+ * 阶段流转日志（StageLog）：记录候选人/投递在各招聘阶段间的流转轨迹，供漏斗统计与回溯。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Service。</p>
  */
 @Service
 public class StageLogService {
@@ -28,6 +30,7 @@ public class StageLogService {
         this.mapper = mapper;
     }
 
+    /** 按 ID 查询，不存在抛 NOT_FOUND。 */
     public StageLogResponse get(Long id) {
         StageLog e = mapper.selectById(id);
         if (e == null) {
@@ -36,12 +39,14 @@ public class StageLogService {
         return toResponse(e);
     }
 
+    /** 分页查询列表。 */
     public PageResult<StageLogResponse> list(long page, long size) {
         IPage<StageLog> pg = mapper.selectPage(new Page<>(page, size), new LambdaQueryWrapper<>());
         List<StageLogResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
+    /** 新建记录（事务）。 */
     @Transactional(rollbackFor = Exception.class)
     public StageLogResponse create(StageLogCreateRequest req) {
         StageLog e = new StageLog();
@@ -53,6 +58,7 @@ public class StageLogService {
         return toResponse(e);
     }
 
+    /** 更新记录（事务）；数据被并发变更时抛 RCS_ERROR。 */
     @Transactional(rollbackFor = Exception.class)
     public StageLogResponse update(Long id, StageLogUpdateRequest req) {
         StageLog e = mapper.selectById(id);
@@ -69,6 +75,7 @@ public class StageLogService {
         return toResponse(e);
     }
 
+    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {

@@ -6,9 +6,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * 假期额度流水（att_leave_ledger）。额度的每一次增减都留痕，供对账与追溯。
- *
- * <p>change_amount 正增负减（天）；biz_ref 回填业务单号（请假单 biz_key）（docs/12 §5.4）。</p>
+ * 假期台账流水（域：考勤，分层：实体/DO）。假期额度变动明细（额度发放/消耗/结转/转入），bizRef 关联请假单或调账操作。
  */
 @TableName("att_leave_ledger")
 public class LeaveLedger extends BaseEntity {

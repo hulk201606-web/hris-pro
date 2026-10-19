@@ -37,6 +37,7 @@ public class GroupService {
     public GroupResponse get(Long id) {
         return toResponse(require(id));
     }
+    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
     @Transactional(rollbackFor = Exception.class)
     public GroupResponse create(GroupRequest req) {
@@ -54,6 +55,7 @@ public class GroupService {
         groupMapper.insert(group);
         return toResponse(group);
     }
+    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
     @Transactional(rollbackFor = Exception.class)
     public GroupResponse update(Long id, GroupRequest req) {

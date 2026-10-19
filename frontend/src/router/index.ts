@@ -1,3 +1,9 @@
+/**
+ * 路由表与全局守卫。
+ * - /login 公开；/self/* 自助端；/admin/* 管理端；其余 404。
+ * - 守卫：未登录跳登录页（带 redirect）；已登录访问登录页回自助首页。
+ * - afterEach 写入文档标题「页面名 · 智云 HR」。
+ */
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { useUserStore } from '../stores/user';

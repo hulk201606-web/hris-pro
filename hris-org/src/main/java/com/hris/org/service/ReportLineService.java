@@ -29,6 +29,10 @@ public class ReportLineService {
         this.deptMapper = deptMapper;
     }
 
+    /**
+     * 解析汇报链：先取员工直属上级 supervisorEmpId，再沿部门树逐级向上收集部门负责人
+     * managerEmpId，直到根部门为止；用 visited 防环，去重。员工域不可用时抛业务异常。
+     */
     public List<Long> resolve(Long empId) {
         Map<String, Object> profile;
         try {

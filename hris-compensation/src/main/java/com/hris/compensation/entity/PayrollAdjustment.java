@@ -5,7 +5,7 @@ import com.hris.common.entity.BaseEntity;
 import java.math.BigDecimal;
 
 /**
- * cmp_payroll_adjustment（由 DDL 自动生成）
+ * 算薪调整项（域：薪酬，分层：实体/DO，密域）。算薪批次中的手工补款/扣款，amount 为密文存储。
  */
 @TableName("cmp_payroll_adjustment")
 public class PayrollAdjustment extends BaseEntity {

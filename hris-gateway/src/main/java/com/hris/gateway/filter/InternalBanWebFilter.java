@@ -38,6 +38,11 @@ public class InternalBanWebFilter implements WebFilter, Ordered {
         this.errorWriter = errorWriter;
     }
 
+    /**
+     * 内部端点封禁（WebFilter 层，先于路由匹配）：路径包含 internalPathMarker（默认 /internal/）
+     * 时直接 403 FORBIDDEN，不进入 Gateway 路由与 GlobalFilter 链。
+     * 内部端点仅允许服务间 Feign 直连，公网经网关访问一律拒绝。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();

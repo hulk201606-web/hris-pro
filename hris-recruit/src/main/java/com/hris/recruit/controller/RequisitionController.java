@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Requisition 端点。
+ * 招聘需求端点：招聘流程起点，权限点 rcu:requisition:read/write。
+ *
+ * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
 @RestController
 @RequestMapping("/api/v1/rcu/requisitions")
@@ -32,6 +34,7 @@ public class RequisitionController {
         this.service = service;
     }
 
+    /** 分页查询列表（读权限）。 */
     @RequirePerm("rcu:requisition:read")
     @GetMapping
     public R<PageResult<RequisitionResponse>> list(
@@ -40,24 +43,28 @@ public class RequisitionController {
         return R.ok(service.list(page, size));
     }
 
+    /** 按 ID 查询详情（读权限）。 */
     @RequirePerm("rcu:requisition:read")
     @GetMapping("/{id}")
     public R<RequisitionResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));
     }
 
+    /** 新建记录（写权限）。 */
     @RequirePerm("rcu:requisition:write")
     @PostMapping
     public R<RequisitionResponse> create(@Valid @RequestBody RequisitionCreateRequest req) {
         return R.ok(service.create(req));
     }
 
+    /** 更新记录（写权限）。 */
     @RequirePerm("rcu:requisition:write")
     @PutMapping("/{id}")
     public R<RequisitionResponse> update(@PathVariable Long id, @Valid @RequestBody RequisitionUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
 
+    /** 删除记录（写权限）。 */
     @RequirePerm("rcu:requisition:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

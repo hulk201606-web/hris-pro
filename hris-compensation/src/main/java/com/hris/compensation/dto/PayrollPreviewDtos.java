@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 算薪取数预览 DTO（跨域组合：员工主档 + 考勤月结/日明细，docs/07）。
+ * 算薪预览相关 DTO（域：薪酬，分层：DTO/接口契约）。算薪前组合员工主档+考勤结果的预览行结构。
  */
 public final class PayrollPreviewDtos {
 
