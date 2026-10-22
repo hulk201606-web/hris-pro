@@ -171,6 +171,13 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <configuration>
                         <useModulePath>false</useModulePath>
+                        <!--
+                            指定 -Dtest=XxxTest 后，对被 -am 聚合拉入、但未包含该测试的依赖模块
+                            不报错（如 hris-flow -am 拉入 hris-common）。
+                            与 failIfNoTests 互补：后者管“模块内完全没有测试类”，
+                            本参数管“有测试类但被 -Dtest 过滤后无匹配”；全量 mvn test 不受影响。
+                        -->
+                        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
                     </configuration>
                 </plugin>
                 <!-- 环境约束：Maven 3.8.6+ / JDK 21+（Boot 4.0 要求），老环境编译时明确报错提示 -->

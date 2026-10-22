@@ -17,7 +17,8 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
-export JAVA_HOME="${JAVA_HOME:-D:/Program Files/Java/jdk-21.0.12.1}"
+# 不写死平台路径：CI 由 setup-java 注入 JAVA_HOME；本地未设置时留空，Maven 回退到 PATH 上的 java
+export JAVA_HOME="${JAVA_HOME:-}"
 
 WITH_E2E=0
 MODULE=""
