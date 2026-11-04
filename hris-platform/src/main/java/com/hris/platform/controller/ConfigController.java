@@ -29,11 +29,13 @@ public class ConfigController {
         this.configService = configService;
     }
 
+    @RequirePerm("plt:config:read")
     @GetMapping
     public R<List<ConfigResponse>> list() {
         return R.ok(configService.list());
     }
 
+    @RequirePerm("plt:config:read")
     @GetMapping("/{key}")
     public R<ConfigResponse> get(@PathVariable String key) {
         return R.ok(configService.get(key));

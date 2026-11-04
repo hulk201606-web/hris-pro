@@ -1,6 +1,7 @@
 package com.hris.flow.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.security.RequirePerm;
 import com.hris.flow.dto.PageResult;
 import com.hris.flow.dto.TaskActionRequest;
 import com.hris.flow.dto.TaskView;
@@ -29,54 +30,63 @@ public class TaskController {
         this.taskActionService = taskActionService;
     }
 
+    @RequirePerm("flow:task:read")
     @GetMapping("/todo")
     public R<PageResult<TaskView>> todo(@RequestParam(defaultValue = "1") long page,
                                         @RequestParam(defaultValue = "20") long size) {
         return R.ok(taskQueryService.todo(page, size));
     }
 
+    @RequirePerm("flow:task:read")
     @GetMapping("/done")
     public R<PageResult<TaskView>> done(@RequestParam(defaultValue = "1") long page,
                                         @RequestParam(defaultValue = "20") long size) {
         return R.ok(taskQueryService.done(page, size));
     }
 
+    @RequirePerm("flow:task:read")
     @GetMapping("/cc")
     public R<PageResult<TaskView>> cc(@RequestParam(defaultValue = "1") long page,
                                       @RequestParam(defaultValue = "20") long size) {
         return R.ok(taskQueryService.cc(page, size));
     }
 
+    @RequirePerm("flow:task:read")
     @GetMapping("/started")
     public R<PageResult<TaskView>> started(@RequestParam(defaultValue = "1") long page,
                                            @RequestParam(defaultValue = "20") long size) {
         return R.ok(taskQueryService.started(page, size));
     }
 
+    @RequirePerm("flow:task:write")
     @PostMapping("/{id}/approve")
     public R<Void> approve(@PathVariable("id") String id, @RequestBody(required = false) TaskActionRequest req) {
         taskActionService.approve(id, req);
         return R.ok();
     }
 
+    @RequirePerm("flow:task:write")
     @PostMapping("/{id}/reject")
     public R<Void> reject(@PathVariable("id") String id, @RequestBody(required = false) TaskActionRequest req) {
         taskActionService.reject(id, req);
         return R.ok();
     }
 
+    @RequirePerm("flow:task:write")
     @PostMapping("/{id}/transfer")
     public R<Void> transfer(@PathVariable("id") String id, @RequestBody TaskActionRequest req) {
         taskActionService.transfer(id, req);
         return R.ok();
     }
 
+    @RequirePerm("flow:task:write")
     @PostMapping("/{id}/add-sign")
     public R<Void> addSign(@PathVariable("id") String id, @RequestBody TaskActionRequest req) {
         taskActionService.addSign(id, req);
         return R.ok();
     }
 
+    @RequirePerm("flow:task:write")
     @PostMapping("/{id}/withdraw")
     public R<Void> withdraw(@PathVariable("id") String id) {
         taskActionService.withdraw(id);

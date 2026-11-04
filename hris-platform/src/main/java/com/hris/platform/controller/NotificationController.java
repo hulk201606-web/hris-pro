@@ -1,6 +1,7 @@
 package com.hris.platform.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.security.RequirePerm;
 import com.hris.platform.dto.NotificationDtos.RecordResponse;
 import com.hris.platform.dto.NotificationDtos.TemplateRequest;
 import com.hris.platform.dto.NotificationDtos.TemplateResponse;
@@ -35,27 +36,32 @@ public class NotificationController {
         this.recordService = recordService;
     }
 
+    @RequirePerm("plt:notification:read")
     @GetMapping("/templates")
     public R<List<TemplateResponse>> listTemplates(@RequestParam(required = false) String channel) {
         return R.ok(templateService.list(channel));
     }
 
+    @RequirePerm("plt:notification:write")
     @PostMapping("/templates")
     public R<TemplateResponse> createTemplate(@Valid @RequestBody TemplateRequest req) {
         return R.ok(templateService.create(req));
     }
 
+    @RequirePerm("plt:notification:write")
     @PutMapping("/templates/{id}")
     public R<TemplateResponse> updateTemplate(@PathVariable Long id, @Valid @RequestBody TemplateRequest req) {
         return R.ok(templateService.update(id, req));
     }
 
+    @RequirePerm("plt:notification:write")
     @DeleteMapping("/templates/{id}")
     public R<Void> deleteTemplate(@PathVariable Long id) {
         templateService.delete(id);
         return R.ok();
     }
 
+    @RequirePerm("plt:notification:read")
     @GetMapping("/records")
     public R<PageResult<RecordResponse>> records(
             @RequestParam(required = false) Long userId,

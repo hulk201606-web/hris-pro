@@ -28,6 +28,7 @@ public class ModelController {
         this.modelService = modelService;
     }
 
+    @RequirePerm("flow:model:read")
     @GetMapping
     public R<ModelDtos.ModelPageResult> list(@RequestParam(defaultValue = "1") long page,
                                              @RequestParam(defaultValue = "20") long size) {
@@ -46,6 +47,7 @@ public class ModelController {
         return R.ok(modelService.deploy(id));
     }
 
+    @RequirePerm("flow:model:read")
     @GetMapping("/{id}/versions")
     public R<List<ModelDtos.ModelVersionResponse>> versions(@PathVariable("id") Long id) {
         return R.ok(modelService.versions(id));

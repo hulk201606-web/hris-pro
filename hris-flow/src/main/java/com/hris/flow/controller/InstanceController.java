@@ -35,6 +35,7 @@ public class InstanceController {
         return R.ok(instanceService.start(req));
     }
 
+    @RequirePerm("flow:instance:terminate")
     @DeleteMapping("/instances/{id}")
     public R<Void> withdraw(@PathVariable("id") String id,
                             @RequestParam(value = "reason", required = false) String reason) {
@@ -42,6 +43,7 @@ public class InstanceController {
         return R.ok();
     }
 
+    @RequirePerm("flow:instance:read")
     @GetMapping("/instances/{id}/track")
     public R<TrackResponse> track(@PathVariable("id") String id) {
         return R.ok(instanceService.track(id));

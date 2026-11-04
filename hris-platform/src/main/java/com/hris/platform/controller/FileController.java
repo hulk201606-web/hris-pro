@@ -1,6 +1,7 @@
 package com.hris.platform.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.security.RequirePerm;
 import com.hris.platform.dto.FileDtos.FileDownloadResponse;
 import com.hris.platform.dto.FileDtos.FileMetaResponse;
 import com.hris.platform.dto.FileDtos.PresignUploadRequest;
@@ -28,16 +29,19 @@ public class FileController {
         this.fileService = fileService;
     }
 
+    @RequirePerm("plt:file:write")
     @PostMapping("/presign-upload")
     public R<PresignUploadResponse> presignUpload(@Valid @RequestBody PresignUploadRequest req) {
         return R.ok(fileService.presignUpload(req));
     }
 
+    @RequirePerm("plt:file:read")
     @GetMapping("/meta/{id}")
     public R<FileMetaResponse> meta(@PathVariable Long id) {
         return R.ok(fileService.getMeta(id));
     }
 
+    @RequirePerm("plt:file:read")
     @GetMapping("/download")
     public R<FileDownloadResponse> download(@RequestParam Long id) {
         return R.ok(fileService.download(id));
