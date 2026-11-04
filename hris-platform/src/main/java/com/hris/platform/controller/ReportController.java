@@ -1,6 +1,7 @@
 package com.hris.platform.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.security.RequirePerm;
 import com.hris.platform.dto.PageResult;
 import com.hris.platform.dto.ReportDtos.ExportTaskRequest;
 import com.hris.platform.dto.ReportDtos.ExportTaskResponse;
@@ -36,32 +37,38 @@ public class ReportController {
         this.exportTaskService = exportTaskService;
     }
 
+    @RequirePerm("plt:report:read")
     @GetMapping("/defs")
     public R<List<ReportDefResponse>> listDefs() {
         return R.ok(reportService.list());
     }
 
+    @RequirePerm("plt:report:write")
     @PostMapping("/defs")
     public R<ReportDefResponse> createDef(@Valid @RequestBody ReportDefRequest req) {
         return R.ok(reportService.create(req));
     }
 
+    @RequirePerm("plt:report:write")
     @PutMapping("/defs/{id}")
     public R<ReportDefResponse> updateDef(@PathVariable Long id, @Valid @RequestBody ReportDefRequest req) {
         return R.ok(reportService.update(id, req));
     }
 
+    @RequirePerm("plt:report:write")
     @DeleteMapping("/defs/{id}")
     public R<Void> deleteDef(@PathVariable Long id) {
         reportService.delete(id);
         return R.ok();
     }
 
+    @RequirePerm("plt:report:export")
     @PostMapping("/exports")
     public R<ExportTaskResponse> createExport(@RequestBody ExportTaskRequest req) {
         return R.ok(exportTaskService.create(req));
     }
 
+    @RequirePerm("plt:report:read")
     @GetMapping("/exports")
     public R<PageResult<ExportTaskResponse>> listExports(
             @RequestParam(required = false) String status,

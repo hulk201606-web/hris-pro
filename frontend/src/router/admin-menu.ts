@@ -5,6 +5,8 @@ import {
   CalendarOutlined,
   DollarOutlined,
   IdcardOutlined,
+  NodeIndexOutlined,
+  SettingOutlined,
   TeamOutlined,
   TrophyOutlined,
 } from '@ant-design/icons-vue';
@@ -115,6 +117,32 @@ const MODULES: ModuleMeta[] = [
       { resource: 'employee', route: '/admin/employee/roster', title: '员工花名册' },
       { resource: 'lifecycle', route: '/admin/employee/lifecycle', title: '员工异动办理' },
       { resource: 'contract', route: '/admin/employee/contracts-expiring', title: '合同到期预警' },
+    ],
+  },
+  {
+    // 流程中心：权限点形如 flow:model:write / flow:task:read。
+    // 待办中心对四类视图（待办/已办/抄送/我发起）共用 flow:task 资源。
+    code: 'flow',
+    title: '流程中心',
+    icon: NodeIndexOutlined,
+    resources: [
+      { resource: 'model', route: '/admin/flow/models', title: '流程模型' },
+      { resource: 'task', route: '/admin/flow/tasks', title: '待办中心' },
+    ],
+  },
+  {
+    // 平台支撑：权限点形如 plt:dict:write / plt:report:export。
+    // 字典类型与字典项共用一个 dict 资源，故两条菜单项会同时命中。
+    code: 'plt',
+    title: '平台支撑',
+    icon: SettingOutlined,
+    resources: [
+      { resource: 'audit', route: '/admin/platform/audit-logs', title: '审计日志' },
+      { resource: 'config', route: '/admin/platform/configs', title: '系统配置' },
+      { resource: 'dict', route: '/admin/platform/dict-types', title: '字典类型' },
+      { resource: 'dict', route: '/admin/platform/dict-items', title: '字典项' },
+      { resource: 'notification', route: '/admin/platform/templates', title: '通知模板' },
+      { resource: 'report', route: '/admin/platform/reports', title: '报表定义' },
     ],
   },
 ];
