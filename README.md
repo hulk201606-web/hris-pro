@@ -45,7 +45,7 @@ docker compose --profile rag up -d   # 可选：ES + Milvus（RAG 检索）
 python -m pip install pymysql
 
 export DB_PASSWORD='<你的数据库密码>'
-python scripts/init_db.py                    # 建库建表（幂等）
+python scripts/init_db.py                    # 建库建表（仅首次；库已存在时跳过）
 python scripts/seed_rbac_from_source.py      # 扫描 @RequirePerm 同步权限点（幂等）
 ```
 

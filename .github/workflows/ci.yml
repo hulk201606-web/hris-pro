@@ -21,7 +21,7 @@ jobs:
   # P0 门禁（最快失败，秒级反馈）
   # ===================================================================
   gates:
-    name: P0 gates (emoji / color / 单文件行数)
+    name: P0 gates (emoji / color / 凭据 / 单文件行数)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +33,27 @@ jobs:
       - name: Emoji scan (全仓)
         run: node scripts/check-emoji.js
 
+      # P0 凭据门禁。事故背景：scripts/init_db.py 曾以大写 DB_PASSWORD = "..."
+      # 硬编码口令并进入 git 历史（commit 3f811fb），当时的临时扫描用
+      # 小写无 -i 的正则整条漏过。check-secret.js 的正则带 i 标志，
+      # 并覆盖引号/YAML 裸值两种书写形态，同时放行 ${VAR} 与 os.environ.get() 正确写法。
+      - name: Credential scan (全仓, 大小写不敏感)
+        run: node scripts/check-secret.js
+
       - name: Hardcoded color scan (前端)
         run: node scripts/check-hardcoded-color.js frontend
 
-      - name: 单文件行数门禁（≤300 行）
+      # 明文凭据扫描（P0 门禁）。
+      # 历史教训：2026-10-18 曾因扫描正则大小写不敏感缺失，导致
+      # scripts/init_db.py 的大写 DB_PASSWORD 明文口令进入 git 历史。
+      # 此门禁强制大小写不敏感，且豁免须逐条登记理由。
+      - name: Secret scan (明文凭据)
+        run: node scripts/check-secret.js
+
+      # 单文件行数门禁（≤300 行）
+      # 注意：frontend/src/api/generated/ 是由 openapi 契约自动生成的产物（单文件可达数千行），
+      # 不适用"单文件≤300 行"这条面向**手写代码**的规则，故排除。
+      - name: 单文件行数门禁（≤300 行，排除生成物）
         run: |
           fail=0
           while IFS= read -r f; do
@@ -47,8 +64,19 @@ jobs:
             fi
           done < <(find . -path ./node_modules -prune -o -path ./frontend/node_modules -prune -o \
                    -path '*/target' -prune -o -path ./frontend/dist -prune -o \
+                   -path ./frontend/src/api/generated -prune -o \
                    \( -name '*.java' -o -name '*.vue' -o -name '*.ts' \) -type f -print)
           exit $fail
+
+      # 生成物规模监控：不阻断，仅记录行数与文件数，便于观察契约覆盖变化
+      - name: Generated artifacts report
+        run: |
+          if [ -d frontend/src/api/generated ]; then
+            echo "生成物行数：$(find frontend/src/api/generated -name '*.ts' -exec cat {} + | wc -l)"
+            echo "生成物文件数：$(find frontend/src/api/generated -name '*.ts' | wc -l)"
+          else
+            echo "尚无生成物（首次生成前属正常）"
+          fi
 
   # ===================================================================
   # 后端：编译 + 单测（含 L2 装配门禁）
@@ -123,7 +151,8 @@ jobs:
   # ===================================================================
   # 镜像构建验证（部署基建门禁：Dockerfile 必须能构建出可运行镜像）
   # 只构建网关 + 一个数据服务（覆盖 22 服务端口收敛到 8080 的通用路径），
-  # 全量 12 个镜像构建耗时过长，交给 docker/build-all.sh 按需本地/发布流水线执行。
+  # 全量 11 个镜像构建耗时过长（11 服务，hris-common 为共享库不产镜像），
+  # 交给 docker/build-all.sh 按需本地/发布流水线执行。
   # ===================================================================
   docker:
     name: Docker image build (gateway + rag)
@@ -191,7 +220,7 @@ jobs:
           JWT_SECRET=ci-placeholder-secret-at-least-32-bytes
           EOF
           docker compose --env-file .env.ci -f docker-compose.yml -f docker-compose.app.yml config > /dev/null
-          echo "::notice::应用编排（12 服务）语法校验通过"
+          echo "::notice::应用编排（11 服务）语法校验通过"
 
   # ===================================================================
   # 汇总门禁

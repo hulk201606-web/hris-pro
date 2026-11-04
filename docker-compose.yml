@@ -19,9 +19,10 @@ services:
       MODE: standalone
       NACOS_AUTH_ENABLE: "false"
       # v3.x 必须设置（即使 auth 关闭），Base64 编码，原文 ≥32 字节
-      NACOS_AUTH_TOKEN: "aHJpcy1kZXYtbmFjb3Mtc2VjcmV0LWtleS0wMTIzNDU2Nzg5YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo="
-      NACOS_AUTH_IDENTITY_KEY: hrisDevIdentityKey
-      NACOS_AUTH_IDENTITY_VALUE: hrisDevIdentityValue
+      # 密钥走 .env 注入，仓库内不留明文（生成：openssl rand -base64 48）
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:?必须设置 NACOS_AUTH_TOKEN（Base64 编码，≥32 字节，见 .env.example）}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-hrisDevIdentityKey}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-hrisDevIdentityValue}
     ports:
       - "8848:8848"
       - "9848:9848"
@@ -74,7 +75,8 @@ services:
     image: mysql:8.0
     container_name: hris-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      # 口令走 .env 注入，仓库内不留明文（scripts/check-secret.js 门禁会拦）
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?必须设置 DB_PASSWORD（见 .env.example）}
       TZ: UTC
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --default-time-zone=+00:00
     ports:
@@ -84,7 +86,7 @@ services:
       - ./docs/db/schema-mysql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     networks: [hris-net]
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -95,7 +97,10 @@ services:
     image: postgres:15-alpine
     container_name: hris-postgres
     environment:
-      POSTGRES_PASSWORD: root
+      # 口令走 .env 注入，仓库内不留明文（scripts/check-secret.js 门禁会拦）。
+      # 双库场景下 PostgreSQL 与 MySQL 共用 DB_PASSWORD；如需独立口令，
+      # 在 .env 里增设 PG_PASSWORD 覆盖此处即可。
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-${DB_PASSWORD:?必须设置 DB_PASSWORD（见 .env.example）}}
       TZ: UTC
     command: ["postgres", "-c", "timezone=UTC"]
     ports:
@@ -135,8 +140,11 @@ services:
     container_name: hris-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      # 账号口令走 .env 注入，仓库内不留明文（scripts/check-secret.js 门禁会拦）。
+      # 未配置时回落到 MinIO 官方公开默认账号，仅供本地联调；
+      # 生产必须显式设置强口令（见 .env.example）。
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${DB_PASSWORD:?必须设置 DB_PASSWORD（见 .env.example）}}
     ports:
       - "9000:9000"
       - "9001:9001"

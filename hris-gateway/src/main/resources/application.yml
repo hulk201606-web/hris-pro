@@ -94,7 +94,12 @@ hris:
       - /api/v1/auth/login
       - /api/v1/auth/refresh
       - /public/**
-      - /actuator/**
+      # 仅放行探针与健康检查，不放行整个 /actuator/**。
+      # 安全原因：/actuator/** 一旦放行，info/env/metrics/prometheus 等端点会
+      # 免 JWT 校验经网关对外可达。指标端点一旦按 docs/18 §3 暴露 prometheus，
+      # 若此处仍写 /actuator/** 就等于把 JVM/DB/HTTP 指标公开到公网。
+      # 需要采集指标时走 Prometheus 服务端直连容器网络，不经网关。
+      - /actuator/health/**
       - /favicon.ico
     # 全局 CORS（CorsWebFilter）
     cors:
