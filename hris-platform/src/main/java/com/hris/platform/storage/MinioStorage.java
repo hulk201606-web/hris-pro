@@ -5,11 +5,13 @@ import io.minio.BucketExistsArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
 import io.minio.http.Method;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -56,6 +58,31 @@ public class MinioStorage {
     /** 生成下载预签名 URL；不可用/异常时返回 null（由调用方降级）。 */
     public String presignGet(String bucket, String objectKey, int expirySeconds) {
         return presign(Method.GET, bucket, objectKey, expirySeconds);
+    }
+
+    /**
+     * 服务端直接写入对象（异步导出执行器用）。
+     *
+     * <p>返回 false 表示「文件服务当前不可用」，调用方必须据此保持任务
+     * PENDING 等待下次调度，而不能把任务标成 DONE——那会造出一个
+     * 永远下载不到的导出结果。</p>
+     */
+    public boolean putObject(String bucket, String objectKey, byte[] content, String contentType) {
+        if (!isReady()) {
+            return false;
+        }
+        try {
+            client().putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .stream(new ByteArrayInputStream(content), content.length, -1)
+                    .contentType(contentType)
+                    .build());
+            return true;
+        } catch (Exception e) {
+            log.warn("MinIO putObject failed, object={}: {}", objectKey, e.getMessage());
+            return false;
+        }
     }
 
     private String presign(Method method, String bucket, String objectKey, int expirySeconds) {

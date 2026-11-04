@@ -163,3 +163,16 @@ export function listExports(
 export function createExport(reportDefId: number): Promise<ExportTaskResponse> {
   return post<ExportTaskResponse>('/plt/reports/exports', { reportDefId });
 }
+
+/** 预置报表目录项（PLT-F-005）：五类主题由服务端常量提供，无需各租户 seed */
+export interface CatalogItem {
+  code: string;
+  name: string;
+  description: string;
+  formats: string[];
+}
+
+/** 预置报表目录（GET /plt/reports/catalog） */
+export function listReportCatalog(): Promise<CatalogItem[]> {
+  return get<CatalogItem[]>('/plt/reports/catalog');
+}

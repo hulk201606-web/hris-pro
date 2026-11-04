@@ -3,6 +3,7 @@ package com.hris.platform.controller;
 import com.hris.common.api.R;
 import com.hris.common.security.RequirePerm;
 import com.hris.platform.dto.PageResult;
+import com.hris.platform.dto.ReportDtos.CatalogItem;
 import com.hris.platform.dto.ReportDtos.ExportTaskRequest;
 import com.hris.platform.dto.ReportDtos.ExportTaskResponse;
 import com.hris.platform.dto.ReportDtos.ReportDefRequest;
@@ -29,12 +30,28 @@ import java.util.List;
 @RequestMapping("/api/v1/plt/reports")
 public class ReportController {
 
+    /** 需求约定的五类预置报表主题，先以常量目录暴露，避免各租户重复 seed。 */
+    private static final List<CatalogItem> CATALOG = List.of(
+            new CatalogItem("HR_STRUCTURE", "人力结构", "在职人数、司龄/年龄/学历分布", List.of("EXCEL", "PDF")),
+            new CatalogItem("EMP_CHANGE", "人员异动", "入职/转正/调动/离职周转统计", List.of("EXCEL", "PDF")),
+            new CatalogItem("ATTENDANCE", "考勤汇总", "出勤率、加班、假期消耗", List.of("EXCEL")),
+            new CatalogItem("RECRUITMENT", "招聘漏斗", "需求→候选人→Offer→录用转化", List.of("EXCEL", "PDF")),
+            new CatalogItem("PAYROLL_COST", "薪酬成本", "期间薪酬总额与部门成本分摊", List.of("EXCEL"))
+    );
+
     private final ReportService reportService;
     private final ExportTaskService exportTaskService;
 
     public ReportController(ReportService reportService, ExportTaskService exportTaskService) {
         this.reportService = reportService;
         this.exportTaskService = exportTaskService;
+    }
+
+    /** 预置报表目录（PLT-F-005）。业务明细取数依赖 PLT-F-006 只读聚合库。 */
+    @RequirePerm("plt:report:read")
+    @GetMapping("/catalog")
+    public R<List<CatalogItem>> catalog() {
+        return R.ok(CATALOG);
     }
 
     @RequirePerm("plt:report:read")

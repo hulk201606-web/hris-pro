@@ -3,6 +3,7 @@ package com.hris.platform.dto;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 报表中心 DTO（PLT-F-005）。
@@ -39,5 +40,15 @@ public final class ReportDtos {
             String status,
             Long fileId,
             LocalDateTime createdAt) {
+    }
+
+    /**
+     * 预置报表目录项（PLT-F-005）。
+     *
+     * <p>目录是产品侧约定好的五类主题，先以常量形式对外暴露，避免每个租户
+     * 都要手工 seed 一遍。业务数据取数依赖 PLT-F-006 只读聚合库，未就绪前
+     * 导出内容只含报表定义清单，见 ExportTaskDispatchHandler。</p>
+     */
+    public record CatalogItem(String code, String name, String description, List<String> formats) {
     }
 }

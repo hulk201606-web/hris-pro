@@ -318,6 +318,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '导出记录' },
       },
       {
+        path: 'platform/scheduler',
+        name: 'AdminScheduler',
+        component: () => import('../views/admin/platform/SchedulerTaskView.vue'),
+        meta: { title: '调度中心' },
+      },
+      {
         path: 'flow/models',
         name: 'AdminFlowModels',
         component: () => import('../views/admin/flow/ModelListView.vue'),

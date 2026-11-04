@@ -2227,6 +2227,27 @@ CREATE TABLE sys_scheduler_task_registry (
   UNIQUE KEY `uk_sys_scheduler_task` (`tenant_id`, `task_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='调度任务注册';
 
+CREATE TABLE sys_scheduler_task_log (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `task_id`       BIGINT       DEFAULT NULL COMMENT '注册任务ID',
+  `task_key`      VARCHAR(64)  NOT NULL COMMENT '任务键(冗余, 注册表删除后仍可追溯)',
+  `handler`       VARCHAR(128) NOT NULL COMMENT '处理器标识',
+  `trigger_type`  VARCHAR(16)  NOT NULL COMMENT '触发方式: CRON/MANUAL/RETRY',
+  `status`        VARCHAR(16)  NOT NULL COMMENT '结果: SUCCESS/FAILED',
+  `retry_no`      INT          NOT NULL DEFAULT 0 COMMENT '第几次重试(0=首次执行)',
+  `duration_ms`   BIGINT       DEFAULT NULL COMMENT '耗时(毫秒)',
+  `message`       VARCHAR(512) DEFAULT NULL COMMENT '执行摘要或失败原因',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '执行时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_sys_scheduler_log` (`tenant_id`, `task_key`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='调度任务执行日志';
+
 -- 全局事件表(事务消息模板)
 CREATE TABLE sys_outbox_message (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',

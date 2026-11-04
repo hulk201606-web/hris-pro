@@ -148,6 +148,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'notification', route: '/admin/platform/templates', title: '通知模板' },
       { resource: 'report', route: '/admin/platform/reports', title: '报表定义' },
       { resource: 'report', route: '/admin/platform/exports', title: '导出记录' },
+      { resource: 'scheduler', route: '/admin/platform/scheduler', title: '调度中心' },
     ],
   },
 ];

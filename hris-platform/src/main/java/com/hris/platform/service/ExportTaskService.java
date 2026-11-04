@@ -46,6 +46,33 @@ public class ExportTaskService {
         return new PageResult<>(records, p.getCurrent(), p.getSize(), p.getTotal());
     }
 
+    /**
+     * 执行器批量领取待处理任务（PENDING → RUNNING 的领取阶段）。
+     *
+     * <p>只领 PENDING：文件服务暂时不可用时任务仍留在 PENDING 等下次调度，
+     * 不会被误标 DONE，也不会因为一次失败就被永久判死。</p>
+     */
+    public List<SysExportTask> claimPending(int limit) {
+        LambdaQueryWrapper<SysExportTask> qw = new LambdaQueryWrapper<>();
+        qw.eq(SysExportTask::getStatus, "PENDING")
+                .orderByAsc(SysExportTask::getCreatedAt);
+        return mapper.selectPage(new Page<>(1, limit), qw).getRecords();
+    }
+
+    /** 执行器回调：置为运行中。 */
+    public void markRunning(Long id) {
+        SysExportTask t = require(id);
+        t.setStatus("RUNNING");
+        mapper.updateById(t);
+    }
+
+    /** 执行器回调：文件服务暂时不可用时退回 PENDING，等下次调度重试。 */
+    public void markPending(Long id) {
+        SysExportTask t = require(id);
+        t.setStatus("PENDING");
+        mapper.updateById(t);
+    }
+
     /** 导出执行器回调：完成并关联文件。 */
     public void markDone(Long id, Long fileId) {
         SysExportTask t = require(id);
