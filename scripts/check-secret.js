@@ -141,12 +141,17 @@ const LINE_EXEMPT = [
   },
   {
     file: /docs\/.*\.md$/,
-    // 交付文档中引用问题代码时必然带上原样字符串。
-    // 刻意使用**结构性特征**（凭据字段名）而非具体值：
-    // 若在此处写入真实口令，等于把凭据复制进防泄露的门禁自身——
-    // 这是最坏的循环。文档是叙述载体，出现字段名本就合理，具体值是什么不重要。
-    line: /(?:DB_PASSWORD|MYSQL_ROOT_PASSWORD|MYSQL_PWD|NACOS_AUTH_TOKEN|JWT_SECRET)\s*[=:]/,
-    reason: '交付文档为说明「某处曾硬编码口令」而引用原样，属证据引用而非凭据',
+    // 交付文档里引用「曾硬编码的弱口令」时的叙述性引用。
+    //
+    // 两条硬约束（缺一不可）：
+    //  1) 用**结构性特征**（凭据字段名 + 占位/弱值），绝不写具体真实口令。
+    //     把真实值写进防泄露门禁自身是最坏的循环。
+    //  2) 必须被反引号包裹（即文档正文里的内联代码，而非真正的配置行）。
+    //     只按「出现凭据字段名」豁免太宽：实测 `DB_PASSWORD = "RealSecret987!"`
+    //     放在 docs/ 下会被整条放过，等于给文档开了一个免检后门。
+    //     加上反引号 + 占位值双重限定后，真实值仍会被门禁捕获。
+    line: /`(?:DB_PASSWORD|MYSQL_ROOT_PASSWORD|MYSQL_PWD|NACOS_AUTH_TOKEN|JWT_SECRET)\s*[=:]\s*(?:root|<[^>]*>|\$\{[^}]+\}|<REDACTED>)`/i,
+    reason: '文档正文中反引号包裹的凭据字段引用（占位值/公开弱值），属证据叙述而非凭据',
   },
   {
     file: /\.github\/workflows\/ci\.yml$/,
@@ -233,21 +238,33 @@ function isAllowValue(value) {
  * @param {string[]} relPaths 相对仓库根的路径列表
  * @returns {Set<string>} 被忽略的路径集合
  */
+// git 调用最长等待时间。没有这个上限时，若 git 因 index.lock 争用、
+// 凭据弹窗或钩子挂起而卡住，execFileSync 会无限期阻塞 —— CI 上表现为
+// 「门禁跑到超时」，等于门禁失效。超时后降级为「不过滤、全量扫描」，
+// 宁可慢一点也绝不让门禁静默跳过文件。
+const GIT_TIMEOUT_MS = 15000;
+
 function collectIgnored(relPaths) {
   const ignored = new Set();
   if (relPaths.length === 0) return ignored;
   let cp;
   try {
     cp = require('child_process');
-    cp.execFileSync('git', ['--version'], { stdio: 'ignore' });
+    cp.execFileSync('git', ['--version'], { stdio: 'ignore', timeout: GIT_TIMEOUT_MS });
   } catch {
-    return ignored; // git 不可用 → 不过滤（保守：继续扫描）
+    return ignored; // git 不可用/超时 → 不过滤（保守：继续扫描全部文件）
   }
   try {
     const out = cp.execFileSync(
       'git',
       ['check-ignore', '--stdin', '--no-index'],
-      { cwd: ROOT, input: relPaths.join('\n') + '\n', encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+      {
+        cwd: ROOT,
+        input: relPaths.join('\n') + '\n',
+        encoding: 'utf8',
+        timeout: GIT_TIMEOUT_MS,
+        maxBuffer: 64 * 1024 * 1024,
+      },
     );
     for (const line of out.split('\n')) {
       const p = line.trim();
@@ -373,8 +390,16 @@ function scanFile(file) {
 }
 
 function main() {
-  const target = process.argv[2] ? path.resolve(process.argv[2]) : ROOT;
-  const collected = collect(target);
+  const arg = process.argv[2] ? path.resolve(process.argv[2]) : ROOT;
+  // 支持传入单个文件。原先只按目录处理，传文件会扫描 0 个文件并输出 PASS
+  // —— 这是最危险的假绿：用户以为「这个文件扫过了没问题」，实际根本没扫。
+  let collected;
+  try {
+    collected = fs.statSync(arg).isFile() ? [arg] : collect(arg);
+  } catch {
+    console.error(`[secret] 路径不存在或不可读：${arg}`);
+    process.exit(2);
+  }
   // 批量剔除被 .gitignore 忽略的文件（一次 git 调用，不逐文件）
   const relAll = collected.map((f) => path.relative(ROOT, f).replace(/\\/g, '/'));
   const ignored = collectIgnored(relAll);

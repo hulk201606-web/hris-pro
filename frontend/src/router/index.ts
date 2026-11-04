@@ -150,6 +150,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '考勤报表' },
       },
       {
+        path: 'attendance/holidays',
+        name: 'AdminAttHolidays',
+        component: () => import('../views/admin/attendance/HolidayCalendarView.vue'),
+        meta: { title: '节假日历' },
+      },
+      {
         path: 'compensation/payroll-runs',
         name: 'AdminPayrollRuns',
         component: () => import('../views/admin/compensation/PayrollRunListView.vue'),

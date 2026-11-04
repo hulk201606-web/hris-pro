@@ -660,6 +660,24 @@ CREATE TABLE att_group (
   UNIQUE KEY `uk_att_group_code` (`tenant_id`, `code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='班组';
 
+CREATE TABLE att_holiday (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `holiday_date`  DATE         NOT NULL COMMENT '日期',
+  `name`          VARCHAR(64)  NOT NULL COMMENT '名称(如 春节/国庆调休)',
+  `day_type`      VARCHAR(16)  NOT NULL COMMENT '日期类型: HOLIDAY=法定节假日(放假) WORKDAY=调班补班(上班)',
+  `remark`        VARCHAR(255) DEFAULT NULL COMMENT '备注',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_att_holiday_date` (`tenant_id`, `holiday_date`),
+  KEY `idx_att_holiday_type` (`tenant_id`, `day_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='法定节假日与调班日';
+
 -- 班次
 CREATE TABLE att_shift (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',

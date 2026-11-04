@@ -61,6 +61,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'daily', route: '/admin/attendance/daily', title: '日考勤' },
       { resource: 'exception', route: '/admin/attendance/exceptions', title: '异常工作台' },
       { resource: 'report', route: '/admin/attendance/reports', title: '考勤报表' },
+      { resource: 'holiday', route: '/admin/attendance/holidays', title: '节假日历' },
     ],
   },
   {
