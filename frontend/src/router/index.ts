@@ -138,6 +138,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '异常工作台' },
       },
       {
+        path: 'attendance/reports',
+        name: 'AdminAttReports',
+        component: () => import('../views/admin/attendance/AttendanceReportView.vue'),
+        meta: { title: '考勤报表' },
+      },
+      {
         path: 'compensation/payroll-runs',
         name: 'AdminPayrollRuns',
         component: () => import('../views/admin/compensation/PayrollRunListView.vue'),
@@ -232,6 +238,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminHeadcounts',
         component: () => import('../views/admin/org/HeadcountListView.vue'),
         meta: { title: '编制管理' },
+      },
+      {
+        path: 'org/headcount-board',
+        name: 'AdminHeadcountBoard',
+        component: () => import('../views/admin/org/HeadcountBoardView.vue'),
+        meta: { title: '编制看板' },
       },
       {
         path: 'employee/roster',

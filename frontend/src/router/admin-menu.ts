@@ -59,6 +59,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'cycle', route: '/admin/attendance/payroll-cycles', title: '薪酬取数周期' },
       { resource: 'daily', route: '/admin/attendance/daily', title: '日考勤' },
       { resource: 'exception', route: '/admin/attendance/exceptions', title: '异常工作台' },
+      { resource: 'report', route: '/admin/attendance/reports', title: '考勤报表' },
     ],
   },
   {
@@ -105,6 +106,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'grade', route: '/admin/org/grades', title: '职级体系' },
       { resource: 'grade-band', route: '/admin/org/bands', title: '职级带' },
       { resource: 'headcount', route: '/admin/org/headcounts', title: '编制管理' },
+      { resource: 'headcount', route: '/admin/org/headcount-board', title: '编制看板' },
     ],
   },
   {

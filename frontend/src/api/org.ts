@@ -113,3 +113,11 @@ export function listHeadcounts(): Promise<HeadcountUsage[]> {
 export function updateHeadcount(data: Record<string, unknown>): Promise<HeadcountUsage> {
   return put<HeadcountUsage>('/org/headcounts', data);
 }
+
+/** 编制使用情况（GET /org/headcounts/usage）：可按部门与期间过滤（编制看板用） */
+export function listHeadcountUsage(deptId?: number, period?: string): Promise<HeadcountUsage[]> {
+  const params: Record<string, unknown> = {};
+  if (deptId) params.deptId = deptId;
+  if (period) params.period = period;
+  return get<HeadcountUsage[]>('/org/headcounts/usage', params);
+}
