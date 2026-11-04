@@ -59,7 +59,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_11"];
+        get: operations["list_12"];
         put?: never;
         post?: never;
         delete?: never;
@@ -123,7 +123,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_10"];
+        get: operations["list_11"];
         put?: never;
         post?: never;
         delete?: never;
@@ -171,7 +171,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_9"];
+        get: operations["list_10"];
         put?: never;
         post?: never;
         delete?: never;
@@ -219,9 +219,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_8"];
+        get: operations["list_9"];
         put?: never;
-        post: operations["create_7"];
+        post: operations["create_8"];
         delete?: never;
         options?: never;
         head?: never;
@@ -283,9 +283,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_7"];
+        get: operations["list_8"];
         put?: never;
-        post: operations["create_6"];
+        post: operations["create_7"];
         delete?: never;
         options?: never;
         head?: never;
@@ -300,9 +300,57 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_3"];
-        put: operations["update_3"];
+        put: operations["update_4"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/att/holidays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_7"];
+        put?: never;
+        post: operations["create_6"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/att/holidays/workday": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["workday"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/att/holidays/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_3"];
+        post?: never;
+        delete: operations["delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2427,7 +2475,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list"];
+        get: operations["list_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2612,6 +2660,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plt/reports/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plt/reports/defs": {
         parameters: {
             query?: never;
@@ -2654,6 +2718,86 @@ export interface paths {
         get: operations["listExports"];
         put?: never;
         post: operations["createExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plt/scheduler/handlers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["handlers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plt/scheduler/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plt/scheduler/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plt/scheduler/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plt/scheduler/tasks/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["runNow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3857,6 +4001,22 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        AttHolidayRequest: {
+            dayType: string;
+            /** Format: date */
+            holidayDate: string;
+            name: string;
+            remark?: string;
+        };
+        AttHolidayResponse: {
+            dayType?: string;
+            /** Format: date */
+            holidayDate?: string;
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            remark?: string;
+        };
         AttLeaveActionRequest: {
             remark?: string;
         };
@@ -4246,6 +4406,16 @@ export interface components {
             timestamp?: number;
             traceId?: string;
         };
+        AttRHolidayResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["AttHolidayResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
         AttRLeaveQuotaResponse: {
             /** Format: int32 */
             code?: number;
@@ -4330,6 +4500,16 @@ export interface components {
             /** Format: int32 */
             code?: number;
             data?: components["schemas"]["AttGroupResponse"][];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
+        AttRListHolidayResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["AttHolidayResponse"][];
             message?: string;
             success?: boolean;
             /** Format: int64 */
@@ -4536,6 +4716,26 @@ export interface components {
             timestamp?: number;
             traceId?: string;
         };
+        AttRVoid: {
+            /** Format: int32 */
+            code?: number;
+            data?: unknown;
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
+        AttRWorkdayCheckResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["AttWorkdayCheckResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
         AttShiftRequest: {
             code?: string;
             /** Format: time-local */
@@ -4595,6 +4795,12 @@ export interface components {
             subsidyDays?: number;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        AttWorkdayCheckResponse: {
+            /** Format: date */
+            date?: string;
+            source?: string;
+            workday?: boolean;
         };
         AuthAccountCreateRequest: {
             /** Format: int64 */
@@ -7044,6 +7250,12 @@ export interface components {
             /** Format: int64 */
             tenantId?: number;
         };
+        PltCatalogItem: {
+            code?: string;
+            description?: string;
+            formats?: string[];
+            name?: string;
+        };
         PltConfigRequest: {
             configValue?: string;
         };
@@ -7116,6 +7328,10 @@ export interface components {
             sizeBytes?: number;
             watermarkPolicy?: string;
         };
+        PltHandlerOption: {
+            description?: string;
+            key?: string;
+        };
         PltPageResultAuditLogResponse: {
             /** Format: int64 */
             page?: number;
@@ -7138,6 +7354,15 @@ export interface components {
             /** Format: int64 */
             page?: number;
             records?: components["schemas"]["PltRecordResponse"][];
+            /** Format: int64 */
+            size?: number;
+            /** Format: int64 */
+            total?: number;
+        };
+        PltPageResultTaskLogResponse: {
+            /** Format: int64 */
+            page?: number;
+            records?: components["schemas"]["PltTaskLogResponse"][];
             /** Format: int64 */
             size?: number;
             /** Format: int64 */
@@ -7218,6 +7443,16 @@ export interface components {
             timestamp?: number;
             traceId?: string;
         };
+        PltRListCatalogItem: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["PltCatalogItem"][];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
         PltRListConfigResponse: {
             /** Format: int32 */
             code?: number;
@@ -7248,10 +7483,30 @@ export interface components {
             timestamp?: number;
             traceId?: string;
         };
+        PltRListHandlerOption: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["PltHandlerOption"][];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
         PltRListReportDefResponse: {
             /** Format: int32 */
             code?: number;
             data?: components["schemas"]["PltReportDefResponse"][];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
+        PltRListTaskResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["PltTaskResponse"][];
             message?: string;
             success?: boolean;
             /** Format: int64 */
@@ -7298,6 +7553,16 @@ export interface components {
             timestamp?: number;
             traceId?: string;
         };
+        PltRPageResultTaskLogResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["PltPageResultTaskLogResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
         PltRPresignUploadResponse: {
             /** Format: int32 */
             code?: number;
@@ -7312,6 +7577,26 @@ export interface components {
             /** Format: int32 */
             code?: number;
             data?: components["schemas"]["PltReportDefResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
+        PltRRunResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["PltRunResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
+        PltRTaskResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["PltTaskResponse"];
             message?: string;
             success?: boolean;
             /** Format: int64 */
@@ -7363,6 +7648,47 @@ export interface components {
             /** Format: int64 */
             id?: number;
             name?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        PltRunResponse: {
+            message?: string;
+            status?: string;
+            taskKey?: string;
+        };
+        PltTaskLogResponse: {
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: int64 */
+            durationMs?: number;
+            handler?: string;
+            /** Format: int64 */
+            id?: number;
+            message?: string;
+            /** Format: int32 */
+            retryNo?: number;
+            status?: string;
+            /** Format: int64 */
+            taskId?: number;
+            taskKey?: string;
+            triggerType?: string;
+        };
+        PltTaskRequest: {
+            cron: string;
+            handler: string;
+            /** Format: int32 */
+            status?: number;
+            taskKey: string;
+        };
+        PltTaskResponse: {
+            cron?: string;
+            handler?: string;
+            /** Format: int64 */
+            id?: number;
+            scheduled?: boolean;
+            /** Format: int32 */
+            status?: number;
+            taskKey?: string;
             /** Format: date-time */
             updatedAt?: string;
         };
@@ -9115,7 +9441,7 @@ export interface operations {
             };
         };
     };
-    list_11: {
+    list_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -9227,7 +9553,7 @@ export interface operations {
             };
         };
     };
-    list_10: {
+    list_11: {
         parameters: {
             query?: {
                 empId?: number;
@@ -9301,7 +9627,7 @@ export interface operations {
             };
         };
     };
-    list_9: {
+    list_10: {
         parameters: {
             query?: {
                 empId?: number;
@@ -9379,7 +9705,7 @@ export interface operations {
             };
         };
     };
-    list_8: {
+    list_9: {
         parameters: {
             query?: {
                 empId?: number;
@@ -9406,7 +9732,7 @@ export interface operations {
             };
         };
     };
-    create_7: {
+    create_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -9504,7 +9830,7 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -9524,7 +9850,7 @@ export interface operations {
             };
         };
     };
-    create_6: {
+    create_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -9570,7 +9896,7 @@ export interface operations {
             };
         };
     };
-    update_3: {
+    update_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -9592,6 +9918,122 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AttRGroupResponse"];
+                };
+            };
+        };
+    };
+    list_7: {
+        parameters: {
+            query?: {
+                year?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttRListHolidayResponse"];
+                };
+            };
+        };
+    };
+    create_6: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttHolidayRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttRHolidayResponse"];
+                };
+            };
+        };
+    };
+    workday: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttRWorkdayCheckResponse"];
+                };
+            };
+        };
+    };
+    update_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttHolidayRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttRHolidayResponse"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttRVoid"];
                 };
             };
         };
@@ -14837,7 +15279,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -15303,6 +15745,26 @@ export interface operations {
             };
         };
     };
+    catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRListCatalogItem"];
+                };
+            };
+        };
+    };
     listDefs: {
         parameters: {
             query?: never;
@@ -15439,6 +15901,142 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["PltRExportTaskResponse"];
+                };
+            };
+        };
+    };
+    handlers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRListHandlerOption"];
+                };
+            };
+        };
+    };
+    logs: {
+        parameters: {
+            query?: {
+                taskKey?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRPageResultTaskLogResponse"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRListTaskResponse"];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PltTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRTaskResponse"];
+                };
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PltTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRTaskResponse"];
+                };
+            };
+        };
+    };
+    runNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PltRRunResponse"];
                 };
             };
         };

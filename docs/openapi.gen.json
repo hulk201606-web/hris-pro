@@ -728,6 +728,53 @@
         },
         "type": "object"
       },
+      "AttHolidayRequest": {
+        "properties": {
+          "dayType": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "holidayDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "remark": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dayType",
+          "holidayDate",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AttHolidayResponse": {
+        "properties": {
+          "dayType": {
+            "type": "string"
+          },
+          "holidayDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "remark": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AttLeaveActionRequest": {
         "properties": {
           "remark": {
@@ -1723,6 +1770,31 @@
         },
         "type": "object"
       },
+      "AttRHolidayResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AttHolidayResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AttRLeaveQuotaResponse": {
         "properties": {
           "code": {
@@ -1947,6 +2019,34 @@
           "data": {
             "items": {
               "$ref": "#/components/schemas/AttGroupResponse"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AttRListHolidayResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AttHolidayResponse"
             },
             "type": "array"
           },
@@ -2484,6 +2584,54 @@
         },
         "type": "object"
       },
+      "AttRVoid": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {},
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AttRWorkdayCheckResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AttWorkdayCheckResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AttShiftRequest": {
         "properties": {
           "code": {
@@ -2632,6 +2780,21 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AttWorkdayCheckResponse": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "workday": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -8891,6 +9054,26 @@
         },
         "type": "object"
       },
+      "PltCatalogItem": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PltConfigRequest": {
         "properties": {
           "configValue": {
@@ -9073,6 +9256,17 @@
         },
         "type": "object"
       },
+      "PltHandlerOption": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PltPageResultAuditLogResponse": {
         "properties": {
           "page": {
@@ -9128,6 +9322,29 @@
           "records": {
             "items": {
               "$ref": "#/components/schemas/PltRecordResponse"
+            },
+            "type": "array"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "PltPageResultTaskLogResponse": {
+        "properties": {
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/PltTaskLogResponse"
             },
             "type": "array"
           },
@@ -9335,6 +9552,34 @@
         },
         "type": "object"
       },
+      "PltRListCatalogItem": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PltCatalogItem"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PltRListConfigResponse": {
         "properties": {
           "code": {
@@ -9419,6 +9664,34 @@
         },
         "type": "object"
       },
+      "PltRListHandlerOption": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PltHandlerOption"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PltRListReportDefResponse": {
         "properties": {
           "code": {
@@ -9428,6 +9701,34 @@
           "data": {
             "items": {
               "$ref": "#/components/schemas/PltReportDefResponse"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PltRListTaskResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PltTaskResponse"
             },
             "type": "array"
           },
@@ -9550,6 +9851,31 @@
         },
         "type": "object"
       },
+      "PltRPageResultTaskLogResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PltPageResultTaskLogResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PltRPresignUploadResponse": {
         "properties": {
           "code": {
@@ -9583,6 +9909,56 @@
           },
           "data": {
             "$ref": "#/components/schemas/PltReportDefResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PltRRunResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PltRunResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PltRTaskResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PltTaskResponse"
           },
           "message": {
             "type": "string"
@@ -9710,6 +10086,115 @@
             "type": "integer"
           },
           "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PltRunResponse": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "taskKey": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PltTaskLogResponse": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "durationMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "handler": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryNo": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "taskId": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "taskKey": {
+            "type": "string"
+          },
+          "triggerType": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PltTaskRequest": {
+        "properties": {
+          "cron": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "handler": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "taskKey": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron",
+          "handler",
+          "taskKey"
+        ],
+        "type": "object"
+      },
+      "PltTaskResponse": {
+        "properties": {
+          "cron": {
+            "type": "string"
+          },
+          "handler": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "scheduled": {
+            "type": "boolean"
+          },
+          "status": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "taskKey": {
             "type": "string"
           },
           "updatedAt": {
@@ -14032,7 +14517,7 @@
     },
     "/api/v1/att/closings": {
       "get": {
-        "operationId": "list_11",
+        "operationId": "list_12",
         "responses": {
           "200": {
             "content": {
@@ -14171,7 +14656,7 @@
     },
     "/api/v1/att/daily": {
       "get": {
-        "operationId": "list_10",
+        "operationId": "list_11",
         "parameters": [
           {
             "in": "query",
@@ -14318,7 +14803,7 @@
     },
     "/api/v1/att/exceptions": {
       "get": {
-        "operationId": "list_9",
+        "operationId": "list_10",
         "parameters": [
           {
             "in": "query",
@@ -14474,7 +14959,7 @@
     },
     "/api/v1/att/fix-requests": {
       "get": {
-        "operationId": "list_8",
+        "operationId": "list_9",
         "parameters": [
           {
             "in": "query",
@@ -14549,7 +15034,7 @@
         ]
       },
       "post": {
-        "operationId": "create_7",
+        "operationId": "create_8",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14690,7 +15175,7 @@
     },
     "/api/v1/att/groups": {
       "get": {
-        "operationId": "list_7",
+        "operationId": "list_8",
         "responses": {
           "200": {
             "content": {
@@ -14708,7 +15193,7 @@
         ]
       },
       "post": {
-        "operationId": "create_6",
+        "operationId": "create_7",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14767,7 +15252,7 @@
         ]
       },
       "put": {
-        "operationId": "update_3",
+        "operationId": "update_4",
         "parameters": [
           {
             "in": "path",
@@ -14803,6 +15288,166 @@
         },
         "tags": [
           "group-controller"
+        ]
+      }
+    },
+    "/api/v1/att/holidays": {
+      "get": {
+        "operationId": "list_7",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttRListHolidayResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "holiday-controller"
+        ]
+      },
+      "post": {
+        "operationId": "create_6",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttHolidayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttRHolidayResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "holiday-controller"
+        ]
+      }
+    },
+    "/api/v1/att/holidays/workday": {
+      "get": {
+        "operationId": "workday",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttRWorkdayCheckResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "holiday-controller"
+        ]
+      }
+    },
+    "/api/v1/att/holidays/{id}": {
+      "delete": {
+        "operationId": "delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttRVoid"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "holiday-controller"
+        ]
+      },
+      "put": {
+        "operationId": "update_3",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttHolidayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttRHolidayResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "holiday-controller"
         ]
       }
     },
@@ -22474,7 +23119,7 @@
     },
     "/api/v1/plt/configs": {
       "get": {
-        "operationId": "list",
+        "operationId": "list_1",
         "responses": {
           "200": {
             "content": {
@@ -23131,6 +23776,26 @@
         ]
       }
     },
+    "/api/v1/plt/reports/catalog": {
+      "get": {
+        "operationId": "catalog",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRListCatalogItem"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "report-controller"
+        ]
+      }
+    },
     "/api/v1/plt/reports/defs": {
       "get": {
         "operationId": "listDefs",
@@ -23324,6 +23989,196 @@
         },
         "tags": [
           "report-controller"
+        ]
+      }
+    },
+    "/api/v1/plt/scheduler/handlers": {
+      "get": {
+        "operationId": "handlers",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRListHandlerOption"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "scheduler-controller"
+        ]
+      }
+    },
+    "/api/v1/plt/scheduler/logs": {
+      "get": {
+        "operationId": "logs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "taskKey",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRPageResultTaskLogResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "scheduler-controller"
+        ]
+      }
+    },
+    "/api/v1/plt/scheduler/tasks": {
+      "get": {
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRListTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "scheduler-controller"
+        ]
+      },
+      "post": {
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PltTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "scheduler-controller"
+        ]
+      }
+    },
+    "/api/v1/plt/scheduler/tasks/{id}": {
+      "put": {
+        "operationId": "update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PltTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "scheduler-controller"
+        ]
+      }
+    },
+    "/api/v1/plt/scheduler/tasks/{id}/run": {
+      "post": {
+        "operationId": "runNow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PltRRunResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "scheduler-controller"
         ]
       }
     },
