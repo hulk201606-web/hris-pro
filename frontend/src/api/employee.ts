@@ -86,3 +86,29 @@ export function renewContract(id: number, newEndDate: string): Promise<ContractR
 export function listExpiringContracts(days = 60): Promise<ContractExpiringItem[]> {
   return get<ContractExpiringItem[]>('/emp/contracts/expiring', { days });
 }
+
+/* ---------------------------- 员工异动（生命周期办理） ---------------------------- */
+
+/**
+ * 发起入职办理（POST /emp/onboardings）。
+ * 前置：员工状态必须为待入职（PENDING）；服务端会做编制校验，超编抛 51204。
+ * 前端不预判，一律以服务端返回的错误码为准。
+ */
+export function submitOnboarding(data: Record<string, unknown>): Promise<unknown> {
+  return post<unknown>('/emp/onboardings', data);
+}
+
+/** 发起转正办理（POST /emp/regularizations）。前置：状态为试用（PROBATION）。 */
+export function submitRegularization(data: Record<string, unknown>): Promise<unknown> {
+  return post<unknown>('/emp/regularizations', data);
+}
+
+/** 发起调动办理（POST /emp/transfers）。前置：状态为在职（ACTIVE）；目标部门/岗位做编制校验。 */
+export function submitTransfer(data: Record<string, unknown>): Promise<unknown> {
+  return post<unknown>('/emp/transfers', data);
+}
+
+/** 发起离职办理（POST /emp/resignations）。前置：状态为在职（ACTIVE）或试用（PROBATION）。 */
+export function submitResignation(data: Record<string, unknown>): Promise<unknown> {
+  return post<unknown>('/emp/resignations', data);
+}

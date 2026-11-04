@@ -245,6 +245,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/admin/employee/ContractExpiringView.vue'),
         meta: { title: '合同到期预警' },
       },
+      {
+        path: 'employee/lifecycle',
+        name: 'AdminLifecycle',
+        component: () => import('../views/admin/employee/LifecycleApplyView.vue'),
+        meta: { title: '员工异动办理' },
+      },
     ],
   },
   {
