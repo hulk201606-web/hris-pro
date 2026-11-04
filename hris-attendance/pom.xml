@@ -13,6 +13,13 @@
     <description>假勤/排班/打卡/月结</description>
 
     <dependencies>
+        <!-- OpenAPI 契约生成（/v3/api-docs）。版本由父 pom 的 springdoc-openapi-bom 统一托管，
+             故此处刻意不写 <version>，请勿补——补上即脱离 BOM 管理。生产默认关闭（见
+             application.yml 的 springdoc.api-docs.enabled），仅本地/CI 开启。 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.hris</groupId>
             <artifactId>hris-common</artifactId>

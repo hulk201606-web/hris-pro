@@ -43,3 +43,14 @@ management:
       probes:
         enabled: true
       show-details: never
+
+# ---------- OpenAPI 契约（springdoc） ----------
+# 生产默认关闭：/v3/api-docs 会完整暴露端点、字段与模型结构。
+# 需要导出契约时显式开启（本地/CI 已由 scripts 与 .env.example 约定）。
+# 注意：网关白名单仅放行 /actuator/health/**，故本端点经网关访问需 JWT，
+# 契约导出请直连容器网络端口，不要经网关。
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}

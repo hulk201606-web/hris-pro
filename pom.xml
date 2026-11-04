@@ -63,10 +63,27 @@
         <milvus.version>2.5.14</milvus.version>
         <!-- AI：Spring AI 2.0（支持 Boot 4.0.x；通义千问走 OpenAI 兼容端点，ADR-005 修订） -->
         <spring-ai.version>2.0.0</spring-ai.version>
+        <!-- OpenAPI 契约生成：springdoc-openapi 3.x 对应 Spring Boot 4（官方 FAQ 兼容矩阵
+             4.0.x → 3.0.x/3.1.x）。版本只在下方 BOM import 处声明一次，
+             各模块依赖不写 <version>，避免 10 个模块各自锁版本导致脱管。 -->
+        <springdoc.version>3.1.1</springdoc.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- OpenAPI 契约生成（springdoc）。
+                 必须 import 它的 BOM：spring-boot-dependencies:4.0.6 并未托管 springdoc
+                 （实测该 BOM 共 668 个 artifactId，springdoc / swagger 均零命中），
+                 若各模块直接省略 <version> 而不 import BOM，Maven 会报
+                 'dependencies.dependency.version' for org.springdoc:...:jar is missing。
+                 下方各模块依赖因此刻意不写 version，请勿"顺手补上"。 -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-bom</artifactId>
+                <version>${springdoc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Spring Cloud BOM -->
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
