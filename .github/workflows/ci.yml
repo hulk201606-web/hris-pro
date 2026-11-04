@@ -136,6 +136,17 @@ jobs:
       - name: Type check (vue-tsc, 0 error 门禁)
         run: npm run type-check
 
+      # 契约漂移门禁：生成的 TS 类型必须与 docs/openapi.gen.json 同步。
+      # 改了后端接口却没重新生成类型时，这里会红——这正是要拦住的情况：
+      # 否则前端会按旧类型的字段名去读新响应，type-check 全绿但运行时字段缺失。
+      - name: API type drift (契约与生成类型同步)
+        run: npm run check:api-drift
+
+      # 前端调用的每个 URL 必须在契约中存在，避免拼写错误导致的运行时 404
+      - name: Contract coverage (前端 URL 覆盖)
+        working-directory: .
+        run: python scripts/check-contract.py --strict
+
       - name: Production build
         run: |
           # dist 产物超阈值会触发构建机的批量删除保护，先清空

@@ -45,3 +45,10 @@ reports/
 # Java 编译产物
 *.class
 .mvn/wrapper/maven-wrapper.jar
+
+# ---------- OpenAPI 契约 ----------
+# docs/openapi.gen.json **入库**。它是契约漂移检测的基准：
+# CI 需要它来验证 frontend/src/api/generated/api.d.ts 是否与契约同步，
+# 不入库则这道门禁无法在 CI 中执行（CI 不可能起 10 个 JVM 去重新拉契约）。
+# 文件较大（约 640KB），但 JSON 已做 key 排序，diff 只反映真实接口变化。
+# 注意：它由 scripts/gen-openapi.py 生成，请勿手工编辑。

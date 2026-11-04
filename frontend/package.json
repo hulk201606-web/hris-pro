@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "type-check": "vue-tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:api": "openapi-typescript ../docs/openapi.gen.json -o src/api/generated/api.d.ts",
+    "check:api-drift": "openapi-typescript ../docs/openapi.gen.json -o .api-drift.tmp.d.ts && node -e \"const fs=require('fs');const a=fs.readFileSync('.api-drift.tmp.d.ts','utf8');const b=fs.readFileSync('src/api/generated/api.d.ts','utf8');fs.unlinkSync('.api-drift.tmp.d.ts');if(a!==b){console.error('[drift] 生成类型与契约不同步。请运行 npm run gen:api 后提交变更。');process.exit(1);}console.log('PASS: 生成类型与契约同步');\""
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
+    "openapi-typescript": "7.13.0",
     "typescript": "~5.8.2",
     "vite": "^7.0.0",
     "vue-tsc": "^2.2.8"
