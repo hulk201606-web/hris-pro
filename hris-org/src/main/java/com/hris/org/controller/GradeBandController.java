@@ -1,6 +1,7 @@
 package com.hris.org.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.security.RequirePerm;
 import com.hris.org.dto.CatalogRequest;
 import com.hris.org.dto.CatalogResponse;
 import com.hris.org.service.GradeBandService;
@@ -30,24 +31,28 @@ public class GradeBandController {
     }
 
     /** 查询全部职级带（职级带是薪酬带宽分组，如"技术族"，下辖若干职级）。 */
+    @RequirePerm("org:grade-band:read")
     @GetMapping("/bands")
     public R<List<CatalogResponse>> list() {
         return R.ok(gradeBandService.list());
     }
 
     /** 新建职级带：编码缺省自动生成（band 前缀），校验编码唯一。 */
+    @RequirePerm("org:grade-band:write")
     @PostMapping("/bands")
     public R<CatalogResponse> create(@Valid @RequestBody CatalogRequest req) {
         return R.ok(gradeBandService.create(req));
     }
 
     /** 更新职级带：仅允许改名称。 */
+    @RequirePerm("org:grade-band:write")
     @PutMapping("/bands/{id}")
     public R<CatalogResponse> update(@PathVariable Long id, @Valid @RequestBody CatalogRequest req) {
         return R.ok(gradeBandService.update(id, req));
     }
 
     /** 删除职级带（物理删除）。 */
+    @RequirePerm("org:grade-band:write")
     @DeleteMapping("/bands/{id}")
     public R<Void> delete(@PathVariable Long id) {
         gradeBandService.delete(id);

@@ -36,24 +36,28 @@ public class DeptController {
     }
 
     /** 部门列表/树查询：tree=true 返回嵌套部门树，否则返回扁平的当前生效部门列表（按物化路径排序）。 */
+    @RequirePerm("org:dept:read")
     @GetMapping("/depts")
     public R<List<DeptNode>> list(@RequestParam(defaultValue = "false") boolean tree) {
         return R.ok(deptService.query(tree));
     }
 
     /** 新建部门：自动生成物化路径，校验树深度（≤8 层）与部门编码唯一；父部门为空则建根节点。 */
+    @RequirePerm("org:dept:write")
     @PostMapping("/depts")
     public R<DeptNode> create(@Valid @RequestBody DeptRequest req) {
         return R.ok(deptService.create(req));
     }
 
     /** 更新部门：变更前先写 org_dept_history 快照；父部门变更时重算物化路径，部门编码不可修改。 */
+    @RequirePerm("org:dept:write")
     @PutMapping("/depts/{id}")
     public R<DeptNode> update(@PathVariable Long id, @Valid @RequestBody DeptRequest req) {
         return R.ok(deptService.update(id, req));
     }
 
     /** 部门历史快照：at 为空取当日；优先取历史表，无快照时用现行部门现拼一份。 */
+    @RequirePerm("org:dept:read")
     @GetMapping("/depts/{id}/snapshot")
     public R<Map<String, Object>> snapshot(
             @PathVariable Long id,
