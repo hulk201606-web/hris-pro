@@ -398,7 +398,8 @@ CREATE TABLE emp_employee (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_emp_employee_no` (`tenant_id`, `emp_no`),
   KEY `idx_emp_employee_status` (`tenant_id`, `status`),
-  KEY `idx_emp_employee_pinyin` (`tenant_id`, `pinyin_sort_key`)
+  KEY `idx_emp_employee_pinyin` (`tenant_id`, `pinyin_sort_key`),
+  KEY `idx_emp_employee_cert` (`tenant_id`, `cert_no_cipher`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='员工主档';
 
 -- 雇佣关系版本链(核心)
@@ -1016,7 +1017,8 @@ CREATE TABLE rcu_candidate (
   `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
   `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
-  KEY `idx_rcu_candidate_status` (`tenant_id`, `status`)
+  KEY `idx_rcu_candidate_status` (`tenant_id`, `status`),
+  KEY `idx_rcu_candidate_email` (`tenant_id`, `email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='候选人';
 
 -- 简历
