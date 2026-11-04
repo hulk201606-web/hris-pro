@@ -29,8 +29,6 @@ public final class GatewayConstants {
     /* ---------- JWT claims（与 hris-auth TokenService 对齐） ---------- */
     public static final String CLAIM_TENANT_ID = "tenant_id";
     public static final String CLAIM_EMP_ID = "emp_id";
-    public static final String CLAIM_ROLES = "roles";
-    public static final String CLAIM_PERMS = "perms";
     public static final String CLAIM_TYPE = "typ";
     public static final String TOKEN_TYPE_ACCESS = "access";
 }

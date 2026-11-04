@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 /**
  * 网关 JWT 验签器（HS256）。与 hris-auth TokenService 的解析逻辑对齐：
@@ -53,20 +52,6 @@ public class JwtTokenVerifier {
         Long empId = claims.get(GatewayConstants.CLAIM_EMP_ID) == null
                 ? null
                 : ((Number) claims.get(GatewayConstants.CLAIM_EMP_ID)).longValue();
-        List<String> roles = castStrings(claims.get(GatewayConstants.CLAIM_ROLES));
-        List<String> perms = castStrings(claims.get(GatewayConstants.CLAIM_PERMS));
-        return new GatewayPrincipal(userId, tenantId, empId, roles, perms);
-    }
-
-    /**
-     * 安全地把 JWT claims 中的 List 值转为 List<String>（jjwt 反序列化后元素类型不可靠），
-     * 非 List 时返回空集合，避免 NPE。
-     */
-    @SuppressWarnings("unchecked")
-    private List<String> castStrings(Object value) {
-        if (value instanceof List<?> list) {
-            return list.stream().map(String::valueOf).toList();
-        }
-        return List.of();
+        return new GatewayPrincipal(userId, tenantId, empId);
     }
 }

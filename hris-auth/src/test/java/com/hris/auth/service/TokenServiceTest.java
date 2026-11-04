@@ -21,6 +21,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,7 +76,7 @@ class TokenServiceTest {
     class Issue {
 
         @Test
-        @DisplayName("access 令牌携带完整身份声明（租户/员工/权限）")
+        @DisplayName("access 令牌携带身份声明，但不再含 roles/perms（权限瘦身）")
         void issuesAccessWithFullClaims() {
             String token = service.issueAccess(stubUser());
 
@@ -89,8 +90,8 @@ class TokenServiceTest {
             assertEquals(100001L, ((Number) c.get("tenant_id")).longValue());
             assertEquals(200001L, ((Number) c.get("emp_id")).longValue());
             assertEquals("admin", c.get("username", String.class));
-            assertEquals(List.of("ROLE_ADMIN"), c.get("roles"));
-            assertEquals(List.of("emp:read", "cmp:salary:read"), c.get("perms"));
+            assertNull(c.get("roles"), "瘦身后 token 不再含 roles claim");
+            assertNull(c.get("perms"), "瘦身后 token 不再含 perms claim");
             assertNotNull(c.getId(), "必须带 jti 以支持黑名单");
         }
 
@@ -138,7 +139,7 @@ class TokenServiceTest {
     class Parse {
 
         @Test
-        @DisplayName("正确令牌可还原出完整身份")
+        @DisplayName("正确令牌可还原出身份（roles/perms 不再进 JWT，恒为空）")
         void parsesValidToken() {
             LoginUser u = service.parseAccess(service.issueAccess(stubUser()));
 
@@ -147,8 +148,8 @@ class TokenServiceTest {
             assertEquals(200001L, u.employeeId());
             assertEquals("admin", u.username());
             assertEquals(1, u.status());
-            assertEquals(List.of("ROLE_ADMIN"), u.roles());
-            assertEquals(List.of("emp:read", "cmp:salary:read"), u.perms());
+            assertEquals(List.of(), u.roles());
+            assertEquals(List.of(), u.perms());
         }
 
         @Test

@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -42,10 +41,9 @@ class JwtTokenVerifierTest {
         verifier = new JwtTokenVerifier(props);
     }
 
-    /** 复刻 hris-auth TokenService.issueAccess 的签发逻辑（同 claims 名与顺序约定）。 */
+    /** 复刻 hris-auth TokenService.issueAccess 的签发逻辑（同 claims 名与顺序约定，不含 roles/perms）。 */
     private String issueAuthStyleAccess(String secret, String issuer, String type,
-                                        Long tenantId, Long empId, String username,
-                                        List<String> roles, List<String> perms, long ttlSeconds) {
+                                        Long tenantId, Long empId, String username, long ttlSeconds) {
         SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         Date now = new Date();
         var builder = Jwts.builder()
@@ -60,14 +58,12 @@ class JwtTokenVerifierTest {
         if (empId != null) {
             builder.claim("emp_id", empId);
         }
-        builder.claim("roles", roles).claim("perms", perms);
         return builder.signWith(key, Jwts.SIG.HS256).compact();
     }
 
     private String validToken() {
         return issueAuthStyleAccess(SECRET, ISSUER, GatewayConstants.TOKEN_TYPE_ACCESS,
-                100001L, 200001L, "admin",
-                List.of("ROLE_ADMIN"), List.of("emp:read", "cmp:salary:read"), 900);
+                100001L, 200001L, "admin", 900);
     }
 
     @Test
@@ -78,16 +74,13 @@ class JwtTokenVerifierTest {
         assertEquals(100001L, p.userId());
         assertEquals(100001L, p.tenantId());
         assertEquals(200001L, p.empId());
-        assertEquals(List.of("ROLE_ADMIN"), p.roles());
-        assertEquals(List.of("emp:read", "cmp:salary:read"), p.perms());
     }
 
     @Test
     @DisplayName("跨租户令牌正常解析（租户隔离由后续过滤器负责，非验签职责）")
     void parsesTenantFromToken() {
         String token = issueAuthStyleAccess(SECRET, ISSUER,
-                GatewayConstants.TOKEN_TYPE_ACCESS, 200002L, 300002L, "other",
-                List.of(), List.of(), 900);
+                GatewayConstants.TOKEN_TYPE_ACCESS, 200002L, 300002L, "other", 900);
 
         assertEquals(200002L, verifier.verifyAccess(token).tenantId());
     }
@@ -97,7 +90,7 @@ class JwtTokenVerifierTest {
     void rejectsMismatchedSecret() {
         String token = issueAuthStyleAccess("other-secret-long-enough-32-bytes-xx",
                 ISSUER, GatewayConstants.TOKEN_TYPE_ACCESS,
-                100001L, 200001L, "admin", List.of(), List.of(), 900);
+                100001L, 200001L, "admin", 900);
 
         assertThrows(JwtException.class, () -> verifier.verifyAccess(token));
     }
@@ -107,7 +100,7 @@ class JwtTokenVerifierTest {
     void rejectsWrongIssuer() {
         String token = issueAuthStyleAccess(SECRET, "another-issuer",
                 GatewayConstants.TOKEN_TYPE_ACCESS,
-                100001L, 200001L, "admin", List.of(), List.of(), 900);
+                100001L, 200001L, "admin", 900);
 
         assertThrows(JwtException.class, () -> verifier.verifyAccess(token));
     }
@@ -117,7 +110,7 @@ class JwtTokenVerifierTest {
     void rejectsRefreshToken() {
         // 网关常量只定义 access（其职责即放行 access）；refresh 值为 auth 侧约定
         String token = issueAuthStyleAccess(SECRET, ISSUER, "refresh",
-                100001L, 200001L, "admin", List.of(), List.of(), 900);
+                100001L, 200001L, "admin", 900);
 
         JwtException e = assertThrows(JwtException.class,
                 () -> verifier.verifyAccess(token));
@@ -129,7 +122,7 @@ class JwtTokenVerifierTest {
     void rejectsExpired() {
         String token = issueAuthStyleAccess(SECRET, ISSUER,
                 GatewayConstants.TOKEN_TYPE_ACCESS,
-                100001L, 200001L, "admin", List.of(), List.of(), -60);
+                100001L, 200001L, "admin", -60);
 
         assertThrows(JwtException.class, () -> verifier.verifyAccess(token));
     }
@@ -139,33 +132,12 @@ class JwtTokenVerifierTest {
     void toleratesMissingEmpId() {
         String token = issueAuthStyleAccess(SECRET, ISSUER,
                 GatewayConstants.TOKEN_TYPE_ACCESS,
-                100001L, null, "system", List.of("ROLE_SYS"), List.of(), 900);
+                100001L, null, "system", 900);
 
         GatewayPrincipal p = verifier.verifyAccess(token);
 
         assertNull(p.empId());
         assertEquals(100001L, p.userId(), "系统账号无 emp_id 时仍应解析出主体");
-    }
-
-    @Test
-    @DisplayName("claims 缺失 roles/perms 时降级为空列表（不抛异常）")
-    void toleratesMissingRolePerms() {
-        SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
-        Date now = new Date();
-        String token = Jwts.builder()
-                .issuer(ISSUER)
-                .subject("100001")
-                .claim("typ", GatewayConstants.TOKEN_TYPE_ACCESS)
-                .claim("tenant_id", 100001L)
-                .issuedAt(now)
-                .expiration(new Date(now.getTime() + 900_000))
-                .signWith(key, Jwts.SIG.HS256)
-                .compact();
-
-        GatewayPrincipal p = verifier.verifyAccess(token);
-
-        assertEquals(List.of(), p.roles());
-        assertEquals(List.of(), p.perms());
     }
 
     @Test

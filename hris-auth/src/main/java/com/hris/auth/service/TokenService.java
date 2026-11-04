@@ -32,8 +32,6 @@ public class TokenService {
     private static final String CLAIM_EMP_ID = "emp_id";
     private static final String CLAIM_USERNAME = "username";
     private static final String CLAIM_STATUS = "status";
-    private static final String CLAIM_ROLES = "roles";
-    private static final String CLAIM_PERMS = "perms";
     private static final String CLAIM_TYPE = "typ";
     private static final String TYPE_ACCESS = "access";
     private static final String TYPE_REFRESH = "refresh";
@@ -59,7 +57,8 @@ public class TokenService {
 
     /**
      * 签发 access 令牌（HS256，默认 15 分钟）：
-     * claims 含 sub=userId、tenant_id、emp_id、username、status、roles、perms、typ=access。
+     * claims 仅含 sub=userId、tenant_id、emp_id、username、status、typ=access。
+     * 不含 roles/perms（权限由网关验签后实时查询 auth 内部端点获取，见网关 PermQueryService）。
      * 显式固定 HS256 算法，避免密钥轮换后 jjwt 按长度自动切到 HS384/512。
      */
     public String issueAccess(LoginUser user) {
@@ -73,8 +72,6 @@ public class TokenService {
                 .claim(CLAIM_EMP_ID, user.employeeId())
                 .claim(CLAIM_USERNAME, user.username())
                 .claim(CLAIM_STATUS, user.status())
-                .claim(CLAIM_ROLES, user.roles())
-                .claim(CLAIM_PERMS, user.perms())
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTtlSeconds * 1000))
                 // 显式固定 HS256：不指定算法时 jjwt 会按密钥长度自动选 HS256/384/512，
@@ -197,8 +194,8 @@ public class TokenService {
     }
 
     /**
-     * 把 JWT claims 反序列化为 LoginUser：Number 类型 claims 安全转 Long/Integer，
-     * roles/perms 经 castStrings 转 List<String>。
+     * 把 JWT claims 反序列化为 LoginUser：Number 类型 claims 安全转 Long/Integer。
+     * roles/perms 不再进 JWT，此处恒返回空集合（登录流程会另行查询填充）。
      */
     private LoginUser toLoginUser(Claims c) {
         Long userId = Long.parseLong(c.getSubject());
@@ -209,18 +206,7 @@ public class TokenService {
                 : ((Number) c.get(CLAIM_STATUS)).intValue();
         return new LoginUser(userId, tenantId, empId,
                 c.get(CLAIM_USERNAME, String.class), status,
-                castStrings(c.get(CLAIM_ROLES)), castStrings(c.get(CLAIM_PERMS)));
-    }
-
-    /**
-     * 安全地把 claims 中的 List 值转为 List<String>，非 List 时返回空集合。
-     */
-    @SuppressWarnings("unchecked")
-    private List<String> castStrings(Object v) {
-        if (v instanceof List<?> list) {
-            return list.stream().map(String::valueOf).toList();
-        }
-        return List.of();
+                List.of(), List.of());
     }
 
     /**

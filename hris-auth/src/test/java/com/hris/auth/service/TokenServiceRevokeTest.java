@@ -99,13 +99,12 @@ class TokenServiceRevokeTest {
     class CrossService {
 
         @Test
-        @DisplayName("claims 名称与权限透传约定被锁定（网关据此鉴权与隔离）")
+        @DisplayName("claims 名称契约被锁定：租户声明可还原，权限不再进 JWT")
         void locksClaimsContract() {
             LoginUser u = service.parseAccess(service.issueAccess(stubUser()));
 
             assertEquals(100001L, u.tenantId(), "租户声明须可还原");
-            assertEquals(List.of("emp:read", "cmp:salary:read"), u.perms(),
-                    "权限声明须以字符串数组原样透传");
+            assertEquals(List.of(), u.perms(), "权限不再进 JWT，parse 后应为空集合");
         }
     }
 
