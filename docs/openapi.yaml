@@ -1,3 +1,21 @@
+# =============================================================================
+# 【已废弃 / DEPRECATED】本文件不再是契约的权威来源，请勿据它开发。
+#
+# 现状：本文件为早期手工维护的契约，仅覆盖 auth/org/employee 三个服务、
+#       124 个 path，且不含二期 rcu/cmp/prf/kb 四个模块。
+#
+# 权威契约：docs/openapi.gen.json（221 个 path / 10 个模块 / 542 个 schema）
+#           由 scripts/gen-openapi.py 从各服务的 /v3/api-docs 自动聚合生成，
+#           前端类型由 openapi-typescript 从它生成到
+#           frontend/src/api/generated/api.d.ts。
+#
+# 保留原因：本文件含手写的中文业务描述与字段说明，作为文档阅读仍有价值；
+#           但接口结构以生成物为准。
+#
+# 修改方式：不要编辑本文件。改后端 Controller 后重新执行
+#           python scripts/gen-openapi.py && (cd frontend && npm run gen:api)
+# =============================================================================
+
 openapi: 3.0.3
 info:
   title: 智云 HR - 认证授权 / 组织管理 / 员工管理 API
