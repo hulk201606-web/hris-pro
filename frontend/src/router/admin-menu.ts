@@ -145,6 +145,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'dict', route: '/admin/platform/dict-items', title: '字典项' },
       { resource: 'notification', route: '/admin/platform/templates', title: '通知模板' },
       { resource: 'report', route: '/admin/platform/reports', title: '报表定义' },
+      { resource: 'report', route: '/admin/platform/exports', title: '导出记录' },
     ],
   },
 ];

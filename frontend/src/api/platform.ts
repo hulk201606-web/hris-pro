@@ -135,3 +135,31 @@ export function updateReportDef(id: number, data: Record<string, unknown>): Prom
 export function deleteReportDef(id: number): Promise<void> {
   return del<void>(`/plt/reports/defs/${id}`);
 }
+
+/* ---------------------------- 导出任务 ---------------------------- */
+
+/** 导出任务（报表定义 → 异步生成文件） */
+export interface ExportTaskResponse {
+  id: number;
+  reportDefId: number;
+  /** 任务状态：PENDING / DONE / FAILED */
+  status: string;
+  fileId?: number;
+  createdAt?: string;
+}
+
+/** 导出任务分页（GET /plt/reports/exports） */
+export function listExports(
+  page: number,
+  size: number,
+  status?: string,
+): Promise<PageResult<ExportTaskResponse>> {
+  const params: Record<string, unknown> = { page, size };
+  if (status) params.status = status;
+  return get<PageResult<ExportTaskResponse>>('/plt/reports/exports', params);
+}
+
+/** 发起导出（POST /plt/reports/exports）：需 plt:report:export 权限 */
+export function createExport(reportDefId: number): Promise<ExportTaskResponse> {
+  return post<ExportTaskResponse>('/plt/reports/exports', { reportDefId });
+}

@@ -300,6 +300,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '报表定义' },
       },
       {
+        path: 'platform/exports',
+        name: 'AdminExports',
+        component: () => import('../views/admin/platform/ExportTaskListView.vue'),
+        meta: { title: '导出记录' },
+      },
+      {
         path: 'flow/models',
         name: 'AdminFlowModels',
         component: () => import('../views/admin/flow/ModelListView.vue'),
