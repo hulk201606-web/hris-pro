@@ -71,3 +71,56 @@ export interface EmployeeProfileResponse {
   families?: ProfileFamilyDto[];
   emergencies?: ProfileEmergencyDto[];
 }
+
+/* ---------------------------- 花名册与合同 ---------------------------- */
+
+/** 花名册行（脱敏简报）：证件/手机号仅给掩码，明文不下发（EMP-F-025） */
+export interface EmployeeBrief {
+  id: number;
+  empNo: string;
+  name: string;
+  gender?: string;
+  email?: string;
+  /** 证件号掩码，如 3101**********1234 */
+  certNoMask?: string;
+  /** 手机号掩码，如 138****5678 */
+  mobileMask?: string;
+  deptId?: number;
+  positionId?: number;
+  supervisorEmpId?: number;
+  hireType?: string;
+  status: number;
+  statusLabel: string;
+  blacklisted: boolean;
+}
+
+/** 合同台账 */
+export interface ContractResponse {
+  id: number;
+  empId: number;
+  contractNo?: string;
+  /** 合同类型：固定期限 / 无固定期限 / 劳务 / 实习 */
+  type: string;
+  startDate: string;
+  endDate?: string;
+  /** 试用期结束日（用于转正提醒） */
+  probationEnd?: string;
+  status: string;
+  /** 已续签次数，null 视为 0 */
+  renewCnt?: number;
+  fileId?: number;
+}
+
+/** 合同到期预警项 */
+export interface ContractExpiringItem {
+  id: number;
+  empId: number;
+  empNo: string;
+  name: string;
+  contractNo?: string;
+  endDate: string;
+  /** 剩余天数（<=0 表示已过期） */
+  daysToExpire: number;
+  /** 预警级别：LEVEL_7 / LEVEL_30 / LEVEL_60 */
+  level: string;
+}

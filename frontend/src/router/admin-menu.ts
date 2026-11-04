@@ -4,6 +4,7 @@ import {
   BookOutlined,
   CalendarOutlined,
   DollarOutlined,
+  IdcardOutlined,
   TeamOutlined,
   TrophyOutlined,
 } from '@ant-design/icons-vue';
@@ -102,6 +103,17 @@ const MODULES: ModuleMeta[] = [
       { resource: 'grade', route: '/admin/org/grades', title: '职级体系' },
       { resource: 'grade-band', route: '/admin/org/bands', title: '职级带' },
       { resource: 'headcount', route: '/admin/org/headcounts', title: '编制管理' },
+    ],
+  },
+  {
+    // 员工管理：一期模块，权限点形如 emp:employee:read / emp:contract:write。
+    // 四种异动（入职/转正/调动/离职）共用 emp:lifecycle:write，暂无独立页面。
+    code: 'emp',
+    title: '员工管理',
+    icon: IdcardOutlined,
+    resources: [
+      { resource: 'employee', route: '/admin/employee/roster', title: '员工花名册' },
+      { resource: 'contract', route: '/admin/employee/contracts-expiring', title: '合同到期预警' },
     ],
   },
 ];

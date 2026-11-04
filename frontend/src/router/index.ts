@@ -233,6 +233,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/admin/org/HeadcountListView.vue'),
         meta: { title: '编制管理' },
       },
+      {
+        path: 'employee/roster',
+        name: 'AdminRoster',
+        component: () => import('../views/admin/employee/RosterListView.vue'),
+        meta: { title: '员工花名册' },
+      },
+      {
+        path: 'employee/contracts-expiring',
+        name: 'AdminContractExpiring',
+        component: () => import('../views/admin/employee/ContractExpiringView.vue'),
+        meta: { title: '合同到期预警' },
+      },
     ],
   },
   {
