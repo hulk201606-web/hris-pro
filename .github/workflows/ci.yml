@@ -147,6 +147,14 @@ jobs:
         working-directory: .
         run: python scripts/check-contract.py --strict
 
+      # 手写类型与契约的字段一致性。
+      # 生成类型只覆盖"契约自身"，而前端 src/types/*.d.ts 是手写的业务类型——
+      # 后端加字段时手写类型不会自动跟进，运行时表现为读到 undefined。
+      # 这道检查把这种漂移变成 CI 可判定。
+      - name: Type sync (手写类型与契约字段一致)
+        working-directory: .
+        run: python scripts/check-type-sync.py --strict
+
       - name: Production build
         run: |
           # dist 产物超阈值会触发构建机的批量删除保护，先清空

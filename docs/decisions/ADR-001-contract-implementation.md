@@ -169,30 +169,54 @@ node scripts/check-emoji.js          # 产物不得含 emoji
 - 手工改一行 `api.d.ts` → CI 在 "Contract drift gate" 变红
 - 不改任何文件 → CI 全绿（幂等，无随机失败）
 
-## Step 5 — 迁移手写类型 + 退役手写 openapi
+## Step 5 — 手写类型处置（**已实测修正原计划**）
 
-**做什么**
-
-1. `frontend/src/types/api.d.ts` 中与后端 DTO 对应的类型，改为从生成物再导出：
+**原计划**：把 `frontend/src/types/api*.d.ts` 中与后端 DTO 对应的类型改为
+从生成物再导出，例如：
 
 ```ts
 import type { components } from './generated/api';
 export type AttGroupVO = components['schemas']['AttGroupVO'];
 ```
 
-**先做无损子集**：只迁移被 `api/*.ts` 实际引用的类型。
-`admin.d.ts` 中纯前端视图模型（Ant Design 列定义、表单选项）保持手写不动。
+**实测后该计划不成立，改为「保留手写 + 机械校验一致性」**。两个实测依据：
 
-2. `docs/openapi.yaml`（手写版）标记为 deprecated，或在 Step 2 完成后由脚本覆盖。
+1. **生成类型是按端点具体化的，不存在可直接映射的泛型 schema。**
+   springdoc 对 `R<AdjustmentResponse>` 生成的是独立 schema
+   `AttRAdjustmentResponse`，而不是可复用的 `R<T>`。因此手写类型里的
+   `ApiEnvelope<T>`、`PageResult<T>` 这两个**泛型**在契约中根本没有对应物，
+   无法写成 `components['schemas'][...]`。同理，`AttGroup` 对应的契约名是
+   `AttAttGroup`（模块前缀 + 业务名），逐个手工映射 132 个类型既易错又无收益。
+
+2. **手写类型与契约当前已完全对齐。**
+   用 `scripts/check-type-sync.py` 实测 29 个手写类型：23 个字段完全一致、
+   6 个是纯前端视图模型（`CrudColumn`、`MenuNode`、`SelfHomeSummary` 等，
+   本就不该出现在契约中）、**0 个字段冲突**。也就是说当前不存在需要
+   "修"的漂移，全量替换的收益仅为消除重复定义，而代价是改动 56 个调用点
+   并丢失手写类型的 JSDoc 注释。
+
+**因此本步骤实际交付**：`scripts/check-type-sync.py`
+
+- 把手写类型 X 匹配到契约 schema `{模块前缀}X`，比对字段集合
+- 报出「契约有但前端缺」（运行时读到 `undefined`）与
+  「前端有但契约无」（可能已废弃或拼错）两个方向的差异
+- 纯前端视图模型登记在 `FRONTEND_ONLY` 白名单；
+  命名与后端不一致的历史遗留登记在 `ALIAS`（如 `FixRequest` ↔
+  `AttFixResponse`——这三个考勤业务单前端命名为 Request，但实际用作响应体，
+  可从 `get<PageResult<FixRequest>>` 的用法确认）
+- **已做反向验证**：给 `EmploymentInfo` 注入一个契约中不存在的字段，
+  脚本退出码 1 并精确指出该字段
+
+**为什么这比全量替换好**：防漂移的目标是"后端改字段时前端能被发现"，
+机械校验同样能达到，且不需要改动任何业务代码、不丢失注释。
+若将来手写类型膨胀到难以维护，再考虑按模块分批替换。
 
 **验收标准**
 
 ```bash
-npm run type-check   # 退出码 0
+python scripts/check-type-sync.py --strict   # 退出码 0
+npm run type-check                            # 退出码 0
 ```
-
-**风险控制**：一次只迁一个模块（建议 att，端点最多 68），每迁一个跑一次 type-check，
-变红即回滚该模块。禁止一次性全量替换。
 
 ## Step 6（可选）— 收紧 required
 
