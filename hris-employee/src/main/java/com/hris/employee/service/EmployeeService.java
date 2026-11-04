@@ -10,6 +10,8 @@ import com.hris.employee.dto.PreCreateRequest;
 import com.hris.employee.dto.EmployeeDtos.EmployeeProfileResponse;
 import com.hris.employee.dto.EmployeeDtos.EmployeeUpdateRequest;
 import com.hris.employee.dto.EmployeeDtos.EmploymentInfo;
+import com.hris.employee.dto.EmployeeDtos.RehireCheckResponse;
+import com.hris.employee.dto.EmployeeDtos.RehireHistoryItem;
 import com.hris.employee.dto.PageResult;
 import com.hris.employee.entity.ChangeAudit;
 import com.hris.employee.entity.Employee;
@@ -137,6 +139,35 @@ public class EmployeeService {
         employeeMapper.updateById(e);
         profileService.replace(id, req.educations(), req.works(), req.families(), req.emergencies());
         return get(id);
+    }
+
+    /**
+     * 再入职识别（EMP-F-029）：按证件号查历史任职记录，供录用/建档前查重。
+     *
+     * <p>返回全部命中记录而不只是已离职的，因为三种情况处置不同：
+     * 命中已离职 -> 走二次雇佣（工龄是否连续由业务决定）；
+     * 命中在职 -> 属重复建档，应直接使用现有档案；
+     * 命中黑名单 -> 禁止录用。判断交给调用方，本方法不做裁决。</p>
+     *
+     * <p>实现说明：按 certNoCipher 等值查询，依赖该列当前按明文落库
+     * （未接 ShardingSphere 加密插件，见 Employee 类注释）。若改为随机 IV 加密，
+     * 同值密文不同，本查询会静默返回空——届时须增加 cert_no_hash 列改为哈希查询。</p>
+     */
+    public RehireCheckResponse rehireCheck(String certNo) {
+        if (certNo == null || certNo.isBlank()) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "证件号不能为空");
+        }
+        LambdaQueryWrapper<Employee> qw = new LambdaQueryWrapper<>();
+        qw.eq(Employee::getCertNoCipher, certNo.trim());
+        qw.orderByDesc(Employee::getId);
+        List<Employee> hits = employeeMapper.selectList(qw);
+
+        List<RehireHistoryItem> items = hits.stream().map(e -> {
+            EmployeeStatus st = EmployeeStatus.fromCode(e.getStatus());
+            return new RehireHistoryItem(e.getId(), e.getEmpNo(), e.getName(),
+                    e.getStatus(), st == null ? "未知状态" : st.getLabel(), e.getBlacklisted());
+        }).toList();
+        return new RehireCheckResponse(!items.isEmpty(), items.size(), items);
     }
 
     /** 加入黑名单（终态标记 EMP-F-016）。 */

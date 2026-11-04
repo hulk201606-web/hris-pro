@@ -264,6 +264,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '员工异动办理' },
       },
       {
+        path: 'employee/rehire-check',
+        name: 'AdminRehireCheck',
+        component: () => import('../views/admin/employee/RehireCheckView.vue'),
+        meta: { title: '再入职校验' },
+      },
+      {
         path: 'platform/audit-logs',
         name: 'AdminAuditLogs',
         component: () => import('../views/admin/platform/AuditLogListView.vue'),

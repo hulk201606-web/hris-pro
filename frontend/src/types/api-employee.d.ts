@@ -124,3 +124,24 @@ export interface ContractExpiringItem {
   /** 预警级别：LEVEL_7 / LEVEL_30 / LEVEL_60 */
   level: string;
 }
+
+/* ---------------------------- 再入职识别（EMP-F-029） ---------------------------- */
+
+/** 一条历史任职记录 */
+export interface RehireHistoryItem {
+  empId: number;
+  empNo: string;
+  name: string;
+  status: number;
+  statusLabel: string;
+  /** 1=在黑名单 0=否 */
+  blacklisted?: number;
+}
+
+/** 再入职识别结果：按证件号命中的历史任职记录 */
+export interface RehireCheckResponse {
+  /** 是否存在历史任职记录 */
+  rehire: boolean;
+  historyCount: number;
+  histories: RehireHistoryItem[];
+}

@@ -64,4 +64,19 @@ public final class EmployeeDtos {
             List<ProfileFamilyDto> families,
             List<ProfileEmergencyDto> emergencies) {
     }
+    /**
+     * 再入职识别结果（EMP-F-029）：按证件号查历史任职记录。
+     *
+     * 注意：本查询依赖 cert_no_cipher 当前**按明文落库**（未接 ShardingSphere 加密插件）。
+     * 若将来改为随机 IV 加密，同值密文不同，等值查询会失效——届时必须增加
+     * cert_no_hash 确定性索引列并改由此列查询，不能直接沿用本实现。
+     */
+    public record RehireCheckResponse(boolean rehire, int historyCount,
+                                      List<RehireHistoryItem> histories) {
+    }
+
+    /** 一条历史任职记录（含已离职 / 黑名单）。 */
+    public record RehireHistoryItem(Long empId, String empNo, String name,
+                                    Integer status, String statusLabel, Integer blacklisted) {
+    }
 }

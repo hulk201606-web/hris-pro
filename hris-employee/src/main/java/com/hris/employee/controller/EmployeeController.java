@@ -5,6 +5,7 @@ import com.hris.common.security.RequirePerm;
 import com.hris.employee.dto.EmployeeBrief;
 import com.hris.employee.dto.EmployeeDtos.EmployeeCreateRequest;
 import com.hris.employee.dto.EmployeeDtos.EmployeeProfileResponse;
+import com.hris.employee.dto.EmployeeDtos.RehireCheckResponse;
 import com.hris.employee.dto.EmployeeDtos.EmployeeUpdateRequest;
 import com.hris.employee.dto.PageResult;
 import com.hris.employee.service.EmployeeService;
@@ -69,6 +70,18 @@ public class EmployeeController {
     public R<EmployeeProfileResponse> update(@PathVariable Long id,
                                              @Valid @RequestBody EmployeeUpdateRequest req) {
         return R.ok(employeeService.update(id, req));
+    }
+
+    /**
+     * 再入职识别（EMP-F-029）：按证件号查历史任职记录，供录用/建档前查重。
+     *
+     * <p>刻意放在 /emp/rehire-check 而非 /emp/employees/rehire-check，
+     * 避免与 /emp/employees/{id} 的路径模板产生歧义。</p>
+     */
+    @RequirePerm("emp:employee:read")
+    @GetMapping("/rehire-check")
+    public R<RehireCheckResponse> rehireCheck(@RequestParam String certNo) {
+        return R.ok(employeeService.rehireCheck(certNo));
     }
 
     /** 加入黑名单（EMP-F-016）：终态标记，经状态机流转并落状态流水，后续招聘侧以此过滤。 */

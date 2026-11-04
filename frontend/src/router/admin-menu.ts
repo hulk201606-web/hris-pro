@@ -117,6 +117,7 @@ const MODULES: ModuleMeta[] = [
     icon: IdcardOutlined,
     resources: [
       { resource: 'employee', route: '/admin/employee/roster', title: '员工花名册' },
+      { resource: 'employee', route: '/admin/employee/rehire-check', title: '再入职校验' },
       { resource: 'lifecycle', route: '/admin/employee/lifecycle', title: '员工异动办理' },
       { resource: 'contract', route: '/admin/employee/contracts-expiring', title: '合同到期预警' },
     ],

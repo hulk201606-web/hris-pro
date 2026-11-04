@@ -1508,6 +1508,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/emp/rehire-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["rehireCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/emp/resignations": {
         parameters: {
             query?: never;
@@ -5922,6 +5938,16 @@ export interface components {
             timestamp?: number;
             traceId?: string;
         };
+        EmpRRehireCheckResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["EmpRehireCheckResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
         EmpRVoid: {
             /** Format: int32 */
             code?: number;
@@ -5939,6 +5965,23 @@ export interface components {
             reason?: string;
             /** Format: date */
             regularDate: string;
+        };
+        EmpRehireCheckResponse: {
+            histories?: components["schemas"]["EmpRehireHistoryItem"][];
+            /** Format: int32 */
+            historyCount?: number;
+            rehire?: boolean;
+        };
+        EmpRehireHistoryItem: {
+            /** Format: int32 */
+            blacklisted?: number;
+            /** Format: int64 */
+            empId?: number;
+            empNo?: string;
+            name?: string;
+            /** Format: int32 */
+            status?: number;
+            statusLabel?: string;
         };
         EmpResignRequest: {
             /** Format: int64 */
@@ -12430,6 +12473,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["EmpRLifecycleCaseResponse"];
+                };
+            };
+        };
+    };
+    rehireCheck: {
+        parameters: {
+            query: {
+                certNo: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["EmpRRehireCheckResponse"];
                 };
             };
         };

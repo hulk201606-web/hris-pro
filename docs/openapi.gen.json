@@ -6121,6 +6121,31 @@
         },
         "type": "object"
       },
+      "EmpRRehireCheckResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/EmpRehireCheckResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "EmpRVoid": {
         "properties": {
           "code": {
@@ -6165,6 +6190,50 @@
           "empId",
           "regularDate"
         ],
+        "type": "object"
+      },
+      "EmpRehireCheckResponse": {
+        "properties": {
+          "histories": {
+            "items": {
+              "$ref": "#/components/schemas/EmpRehireHistoryItem"
+            },
+            "type": "array"
+          },
+          "historyCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "rehire": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "EmpRehireHistoryItem": {
+        "properties": {
+          "blacklisted": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "empId": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "empNo": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "statusLabel": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "EmpResignRequest": {
@@ -18982,6 +19051,36 @@
         },
         "tags": [
           "lifecycle-controller"
+        ]
+      }
+    },
+    "/api/v1/emp/rehire-check": {
+      "get": {
+        "operationId": "rehireCheck",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "certNo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpRRehireCheckResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "employee-controller"
         ]
       }
     },

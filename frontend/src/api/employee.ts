@@ -6,6 +6,7 @@ import type {
   ContractResponse,
   EmployeeBrief,
   EmployeeProfileResponse,
+  RehireCheckResponse,
 } from '../types/api';
 
 /**
@@ -111,4 +112,11 @@ export function submitTransfer(data: Record<string, unknown>): Promise<unknown> 
 /** 发起离职办理（POST /emp/resignations）。前置：状态为在职（ACTIVE）或试用（PROBATION）。 */
 export function submitResignation(data: Record<string, unknown>): Promise<unknown> {
   return post<unknown>('/emp/resignations', data);
+}
+
+/* ---------------------------- 再入职识别 ---------------------------- */
+
+/** 再入职识别（GET /emp/rehire-check）：按证件号查历史任职记录（EMP-F-029） */
+export function checkRehire(certNo: string): Promise<RehireCheckResponse> {
+  return get<RehireCheckResponse>('/emp/rehire-check', { certNo });
 }
