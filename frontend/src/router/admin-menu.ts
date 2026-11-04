@@ -45,6 +45,7 @@ const MODULES: ModuleMeta[] = [
     resources: [
       { resource: 'requisition', route: '/admin/recruit/requisitions', title: '职位需求' },
       { resource: 'candidate', route: '/admin/recruit/candidates', title: '候选人' },
+      { resource: 'candidate', route: '/admin/recruit/candidate-dedup', title: '候选人查重' },
       { resource: 'offer', route: '/admin/recruit/offers', title: 'Offer 管理' },
     ],
   },

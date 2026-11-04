@@ -96,6 +96,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '候选人' },
       },
       {
+        path: 'recruit/candidate-dedup',
+        name: 'AdminCandidateDedup',
+        component: () => import('../views/admin/recruit/CandidateDedupView.vue'),
+        meta: { title: '候选人查重' },
+      },
+      {
         path: 'recruit/offers',
         name: 'AdminOffers',
         component: () => import('../views/admin/recruit/OfferListView.vue'),

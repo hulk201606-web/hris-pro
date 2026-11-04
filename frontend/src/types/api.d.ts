@@ -12,4 +12,5 @@ export * from './api-employee';
 export * from './api-flow';
 export * from './api-org';
 export * from './api-platform';
+export * from './api-recruit';
 export * from './api-self';

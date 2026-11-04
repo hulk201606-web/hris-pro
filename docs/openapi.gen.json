@@ -12214,6 +12214,48 @@
         ],
         "type": "object"
       },
+      "RcuCandidateDedupItem": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "matchField": {
+            "type": "string"
+          },
+          "mobileMask": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RcuCandidateDedupResponse": {
+        "properties": {
+          "duplicated": {
+            "type": "boolean"
+          },
+          "matchCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/RcuCandidateDedupItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "RcuCandidateResponse": {
         "properties": {
           "createdAt": {
@@ -12943,6 +12985,31 @@
           },
           "data": {
             "$ref": "#/components/schemas/RcuApplicationResponse"
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RcuRCandidateDedupResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RcuCandidateDedupResponse"
           },
           "message": {
             "type": "string"
@@ -26161,6 +26228,44 @@
         },
         "tags": [
           "application-controller"
+        ]
+      }
+    },
+    "/api/v1/rcu/candidate-dedup": {
+      "get": {
+        "operationId": "check",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RcuRCandidateDedupResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "candidate-dedup-controller"
         ]
       }
     },

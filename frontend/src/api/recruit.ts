@@ -7,6 +7,7 @@ import { del, get, post, put } from './http';
 import { isMockEnabled } from './mock';
 import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
+import type { CandidateDedupResponse } from '../types/api';
 import type { Candidate, Offer, Requisition } from '../types/admin';
 
 /* ---------------------------- 职位需求 ---------------------------- */
@@ -91,4 +92,23 @@ export function deleteOffer(id: number): Promise<void> {
 export function onboardOffer(id: number): Promise<number> {
   if (isMockEnabled()) return adminMock.onboardOffer(id);
   return post<number>(`/rcu/offers/${id}/onboard`);
+}
+
+/* ---------------------------- 候选人查重（RCS-F-009） ---------------------------- */
+
+/**
+ * 候选人查重（GET /rcu/candidate-dedup）：简历入库前检查是否已有同人。
+ *
+ * 匹配维度：email 精确（强信号）、name 辅助（弱信号，同名不必然同人）。
+ * 手机号暂不纳入——该列由调用方传入 mobileCipher 后原样落库，
+ * 若上游用随机 IV 加密则同号密文不同，等值查询不可靠。
+ */
+export function checkCandidateDuplicate(
+  email?: string,
+  name?: string,
+): Promise<CandidateDedupResponse> {
+  const params: Record<string, unknown> = {};
+  if (email) params.email = email;
+  if (name) params.name = name;
+  return get<CandidateDedupResponse>('/rcu/candidate-dedup', params);
 }

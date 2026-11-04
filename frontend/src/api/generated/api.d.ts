@@ -3220,6 +3220,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rcu/candidate-dedup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rcu/candidates": {
         parameters: {
             query?: never;
@@ -8348,6 +8364,21 @@ export interface components {
             name: string;
             status: string;
         };
+        RcuCandidateDedupItem: {
+            email?: string;
+            /** Format: int64 */
+            id?: number;
+            matchField?: string;
+            mobileMask?: string;
+            name?: string;
+            status?: string;
+        };
+        RcuCandidateDedupResponse: {
+            duplicated?: boolean;
+            /** Format: int32 */
+            matchCount?: number;
+            matches?: components["schemas"]["RcuCandidateDedupItem"][];
+        };
         RcuCandidateResponse: {
             /** Format: date-time */
             createdAt?: string;
@@ -8639,6 +8670,16 @@ export interface components {
             /** Format: int32 */
             code?: number;
             data?: components["schemas"]["RcuApplicationResponse"];
+            message?: string;
+            success?: boolean;
+            /** Format: int64 */
+            timestamp?: number;
+            traceId?: string;
+        };
+        RcuRCandidateDedupResponse: {
+            /** Format: int32 */
+            code?: number;
+            data?: components["schemas"]["RcuCandidateDedupResponse"];
             message?: string;
             success?: boolean;
             /** Format: int64 */
@@ -17409,6 +17450,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RcuRVoid"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: {
+                email?: string;
+                name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RcuRCandidateDedupResponse"];
                 };
             };
         };
