@@ -10,4 +10,5 @@ export * from './api-common';
 export * from './api-auth';
 export * from './api-employee';
 export * from './api-flow';
+export * from './api-org';
 export * from './api-self';

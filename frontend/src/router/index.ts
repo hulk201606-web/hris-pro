@@ -191,6 +191,48 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/admin/knowledge/KnowledgeScopeView.vue'),
         meta: { title: '知识范围' },
       },
+      {
+        path: 'org/legal-entities',
+        name: 'AdminLegalEntities',
+        component: () => import('../views/admin/org/LegalEntityListView.vue'),
+        meta: { title: '法人主体' },
+      },
+      {
+        path: 'org/depts',
+        name: 'AdminDepts',
+        component: () => import('../views/admin/org/DeptListView.vue'),
+        meta: { title: '部门管理' },
+      },
+      {
+        path: 'org/positions',
+        name: 'AdminPositions',
+        component: () => import('../views/admin/org/PositionListView.vue'),
+        meta: { title: '岗位管理' },
+      },
+      {
+        path: 'org/jobs',
+        name: 'AdminJobs',
+        component: () => import('../views/admin/org/JobListView.vue'),
+        meta: { title: '职位管理' },
+      },
+      {
+        path: 'org/grades',
+        name: 'AdminGrades',
+        component: () => import('../views/admin/org/GradeListView.vue'),
+        meta: { title: '职级体系' },
+      },
+      {
+        path: 'org/bands',
+        name: 'AdminGradeBands',
+        component: () => import('../views/admin/org/GradeBandListView.vue'),
+        meta: { title: '职级带' },
+      },
+      {
+        path: 'org/headcounts',
+        name: 'AdminHeadcounts',
+        component: () => import('../views/admin/org/HeadcountListView.vue'),
+        meta: { title: '编制管理' },
+      },
     ],
   },
   {

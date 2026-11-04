@@ -1,5 +1,6 @@
 import type { Component } from 'vue';
 import {
+  ApartmentOutlined,
   BookOutlined,
   CalendarOutlined,
   DollarOutlined,
@@ -85,6 +86,22 @@ const MODULES: ModuleMeta[] = [
       { resource: 'space', route: '/admin/knowledge/spaces', title: '知识空间' },
       { resource: 'document', route: '/admin/knowledge/documents', title: '文档管理' },
       { resource: 'doc', route: '/admin/knowledge/scope', title: '知识范围' },
+    ],
+  },
+  {
+    // 组织架构：一期模块，权限点形如 org:dept:read / org:grade-band:write。
+    // 注意 grade-band 的第二段含连字符，与 grade 是两个不同资源，不能混。
+    code: 'org',
+    title: '组织架构',
+    icon: ApartmentOutlined,
+    resources: [
+      { resource: 'legal-entity', route: '/admin/org/legal-entities', title: '法人主体' },
+      { resource: 'dept', route: '/admin/org/depts', title: '部门管理' },
+      { resource: 'position', route: '/admin/org/positions', title: '岗位管理' },
+      { resource: 'job', route: '/admin/org/jobs', title: '职位管理' },
+      { resource: 'grade', route: '/admin/org/grades', title: '职级体系' },
+      { resource: 'grade-band', route: '/admin/org/bands', title: '职级带' },
+      { resource: 'headcount', route: '/admin/org/headcounts', title: '编制管理' },
     ],
   },
 ];
