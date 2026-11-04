@@ -1,0 +1,267 @@
+/**
+ * 管理端（/admin）子路由表。与 admin-menu.ts 的菜单注册表分离：
+ * 本文件只负责「路径 → 组件」映射，菜单注册表负责「权限点 → 菜单项」映射。
+ * index.ts 引用本文件的 adminChildren 作为 /admin 路由的 children。
+ */
+import type { RouteRecordRaw } from 'vue-router';
+
+export const adminChildren: RouteRecordRaw[] = [
+  {
+    path: 'recruit/requisitions',
+    name: 'AdminRequisitions',
+    component: () => import('../views/admin/recruit/RequisitionListView.vue'),
+    meta: { title: '职位需求' },
+  },
+  {
+    path: 'recruit/candidates',
+    name: 'AdminCandidates',
+    component: () => import('../views/admin/recruit/CandidateListView.vue'),
+    meta: { title: '候选人' },
+  },
+  {
+    path: 'recruit/candidate-dedup',
+    name: 'AdminCandidateDedup',
+    component: () => import('../views/admin/recruit/CandidateDedupView.vue'),
+    meta: { title: '候选人查重' },
+  },
+  {
+    path: 'recruit/offers',
+    name: 'AdminOffers',
+    component: () => import('../views/admin/recruit/OfferListView.vue'),
+    meta: { title: 'Offer 管理' },
+  },
+  {
+    path: 'attendance/groups',
+    name: 'AdminAttGroups',
+    component: () => import('../views/admin/attendance/GroupListView.vue'),
+    meta: { title: '考勤组' },
+  },
+  {
+    path: 'attendance/shifts',
+    name: 'AdminAttShifts',
+    component: () => import('../views/admin/attendance/ShiftListView.vue'),
+    meta: { title: '班次' },
+  },
+  {
+    path: 'attendance/leave-types',
+    name: 'AdminAttLeaveTypes',
+    component: () => import('../views/admin/attendance/LeaveTypeListView.vue'),
+    meta: { title: '假期类型' },
+  },
+  {
+    path: 'attendance/payroll-cycles',
+    name: 'AdminAttCycles',
+    component: () => import('../views/admin/attendance/PayrollCycleListView.vue'),
+    meta: { title: '薪酬取数周期' },
+  },
+  {
+    path: 'attendance/daily',
+    name: 'AdminAttDaily',
+    component: () => import('../views/admin/attendance/DailyAttendanceView.vue'),
+    meta: { title: '日考勤' },
+  },
+  {
+    path: 'attendance/exceptions',
+    name: 'AdminAttExceptions',
+    component: () => import('../views/admin/attendance/ExceptionWorkbenchView.vue'),
+    meta: { title: '异常工作台' },
+  },
+  {
+    path: 'attendance/reports',
+    name: 'AdminAttReports',
+    component: () => import('../views/admin/attendance/AttendanceReportView.vue'),
+    meta: { title: '考勤报表' },
+  },
+  {
+    path: 'attendance/holidays',
+    name: 'AdminAttHolidays',
+    component: () => import('../views/admin/attendance/HolidayCalendarView.vue'),
+    meta: { title: '节假日历' },
+  },
+  {
+    path: 'compensation/payroll-runs',
+    name: 'AdminPayrollRuns',
+    component: () => import('../views/admin/compensation/PayrollRunListView.vue'),
+    meta: { title: '薪酬核算' },
+  },
+  {
+    path: 'compensation/preview',
+    name: 'AdminPayrollPreview',
+    component: () => import('../views/admin/compensation/PayrollPreviewView.vue'),
+    meta: { title: '算薪预览' },
+  },
+  {
+    path: 'compensation/employee-pays',
+    name: 'AdminEmployeePays',
+    component: () => import('../views/admin/compensation/EmployeePayListView.vue'),
+    meta: { title: '员工薪酬' },
+  },
+  {
+    path: 'performance/cycles',
+    name: 'AdminCycles',
+    component: () => import('../views/admin/performance/CycleListView.vue'),
+    meta: { title: '考核周期' },
+  },
+  {
+    path: 'performance/goals',
+    name: 'AdminGoals',
+    component: () => import('../views/admin/performance/GoalListView.vue'),
+    meta: { title: '目标管理' },
+  },
+  {
+    path: 'performance/context',
+    name: 'AdminReviewContext',
+    component: () => import('../views/admin/performance/ReviewContextView.vue'),
+    meta: { title: '评估上下文' },
+  },
+  {
+    path: 'knowledge/spaces',
+    name: 'AdminSpaces',
+    component: () => import('../views/admin/knowledge/SpaceListView.vue'),
+    meta: { title: '知识空间' },
+  },
+  {
+    path: 'knowledge/documents',
+    name: 'AdminDocuments',
+    component: () => import('../views/admin/knowledge/DocumentListView.vue'),
+    meta: { title: '文档管理' },
+  },
+  {
+    path: 'knowledge/scope',
+    name: 'AdminKnowledgeScope',
+    component: () => import('../views/admin/knowledge/KnowledgeScopeView.vue'),
+    meta: { title: '知识范围' },
+  },
+  {
+    path: 'org/legal-entities',
+    name: 'AdminLegalEntities',
+    component: () => import('../views/admin/org/LegalEntityListView.vue'),
+    meta: { title: '法人主体' },
+  },
+  {
+    path: 'org/depts',
+    name: 'AdminDepts',
+    component: () => import('../views/admin/org/DeptListView.vue'),
+    meta: { title: '部门管理' },
+  },
+  {
+    path: 'org/positions',
+    name: 'AdminPositions',
+    component: () => import('../views/admin/org/PositionListView.vue'),
+    meta: { title: '岗位管理' },
+  },
+  {
+    path: 'org/jobs',
+    name: 'AdminJobs',
+    component: () => import('../views/admin/org/JobListView.vue'),
+    meta: { title: '职位管理' },
+  },
+  {
+    path: 'org/grades',
+    name: 'AdminGrades',
+    component: () => import('../views/admin/org/GradeListView.vue'),
+    meta: { title: '职级体系' },
+  },
+  {
+    path: 'org/bands',
+    name: 'AdminGradeBands',
+    component: () => import('../views/admin/org/GradeBandListView.vue'),
+    meta: { title: '职级带' },
+  },
+  {
+    path: 'org/headcounts',
+    name: 'AdminHeadcounts',
+    component: () => import('../views/admin/org/HeadcountListView.vue'),
+    meta: { title: '编制管理' },
+  },
+  {
+    path: 'org/headcount-board',
+    name: 'AdminHeadcountBoard',
+    component: () => import('../views/admin/org/HeadcountBoardView.vue'),
+    meta: { title: '编制看板' },
+  },
+  {
+    path: 'employee/roster',
+    name: 'AdminRoster',
+    component: () => import('../views/admin/employee/RosterListView.vue'),
+    meta: { title: '员工花名册' },
+  },
+  {
+    path: 'employee/contracts-expiring',
+    name: 'AdminContractExpiring',
+    component: () => import('../views/admin/employee/ContractExpiringView.vue'),
+    meta: { title: '合同到期预警' },
+  },
+  {
+    path: 'employee/lifecycle',
+    name: 'AdminLifecycle',
+    component: () => import('../views/admin/employee/LifecycleApplyView.vue'),
+    meta: { title: '员工异动办理' },
+  },
+  {
+    path: 'employee/rehire-check',
+    name: 'AdminRehireCheck',
+    component: () => import('../views/admin/employee/RehireCheckView.vue'),
+    meta: { title: '再入职校验' },
+  },
+  {
+    path: 'platform/audit-logs',
+    name: 'AdminAuditLogs',
+    component: () => import('../views/admin/platform/AuditLogListView.vue'),
+    meta: { title: '审计日志' },
+  },
+  {
+    path: 'platform/configs',
+    name: 'AdminConfigs',
+    component: () => import('../views/admin/platform/ConfigListView.vue'),
+    meta: { title: '系统配置' },
+  },
+  {
+    path: 'platform/dict-types',
+    name: 'AdminDictTypes',
+    component: () => import('../views/admin/platform/DictTypeListView.vue'),
+    meta: { title: '字典类型' },
+  },
+  {
+    path: 'platform/dict-items',
+    name: 'AdminDictItems',
+    component: () => import('../views/admin/platform/DictItemListView.vue'),
+    meta: { title: '字典项' },
+  },
+  {
+    path: 'platform/templates',
+    name: 'AdminTemplates',
+    component: () => import('../views/admin/platform/TemplateListView.vue'),
+    meta: { title: '通知模板' },
+  },
+  {
+    path: 'platform/reports',
+    name: 'AdminReports',
+    component: () => import('../views/admin/platform/ReportDefListView.vue'),
+    meta: { title: '报表定义' },
+  },
+  {
+    path: 'platform/exports',
+    name: 'AdminExports',
+    component: () => import('../views/admin/platform/ExportTaskListView.vue'),
+    meta: { title: '导出记录' },
+  },
+  {
+    path: 'platform/scheduler',
+    name: 'AdminScheduler',
+    component: () => import('../views/admin/platform/SchedulerTaskView.vue'),
+    meta: { title: '调度中心' },
+  },
+  {
+    path: 'flow/models',
+    name: 'AdminFlowModels',
+    component: () => import('../views/admin/flow/ModelListView.vue'),
+    meta: { title: '流程模型' },
+  },
+  {
+    path: 'flow/tasks',
+    name: 'AdminFlowTasks',
+    component: () => import('../views/admin/flow/TaskCenterView.vue'),
+    meta: { title: '待办中心' },
+  },
+];
