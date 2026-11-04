@@ -39,9 +39,17 @@ URL_RE = re.compile(
 
 
 def normalize(path: str) -> str:
-    """把前端 ${x} 与契约 {x} 统一折叠为 {}，并去掉尾部斜杠。"""
+    """把前端 ${x} 与契约 {x} 统一折叠为 {}，并去掉尾部斜杠。
+
+    注意：模板字符串拼接的 query 会被折叠成紧贴标识符的 `{}`
+    （如 `` `/blacklist${qs}` `` → `/blacklist{}`）。路径参数在 OpenAPI 里
+    一定写成 `/{xxx}`，因此**紧贴标识符的 `{}` 必属 query 而非路径段**，
+    需剔除，否则会误报「端点不存在」。
+    """
     path = re.sub(r"\$\{[^}]*\}", "{}", path)
     path = re.sub(r"\{[^}]*\}", "{}", path)
+    # 剔除紧贴标识符的 {}（query 拼接），保留 /{} 形式的路径参数
+    path = re.sub(r"(?<=[A-Za-z0-9_-])\{\}", "", path)
     return path.rstrip("/") or "/"
 
 
