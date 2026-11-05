@@ -1267,14 +1267,17 @@ CREATE TABLE rcu_talent_pool_tag (
 CREATE DATABASE IF NOT EXISTS cmp_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 USE cmp_db;
 
--- 薪酬项(公式 json 版本化)
+-- 薪酬项(公式表达式版本化, Aviator 沙箱求值, 按 pay_group 定义)
 CREATE TABLE cmp_pay_item (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
   `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `pay_group_id`  BIGINT       NOT NULL DEFAULT 0 COMMENT '薪资组ID(逻辑外键 cmp_pay_group.id),0=全局',
   `name`          VARCHAR(64)  NOT NULL COMMENT '薪酬项名称',
   `code`          VARCHAR(64)  NOT NULL COMMENT '薪酬项编码',
+  `category`      VARCHAR(16)  NOT NULL DEFAULT 'EARNING' COMMENT '类别 EARNING/DEDUCTION/TAX/NET',
+  `seq`           INT          NOT NULL DEFAULT 0 COMMENT '求值顺序(小者优先)',
   `version`       INT          NOT NULL DEFAULT 1 COMMENT '版本号',
-  `formula`       JSON         DEFAULT NULL COMMENT '计算公式(json)',
+  `formula`       VARCHAR(512) DEFAULT NULL COMMENT '计算公式(表达式,Aviator 语法,可空;NET 缺省=sum(EARNING)-sum(DEDUCTION)-sum(TAX))',
   `status`        TINYINT      NOT NULL DEFAULT 1 COMMENT '状态 1=启用 0=停用',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
@@ -1282,8 +1285,28 @@ CREATE TABLE cmp_pay_item (
   `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
   `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_cmp_pay_item` (`tenant_id`, `code`, `version`)
+  UNIQUE KEY `uk_cmp_pay_item` (`tenant_id`, `pay_group_id`, `code`, `version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='薪酬项';
+
+-- 算薪任务(F-006 逐员工监控)
+CREATE TABLE cmp_calc_task (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `run_id`        BIGINT       NOT NULL COMMENT '算薪批次ID(逻辑外键 cmp_payroll_run.id)',
+  `emp_id`        BIGINT       NOT NULL COMMENT '员工ID(逻辑外键 emp_employee.id)',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'RUNNING' COMMENT '任务状态 RUNNING/SUCCESS/FAILED/SKIPPED',
+  `error`         VARCHAR(255) DEFAULT NULL COMMENT '失败原因(FAILED 时)',
+  `items_json`    JSON         DEFAULT NULL COMMENT '逐项求值结果快照(json,可复算)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cmp_calc_task` (`run_id`, `emp_id`),
+  KEY `idx_cmp_calc_task_run` (`tenant_id`, `run_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='算薪任务(F-006 逐员工监控)';
 
 -- 薪资组
 CREATE TABLE cmp_pay_group (

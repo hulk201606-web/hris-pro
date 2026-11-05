@@ -1,10 +1,15 @@
 package com.hris.compensation.client;
 
 import com.hris.common.api.R;
+import com.hris.compensation.dto.ReportDtos.EmploymentBriefRow;
+import com.hris.compensation.dto.ReportDtos.HeadcountStructureBriefRequest;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,4 +25,10 @@ public interface EmployeeClient {
      */
     @GetMapping("/{id}/profile-brief")
     R<Map<String, Object>> profileBrief(@PathVariable("id") Long empId);
+
+    /**
+     * 员工雇佣简报批量查询（CMP-F-017 报表：empId→法人映射，MVP 用现行雇佣关系）。
+     */
+    @PostMapping("/headcount-structure-brief")
+    R<List<EmploymentBriefRow>> headcountStructureBrief(@RequestBody HeadcountStructureBriefRequest req);
 }

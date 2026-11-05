@@ -24,6 +24,14 @@
             <groupId>com.hris</groupId>
             <artifactId>hris-common</artifactId>
         </dependency>
+        <!-- CMP-F-021 公式沙箱：Aviator 表达式引擎。选型理由：轻量（无依赖）、
+             支持 ALLOWED_CLASS_SET/FEATURE_SET 白名单化沙箱（禁 new/静态调用/反射导入）、
+             可注册自定义函数（taxMonthly 等薪酬语义），契合公式求值的安全边界。 -->
+        <dependency>
+            <groupId>com.googlecode.aviator</groupId>
+            <artifactId>aviator</artifactId>
+            <version>5.4.3</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

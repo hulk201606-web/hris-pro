@@ -1267,14 +1267,17 @@ CREATE TABLE rcu_talent_pool_tag (
 CREATE SCHEMA IF NOT EXISTS cmp_db;
 SET search_path TO cmp_db;
 
--- 薪酬项(公式 json 版本化)
+-- 薪酬项(公式表达式版本化, Aviator 沙箱求值, 按 pay_group 定义)
 CREATE TABLE cmp_pay_item (
   id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
   tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  pay_group_id  BIGINT       NOT NULL DEFAULT 0,                  -- 薪资组ID(逻辑外键 cmp_pay_group.id),0=全局
   name          VARCHAR(64)  NOT NULL,                            -- 薪酬项名称
   code          VARCHAR(64)  NOT NULL,                            -- 薪酬项编码
+  category      VARCHAR(16)  NOT NULL DEFAULT 'EARNING',          -- 类别 EARNING/DEDUCTION/TAX/NET
+  seq           INTEGER      NOT NULL DEFAULT 0,                  -- 求值顺序(小者优先)
   version       INTEGER      NOT NULL DEFAULT 1,                  -- 版本号
-  formula       JSONB,                                            -- 计算公式(json)
+  formula       VARCHAR(512),                                     -- 计算公式(表达式,Aviator 语法,可空;NET 缺省=sum(EARNING)-sum(DEDUCTION)-sum(TAX))
   status        SMALLINT     NOT NULL DEFAULT 1,                  -- 状态 1=启用 0=停用
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
@@ -1282,8 +1285,28 @@ CREATE TABLE cmp_pay_item (
   updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
   deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
   CONSTRAINT pk_cmp_pay_item PRIMARY KEY (id),
-  CONSTRAINT uk_cmp_pay_item UNIQUE (tenant_id, code, version)
+  CONSTRAINT uk_cmp_pay_item UNIQUE (tenant_id, pay_group_id, code, version)
 );
+
+-- 算薪任务(F-006 逐员工监控)
+CREATE TABLE cmp_calc_task (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  run_id        BIGINT       NOT NULL,                            -- 算薪批次ID(逻辑外键 cmp_payroll_run.id)
+  emp_id        BIGINT       NOT NULL,                            -- 员工ID(逻辑外键 emp_employee.id)
+  status        VARCHAR(16)  NOT NULL DEFAULT 'RUNNING',          -- 任务状态 RUNNING/SUCCESS/FAILED/SKIPPED
+  error         VARCHAR(255),                                     -- 失败原因(FAILED 时)
+  items_json    JSONB,                                            -- 逐项求值结果快照(json,可复算)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_cmp_calc_task PRIMARY KEY (id),
+  CONSTRAINT uk_cmp_calc_task UNIQUE (run_id, emp_id)
+);
+CREATE INDEX idx_cmp_calc_task_run ON cmp_calc_task (tenant_id, run_id, status);
 
 -- 薪资组
 CREATE TABLE cmp_pay_group (
