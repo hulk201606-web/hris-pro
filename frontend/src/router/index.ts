@@ -17,6 +17,13 @@ const routes: RouteRecordRaw[] = [
     meta: { public: true, title: '登录' },
   },
   {
+    // 公开招聘段（RCS-F-004）：官网免登录职位列表，独立于 MainLayout
+    path: '/public/jobs',
+    name: 'PublicJobs',
+    component: () => import('../views/public/PublicJobsView.vue'),
+    meta: { public: true, title: '招聘职位' },
+  },
+  {
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
     redirect: '/self/home',
@@ -68,6 +75,18 @@ const routes: RouteRecordRaw[] = [
         name: 'TripApply',
         component: () => import('../views/self/TripApplyView.vue'),
         meta: { title: '出差申请' },
+      },
+      {
+        path: 'self/out-office/apply',
+        name: 'OutOfficeApply',
+        component: () => import('../views/self/OutOfficeApplyView.vue'),
+        meta: { title: '外出/居家申请' },
+      },
+      {
+        path: 'self/notify-preferences',
+        name: 'NotifyPreferences',
+        component: () => import('../views/self/NotifyPreferenceView.vue'),
+        meta: { title: '通知偏好' },
       },
       {
         path: 'self/payroll',

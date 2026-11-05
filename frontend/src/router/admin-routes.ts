@@ -31,6 +31,12 @@ export const adminChildren: RouteRecordRaw[] = [
     meta: { title: 'Offer 管理' },
   },
   {
+    path: 'recruit/funnel',
+    name: 'AdminFunnelReport',
+    component: () => import('../views/admin/recruit/FunnelReportView.vue'),
+    meta: { title: '招聘漏斗' },
+  },
+  {
     path: 'attendance/groups',
     name: 'AdminAttGroups',
     component: () => import('../views/admin/attendance/GroupListView.vue'),
@@ -77,6 +83,12 @@ export const adminChildren: RouteRecordRaw[] = [
     name: 'AdminAttHolidays',
     component: () => import('../views/admin/attendance/HolidayCalendarView.vue'),
     meta: { title: '节假日历' },
+  },
+  {
+    path: 'attendance/out-offices',
+    name: 'AdminAttOutOffices',
+    component: () => import('../views/admin/attendance/OutOfficeAdminView.vue'),
+    meta: { title: '外出/居家审批' },
   },
   {
     path: 'compensation/payroll-runs',
@@ -263,5 +275,11 @@ export const adminChildren: RouteRecordRaw[] = [
     name: 'AdminFlowTasks',
     component: () => import('../views/admin/flow/TaskCenterView.vue'),
     meta: { title: '待办中心' },
+  },
+  {
+    path: 'flow/delegates',
+    name: 'AdminFlowDelegates',
+    component: () => import('../views/admin/flow/DelegateListView.vue'),
+    meta: { title: '委托代理' },
   },
 ];

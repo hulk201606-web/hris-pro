@@ -62,8 +62,8 @@ function createStore<T extends { id: number }>(seed: T[]): Store<T> {
 }
 
 const requisitionStore = createStore<Requisition>([
-  { id: 1, reqNo: 'REQ-2026-0012', deptId: 101, positionId: 301, headcount: 2, reason: '研发扩编', status: 'APPROVED', createdAt: '2026-09-02 10:12:00', updatedAt: '2026-09-05 09:30:00' },
-  { id: 2, reqNo: 'REQ-2026-0013', deptId: 102, positionId: 305, headcount: 1, reason: '岗位替补', status: 'PENDING', createdAt: '2026-09-18 14:20:00', updatedAt: '2026-09-18 14:20:00' },
+  { id: 1, reqNo: 'REQ-2026-0012', deptId: 101, positionId: 301, headcount: 2, reason: '研发扩编', status: 'APPROVED', published: 1, createdAt: '2026-09-02 10:12:00', updatedAt: '2026-09-05 09:30:00' },
+  { id: 2, reqNo: 'REQ-2026-0013', deptId: 102, positionId: 305, headcount: 1, reason: '岗位替补', status: 'PENDING', published: 0, createdAt: '2026-09-18 14:20:00', updatedAt: '2026-09-18 14:20:00' },
 ]);
 
 const candidateStore = createStore<Candidate>([

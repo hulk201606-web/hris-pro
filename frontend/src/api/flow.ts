@@ -156,3 +156,45 @@ export function getInstanceTrack(instanceId: string): Promise<FlowTrack> {
 export function terminateInstance(instanceId: string): Promise<void> {
   return del<void>(`/flow/instances/${instanceId}`);
 }
+
+/* ---------------------------- 委托代理 ---------------------------- */
+
+/**
+ * 委托代理记录（对齐 /flow/delegates 契约）。
+ * 注意：后端并行开发中，字段以委派 Controller 就绪后的 DTO 为准，取数已做可选兜底。
+ */
+export interface FlowDelegate {
+  id: number;
+  /** 委托人（当前用户） */
+  fromUser?: number;
+  /** 被委托人 */
+  toUser: number;
+  /** 可选：仅委托特定流程定义 */
+  procDefKey?: string;
+  startAt: string;
+  endAt: string;
+  reason?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+/** 我的委托列表（GET /flow/delegates/mine） */
+export function listMyDelegates(): Promise<FlowDelegate[]> {
+  return get<FlowDelegate[]>('/flow/delegates/mine');
+}
+
+/** 新建委托（POST /flow/delegates）：生效期内被委托人可代处理我的待办 */
+export function createDelegate(data: {
+  toUser: number;
+  procDefKey?: string;
+  startAt: string;
+  endAt: string;
+  reason?: string;
+}): Promise<FlowDelegate> {
+  return post<FlowDelegate>('/flow/delegates', data);
+}
+
+/** 提前结束委托（POST /flow/delegates/{id}/end） */
+export function endDelegate(id: number): Promise<void> {
+  return post<void>(`/flow/delegates/${id}/end`);
+}

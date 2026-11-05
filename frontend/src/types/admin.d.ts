@@ -14,6 +14,8 @@ export interface Requisition {
   headcount: number;
   reason: string;
   status: string;
+  /** 官网发布标记 0/1（RCS-F-004，1 时经 /api/v1/public/rcu/jobs 可见） */
+  published: number;
   createdAt: string;
   updatedAt: string;
 }

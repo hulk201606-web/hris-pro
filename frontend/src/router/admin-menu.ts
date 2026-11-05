@@ -44,6 +44,7 @@ const MODULES: ModuleMeta[] = [
     icon: TeamOutlined,
     resources: [
       { resource: 'requisition', route: '/admin/recruit/requisitions', title: '职位需求' },
+      { resource: 'requisition', route: '/admin/recruit/funnel', title: '招聘漏斗' },
       { resource: 'candidate', route: '/admin/recruit/candidates', title: '候选人' },
       { resource: 'candidate', route: '/admin/recruit/candidate-dedup', title: '候选人查重' },
       { resource: 'offer', route: '/admin/recruit/offers', title: 'Offer 管理' },
@@ -62,6 +63,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'exception', route: '/admin/attendance/exceptions', title: '异常工作台' },
       { resource: 'report', route: '/admin/attendance/reports', title: '考勤报表' },
       { resource: 'holiday', route: '/admin/attendance/holidays', title: '节假日历' },
+      { resource: 'out-office', route: '/admin/attendance/out-offices', title: '外出/居家审批' },
     ],
   },
   {
@@ -126,13 +128,15 @@ const MODULES: ModuleMeta[] = [
   },
   {
     // 流程中心：权限点形如 flow:model:write / flow:task:read。
-    // 待办中心对四类视图（待办/已办/抄送/我发起）共用 flow:task 资源。
+    // 待办中心对四类视图（待办/已办/抄送/我发起）共用 flow:task 资源；
+    // 委托代理按契约以 flow:task:write 控显，同样挂 task 资源。
     code: 'flow',
     title: '流程中心',
     icon: NodeIndexOutlined,
     resources: [
       { resource: 'model', route: '/admin/flow/models', title: '流程模型' },
       { resource: 'task', route: '/admin/flow/tasks', title: '待办中心' },
+      { resource: 'task', route: '/admin/flow/delegates', title: '委托代理' },
     ],
   },
   {

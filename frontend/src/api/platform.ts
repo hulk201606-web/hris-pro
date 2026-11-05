@@ -176,3 +176,32 @@ export interface CatalogItem {
 export function listReportCatalog(): Promise<CatalogItem[]> {
   return get<CatalogItem[]>('/plt/reports/catalog');
 }
+
+/* ---------------------------- 通知偏好（自助） ---------------------------- */
+
+/** 通知渠道：钉钉 / 企业微信 / Webhook */
+export type NotifyChannel = 'DINGTALK' | 'WECOM' | 'WEBHOOK';
+
+/** 通知偏好项（对齐 PUT /plt/notify-preferences/me 契约） */
+export interface NotifyPreference {
+  channel: NotifyChannel;
+  enabled: boolean;
+  /** 免打扰开始/结束时刻（HH:mm:ss，选填） */
+  quietStart?: string;
+  quietEnd?: string;
+}
+
+/** 我的通知偏好（GET /plt/notify-preferences/me） */
+export function fetchMyNotifyPreferences(): Promise<NotifyPreference[]> {
+  return get<NotifyPreference[]>('/plt/notify-preferences/me');
+}
+
+/** 更新我某渠道的通知偏好（PUT /plt/notify-preferences/me，upsert 语义） */
+export function updateMyNotifyPreference(data: {
+  channel: NotifyChannel;
+  enabled: boolean;
+  quietStart?: string;
+  quietEnd?: string;
+}): Promise<NotifyPreference> {
+  return put<NotifyPreference>('/plt/notify-preferences/me', data);
+}

@@ -36,6 +36,38 @@ export function deleteRequisition(id: number): Promise<void> {
   return del<void>(`/rcu/requisitions/${id}`);
 }
 
+/** 发布到官网（POST /rcu/requisitions/{id}/publish）：OPEN 需求置 published=1 */
+export function publishRequisition(id: number): Promise<Requisition> {
+  return post<Requisition>(`/rcu/requisitions/${id}/publish`);
+}
+
+/** 撤下官网发布（POST /rcu/requisitions/{id}/unpublish） */
+export function unpublishRequisition(id: number): Promise<Requisition> {
+  return post<Requisition>(`/rcu/requisitions/${id}/unpublish`);
+}
+
+/* ---------------------------- 报表（RCS-F-020） ---------------------------- */
+
+/** 漏斗报表行：stage 阶段 / count 去重候选人数 / conversion 相对 APPLIED 转化率（百分比，2 位小数） */
+export interface FunnelItem {
+  stage: string;
+  count: number;
+  conversion: number;
+}
+
+/** 招聘漏斗（GET /rcu/reports/funnel），from/to 为 ISO 日期时间，reqId 可选过滤 */
+export function getFunnelReport(params: {
+  from?: string;
+  to?: string;
+  reqId?: number;
+}): Promise<FunnelItem[]> {
+  const query: Record<string, unknown> = {};
+  if (params.from) query.from = params.from;
+  if (params.to) query.to = params.to;
+  if (params.reqId) query.reqId = params.reqId;
+  return get<FunnelItem[]>('/rcu/reports/funnel', query);
+}
+
 /* ---------------------------- 候选人 ---------------------------- */
 
 /** 分页查询候选人（GET /rcu/candidates） */
