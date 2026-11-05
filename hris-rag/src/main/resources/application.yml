@@ -24,7 +24,7 @@ spring:
     openai:
       # 通义千问走 DashScope OpenAI 兼容端点（ADR-005 修订：Spring AI 2.0 替代已停更的 Spring AI Alibaba）
       base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
-      api-key: ${DASHSCOPE_API_KEY:***REMOVED***}
+      api-key: ${DASHSCOPE_API_KEY:}
       embedding:
         options:
           model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v4}

@@ -37,6 +37,9 @@ export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}"
 export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
 export MINIO_BUCKET="${MINIO_BUCKET:-hris-files}"
 
+# ---- 可选：DashScope（rag 问答/embedding；留空时 EmbeddingService 降级占位向量）----
+export DASHSCOPE_API_KEY="${DASHSCOPE_API_KEY:-}"
+
 # ---- 服务端口表（与 application.yml 默认值不一致时以此为准）-----------------
 export PORT_GATEWAY="${PORT_GATEWAY:-8080}"
 export PORT_AUTH="${PORT_AUTH:-8101}"
