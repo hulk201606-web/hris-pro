@@ -2,8 +2,12 @@ package com.hris.flow.service;
 
 import com.hris.common.trace.TraceContext;
 import com.hris.flow.client.AttApprovalCallbackClient;
+import com.hris.flow.client.CmpApprovalCallbackClient;
 import com.hris.flow.client.EmpApprovalCallbackClient;
+import com.hris.flow.client.KbApprovalCallbackClient;
 import com.hris.flow.client.OrgApprovalCallbackClient;
+import com.hris.flow.client.PrfApprovalCallbackClient;
+import com.hris.flow.client.RcsApprovalCallbackClient;
 import com.hris.flow.dto.ApprovalCallbackRequest;
 import com.hris.flow.entity.EventOutbox;
 import com.hris.flow.enums.OutboxState;
@@ -40,6 +44,14 @@ class ApprovalCallbackDispatcherTest {
     @Mock
     private OrgApprovalCallbackClient orgClient;
     @Mock
+    private RcsApprovalCallbackClient rcsClient;
+    @Mock
+    private CmpApprovalCallbackClient cmpClient;
+    @Mock
+    private PrfApprovalCallbackClient prfClient;
+    @Mock
+    private KbApprovalCallbackClient kbClient;
+    @Mock
     private EventOutboxMapper outboxMapper;
 
     private ApprovalCallbackDispatcher dispatcher;
@@ -50,11 +62,12 @@ class ApprovalCallbackDispatcherTest {
     }
 
     private ApprovalCallbackDispatcher dispatcher() {
-        return new ApprovalCallbackDispatcher(attClient, empClient, orgClient, outboxMapper);
+        return new ApprovalCallbackDispatcher(attClient, empClient, orgClient,
+                rcsClient, cmpClient, prfClient, kbClient, outboxMapper);
     }
 
     @Nested
-    @DisplayName("前缀路由：ATT_/EMP_/ORG_ 走对应域 client，其它不路由")
+    @DisplayName("前缀路由：ATT_/EMP_/ORG_/RCS_/CMP_/PRF_/KBD_ 走对应域 client，其它不路由")
     class Routing {
 
         @Test
@@ -100,16 +113,69 @@ class ApprovalCallbackDispatcherTest {
         }
 
         @Test
-        @DisplayName("RCS_/CMP_/PRF_ 等无回调端点 → 不路由，返回 false")
+        @DisplayName("RCS_ 前缀 → 招聘域 client")
+        void routesRcsToRecruit() {
+            dispatcher = dispatcher();
+
+            assertTrue(dispatcher.deliver("RCS_REQUISITION", "42", 9L,
+                    true, "APPROVED", null, "PI-7"));
+
+            verify(rcsClient).callback(any(ApprovalCallbackRequest.class));
+            verify(attClient, never()).callback(any());
+            verify(orgClient, never()).callback(any());
+        }
+
+        @Test
+        @DisplayName("CMP_ 前缀 → 薪酬域 client")
+        void routesCmpToCompensation() {
+            dispatcher = dispatcher();
+
+            assertTrue(dispatcher.deliver("CMP_PAYROLL", "88", 9L,
+                    true, "APPROVED", null, "PI-8"));
+
+            verify(cmpClient).callback(any(ApprovalCallbackRequest.class));
+            verify(rcsClient, never()).callback(any());
+        }
+
+        @Test
+        @DisplayName("PRF_ 前缀 → 绩效域 client")
+        void routesPrfToPerformance() {
+            dispatcher = dispatcher();
+
+            assertTrue(dispatcher.deliver("PRF_APPEAL", "PRF_APPEAL-2026-001", 9L,
+                    false, "REJECTED", "维持原评级", "PI-9"));
+
+            verify(prfClient).callback(any(ApprovalCallbackRequest.class));
+            verify(cmpClient, never()).callback(any());
+        }
+
+        @Test
+        @DisplayName("KBD_ 前缀 → 知识库域 client")
+        void routesKbToRag() {
+            dispatcher = dispatcher();
+
+            assertTrue(dispatcher.deliver("KBD_PUBLISH", "3001", 9L,
+                    true, "APPROVED", null, "PI-10"));
+
+            verify(kbClient).callback(any(ApprovalCallbackRequest.class));
+            verify(prfClient, never()).callback(any());
+        }
+
+        @Test
+        @DisplayName("未知前缀 → 不路由，返回 false")
         void skipsUnroutedPrefix() {
             dispatcher = dispatcher();
 
-            assertFalse(dispatcher.deliver("RCS_OFFER", "rcs_offer_1", 9L,
+            assertFalse(dispatcher.deliver("XXX_UNKNOWN", "xxx_1", 9L,
                     true, "APPROVED", null, "PI-4"));
 
             verify(attClient, never()).callback(any());
             verify(empClient, never()).callback(any());
             verify(orgClient, never()).callback(any());
+            verify(rcsClient, never()).callback(any());
+            verify(cmpClient, never()).callback(any());
+            verify(prfClient, never()).callback(any());
+            verify(kbClient, never()).callback(any());
         }
 
         @Test
@@ -147,7 +213,7 @@ class ApprovalCallbackDispatcherTest {
         void savesPendingWhenUnrouted() {
             dispatcher = dispatcher();
 
-            dispatcher.dispatchOnTerminal("RCS_OFFER", "rcs_offer_1", 9L,
+            dispatcher.dispatchOnTerminal("XXX_UNKNOWN", "xxx_1", 9L,
                     true, "APPROVED", null, "PI-4");
 
             ArgumentCaptor<EventOutbox> captor = ArgumentCaptor.forClass(EventOutbox.class);

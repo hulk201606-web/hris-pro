@@ -1,8 +1,12 @@
 package com.hris.flow.service;
 
 import com.hris.flow.client.AttApprovalCallbackClient;
+import com.hris.flow.client.CmpApprovalCallbackClient;
 import com.hris.flow.client.EmpApprovalCallbackClient;
+import com.hris.flow.client.KbApprovalCallbackClient;
 import com.hris.flow.client.OrgApprovalCallbackClient;
+import com.hris.flow.client.PrfApprovalCallbackClient;
+import com.hris.flow.client.RcsApprovalCallbackClient;
 import com.hris.flow.dto.ApprovalCallbackRequest;
 import com.hris.flow.entity.EventOutbox;
 import com.hris.flow.enums.OutboxState;
@@ -21,8 +25,9 @@ import java.util.UUID;
 /**
  * 审批回调分发器（docs/19 §8.3-1 断链修复：flow 审批终态 → 业务域）。
  *
- * <p>按 bizType 前缀路由：ATT_* → hris-attendance、EMP_* → hris-employee、ORG_* → hris-org；
- * 其它前缀（RCS_/CMP_/PRF_ 等）暂无回调端点，落 flow_ext_event_outbox（PENDING）不报错。</p>
+ * <p>按 bizType 前缀路由：ATT_* → hris-attendance、EMP_* → hris-employee、ORG_* → hris-org、
+ * RCS_* → hris-recruit、CMP_* → hris-compensation、PRF_* → hris-performance、KBD_* → hris-rag；
+ * 其它前缀暂无回调端点，落 flow_ext_event_outbox（PENDING）不报错。</p>
  *
  * <p>失败处理：Feign 调用异常时 log.error 并把回调事件落 outbox（PENDING）供
  * {@link EventOutboxService#dispatchPending(int)} 重试，绝不向上抛——审批动作本身不能因回调失败而失败。</p>
@@ -38,15 +43,27 @@ public class ApprovalCallbackDispatcher {
     private final AttApprovalCallbackClient attClient;
     private final EmpApprovalCallbackClient empClient;
     private final OrgApprovalCallbackClient orgClient;
+    private final RcsApprovalCallbackClient rcsClient;
+    private final CmpApprovalCallbackClient cmpClient;
+    private final PrfApprovalCallbackClient prfClient;
+    private final KbApprovalCallbackClient kbClient;
     private final EventOutboxMapper outboxMapper;
 
     public ApprovalCallbackDispatcher(AttApprovalCallbackClient attClient,
                                       EmpApprovalCallbackClient empClient,
                                       OrgApprovalCallbackClient orgClient,
+                                      RcsApprovalCallbackClient rcsClient,
+                                      CmpApprovalCallbackClient cmpClient,
+                                      PrfApprovalCallbackClient prfClient,
+                                      KbApprovalCallbackClient kbClient,
                                       EventOutboxMapper outboxMapper) {
         this.attClient = attClient;
         this.empClient = empClient;
         this.orgClient = orgClient;
+        this.rcsClient = rcsClient;
+        this.cmpClient = cmpClient;
+        this.prfClient = prfClient;
+        this.kbClient = kbClient;
         this.outboxMapper = outboxMapper;
     }
 
@@ -95,6 +112,22 @@ public class ApprovalCallbackDispatcher {
         }
         if (bizType.startsWith("ORG_")) {
             callWithTenant(tenantId, () -> orgClient.callback(body));
+            return true;
+        }
+        if (bizType.startsWith("RCS_")) {
+            callWithTenant(tenantId, () -> rcsClient.callback(body));
+            return true;
+        }
+        if (bizType.startsWith("CMP_")) {
+            callWithTenant(tenantId, () -> cmpClient.callback(body));
+            return true;
+        }
+        if (bizType.startsWith("PRF_")) {
+            callWithTenant(tenantId, () -> prfClient.callback(body));
+            return true;
+        }
+        if (bizType.startsWith("KBD_")) {
+            callWithTenant(tenantId, () -> kbClient.callback(body));
             return true;
         }
         return false;
