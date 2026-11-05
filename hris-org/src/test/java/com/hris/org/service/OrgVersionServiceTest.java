@@ -54,12 +54,14 @@ class OrgVersionServiceTest {
     @Mock
     private OrgGradeVersionMapper gradeVersionMapper;
 
+    private OrgVersionStateService stateService;
     private OrgVersionService service;
 
     @BeforeEach
     void setUp() {
+        stateService = new OrgVersionStateService(positionVersionMapper, gradeVersionMapper);
         service = new OrgVersionService(positionMapper, gradeMapper, positionDeptMapper,
-                positionVersionMapper, gradeVersionMapper);
+                positionVersionMapper, gradeVersionMapper, stateService);
     }
 
     private OrgPosition position(long id, String name, String code, String jobFamily) {
@@ -116,11 +118,13 @@ class OrgVersionServiceTest {
             when(gradeMapper.selectList(isNull())).thenReturn(
                     List.of(grade(21L, "P6", "grade_p6", 3L)));
 
-            OrgVersionSummary summary = service.create();
+            OrgVersionSummary summary = service.create(null);
 
             assertTrue(summary.versionNo().startsWith("V"));
             assertEquals(1, summary.positionCount());
             assertEquals(1, summary.gradeCount());
+            assertEquals("DRAFT", summary.status(), "新版本默认草稿");
+            assertEquals(LocalDate.now().toString(), summary.effectiveFrom());
 
             ArgumentCaptor<OrgPositionVersion> posCaptor =
                     ArgumentCaptor.forClass(OrgPositionVersion.class);
@@ -136,6 +140,18 @@ class OrgVersionServiceTest {
             verify(gradeVersionMapper).insert(gradeCaptor.capture());
             assertEquals(21L, gradeCaptor.getValue().getGradeId());
             assertTrue(gradeCaptor.getValue().getSnapshot().contains("grade_p6"));
+        }
+
+        @Test
+        @DisplayName("指定未来生效日 → 仍为 DRAFT，生效日透传")
+        void keepsDraftWithFutureEffectiveFrom() {
+            when(positionMapper.selectList(isNull())).thenReturn(List.of());
+            when(gradeMapper.selectList(isNull())).thenReturn(List.of());
+
+            OrgVersionSummary summary = service.create(LocalDate.parse("2026-12-01"));
+
+            assertEquals("DRAFT", summary.status());
+            assertEquals("2026-12-01", summary.effectiveFrom());
         }
 
         private OrgPositionDept rel(long positionId, long deptId) {
@@ -158,9 +174,8 @@ class OrgVersionServiceTest {
                             "{\"id\":11,\"name\":\"后端工程师\",\"code\":\"pos_be\",\"deptIds\":[100]}")));
             when(gradeVersionMapper.selectList(any())).thenReturn(List.of(
                     gradeRow("V1", 21L, "{\"id\":21,\"name\":\"P6\",\"code\":\"grade_p6\"}")));
-            when(positionVersionMapper.selectOne(any())).thenReturn(positionRow("V1", 11L, "{}"));
 
-            OrgVersionDetail detail = service.get("V1");
+            OrgVersionDetail detail = service.get("V1", true);
 
             assertEquals("V1", detail.versionNo());
             assertEquals("2026-11-05", detail.snapshotDate());
@@ -171,12 +186,27 @@ class OrgVersionServiceTest {
         }
 
         @Test
+        @DisplayName("草稿版本：无写权限按不存在处理，管理端可读")
+        void hidesDraftFromNonAdmin() {
+            OrgPositionVersion draft = positionRow("V1", 11L, "{}");
+            draft.setStatus("DRAFT");
+            when(positionVersionMapper.selectList(any())).thenReturn(List.of(draft));
+            when(gradeVersionMapper.selectList(any())).thenReturn(List.of());
+
+            BizException e = assertThrows(BizException.class, () -> service.get("V1", false));
+            assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
+
+            OrgVersionDetail detail = service.get("V1", true);
+            assertEquals("DRAFT", detail.status());
+        }
+
+        @Test
         @DisplayName("版本不存在 → NOT_FOUND")
         void rejectsMissingVersion() {
             when(positionVersionMapper.selectList(any())).thenReturn(List.of());
             when(gradeVersionMapper.selectList(any())).thenReturn(List.of());
 
-            BizException e = assertThrows(BizException.class, () -> service.get("V404"));
+            BizException e = assertThrows(BizException.class, () -> service.get("V404", true));
 
             assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
         }
@@ -250,6 +280,50 @@ class OrgVersionServiceTest {
         }
 
         @Test
+        @DisplayName("草稿版本：无写权限按不存在处理，管理端可读")
+        void hidesDraftFromNonAdmin() {
+            OrgPositionVersion draft = positionRow("V1", 11L, "{}");
+            draft.setStatus("DRAFT");
+            when(positionVersionMapper.selectList(any())).thenReturn(List.of(draft));
+            when(gradeVersionMapper.selectList(any())).thenReturn(List.of());
+
+            BizException e = assertThrows(BizException.class, () -> service.get("V1", false));
+            assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
+
+            OrgVersionDetail detail = service.get("V1", true);
+            assertEquals("DRAFT", detail.status());
+        }
+
+        @Test
+        @DisplayName("回滚 = 激活历史版本：原 ACTIVE 置 SUPERSEDED、目标置 ACTIVE")
+        void rollbackActivatesHistoryVersion() {
+            OrgPositionVersion superseded = positionRow("V1", 11L,
+                    "{\"id\":11,\"name\":\"后端工程师\",\"code\":\"pos_be\",\"status\":1,\"deptIds\":[]}");
+            superseded.setStatus("SUPERSEDED");
+            when(positionVersionMapper.selectList(any())).thenReturn(List.of(superseded));
+            when(gradeVersionMapper.selectList(any())).thenReturn(List.of());
+            when(positionMapper.selectById(11L)).thenReturn(position(11L, "后端工程师", "pos_be", "TECH"));
+
+            OrgVersionSummary summary = service.rollback("V1");
+
+            assertEquals("ACTIVE", summary.status());
+            org.mockito.Mockito.verify(positionVersionMapper,
+                    org.mockito.Mockito.times(2)).update(isNull(), any());
+        }
+
+        @Test
+        @DisplayName("草稿版本不可回滚 → PARAM_INVALID")
+        void rejectsDraftRollback() {
+            OrgPositionVersion draft = positionRow("V1", 11L, "{}");
+            draft.setStatus("DRAFT");
+            when(positionVersionMapper.selectList(any())).thenReturn(List.of(draft));
+
+            BizException e = assertThrows(BizException.class, () -> service.rollback("V1"));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+        }
+
+        @Test
         @DisplayName("版本不存在 → NOT_FOUND")
         void rejectsMissingVersion() {
             when(positionVersionMapper.selectList(any())).thenReturn(List.of());
@@ -266,6 +340,26 @@ class OrgVersionServiceTest {
     class ListVersions {
 
         @Test
+        @DisplayName("按状态过滤：默认 ACTIVE，filter=null 含草稿")
+        void filtersByStatus() {
+            OrgPositionVersion active = positionRow("V2", 11L, "{}");
+            active.setId(20L);
+            active.setStatus("ACTIVE");
+            OrgPositionVersion draft = positionRow("V1", 11L, "{}");
+            draft.setId(10L);
+            draft.setStatus("DRAFT");
+            when(positionVersionMapper.selectList(isNull())).thenReturn(List.of(draft, active));
+            when(gradeVersionMapper.selectList(isNull())).thenReturn(List.of());
+
+            List<OrgVersionSummary> activeOnly = service.list(
+                    com.hris.org.enums.OrgVersionStatus.ACTIVE);
+            assertEquals(1, activeOnly.size());
+            assertEquals("V2", activeOnly.get(0).versionNo());
+
+            assertEquals(2, service.list((com.hris.org.enums.OrgVersionStatus) null).size());
+        }
+
+        @Test
         @DisplayName("按版本号聚合岗位/职级计数，倒序")
         void aggregatesCountsByVersion() {
             OrgPositionVersion newer = positionRow("V2", 11L, "{}");
@@ -276,7 +370,8 @@ class OrgVersionServiceTest {
             when(gradeVersionMapper.selectList(isNull())).thenReturn(List.of(
                     gradeRow("V1", 21L, "{}")));
 
-            List<OrgVersionSummary> versions = service.list();
+            List<OrgVersionSummary> versions = service.list(
+                    com.hris.org.enums.OrgVersionStatus.ACTIVE);
 
             assertEquals(2, versions.size());
             assertEquals("V2", versions.get(0).versionNo());

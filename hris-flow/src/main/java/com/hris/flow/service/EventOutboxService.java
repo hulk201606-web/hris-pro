@@ -19,9 +19,14 @@ import java.util.UUID;
 /**
  * 事件出站服务（FLW-F-012）。本地事务内写 flow_ext_event_outbox。
  *
- * <p>两类事件：① MQ 事件（INSTANCE_STARTED/TASK_COMPLETED/INSTANCE_FINISHED），RocketMQ
- * producer 未接入，保持 PENDING 不误标；② 审批回调事件（{@link ApprovalCallbackDispatcher}
- * Feign 失败落表），由 {@link #dispatchPending(int)} 走同一 dispatcher 重试，成功置 SENT。</p>
+ * <p>两类事件：① MQ 事件（INSTANCE_STARTED/TASK_COMPLETED/INSTANCE_FINISHED），经
+ * {@link OutboxMqPublisher} 投递 RocketMQ（批 12 #25）；② 审批回调事件
+ * （{@link ApprovalCallbackDispatcher} Feign 失败落表），由 {@link #dispatchPending(int)}
+ * 走同一 dispatcher 重试，成功置 SENT。</p>
+ *
+ * <p><b>fail-open 与死信</b>：mq-enabled=false（缺省）时 MQ 事件跳过不误标（旧行为，仅落表）；
+ * 发送异常保留 PENDING 并 retry_cnt+1，累计达到 {@code hris.flow.outbox.max-retry}（缺省 3）
+ * 置 DEAD——当前无告警载体，仅打 ERROR 计数日志（见 docs/19 §8.7-1 遗留说明）。</p>
  */
 @Service
 public class EventOutboxService {
@@ -35,10 +40,13 @@ public class EventOutboxService {
 
     private final EventOutboxMapper mapper;
     private final ApprovalCallbackDispatcher callbackDispatcher;
+    private final OutboxMqPublisher mqPublisher;
 
-    public EventOutboxService(EventOutboxMapper mapper, ApprovalCallbackDispatcher callbackDispatcher) {
+    public EventOutboxService(EventOutboxMapper mapper, ApprovalCallbackDispatcher callbackDispatcher,
+                              OutboxMqPublisher mqPublisher) {
         this.mapper = mapper;
         this.callbackDispatcher = callbackDispatcher;
+        this.mqPublisher = mqPublisher;
     }
 
     /**
@@ -65,11 +73,12 @@ public class EventOutboxService {
     }
 
     /**
-     * 重试待发事件（docs/19 §8.7-1）：遍历 PENDING 事件，审批回调事件按 bizType 前缀走
-     * {@link ApprovalCallbackDispatcher#deliver} 重试，成功置 SENT、失败 retryCnt+1 保留 PENDING；
-     * MQ 事件（其它 topic）RocketMQ 未接入，跳过不动。
+     * 重试待发事件（docs/19 §8.7-1；批 12 #25 接入 RocketMQ）：遍历 PENDING 事件——
+     * 审批回调事件走 {@link ApprovalCallbackDispatcher#deliver}；MQ 事件经
+     * {@link OutboxMqPublisher} 投递。成功置 SENT；失败 retryCnt+1 保留 PENDING，
+     * 达到重试上限置 DEAD。mq-enabled=false 时 MQ 事件跳过不误标。
      *
-     * @return 统计：total 扫描数 / sent 成功数 / failed 失败数 / skipped 跳过数
+     * @return 统计：total 扫描数 / sent 成功数 / failed 失败数 / skipped 跳过数 / dead 死信数
      */
     public Map<String, Integer> dispatchPending(int limit) {
         List<EventOutbox> pending = mapper.selectList(new LambdaQueryWrapper<EventOutbox>()
@@ -79,26 +88,43 @@ public class EventOutboxService {
         int sent = 0;
         int failed = 0;
         int skipped = 0;
+        int dead = 0;
         for (EventOutbox row : pending) {
-            if (!ApprovalCallbackDispatcher.TOPIC_APPROVAL_CALLBACK.equals(row.getTopic())) {
+            boolean ok;
+            if (ApprovalCallbackDispatcher.TOPIC_APPROVAL_CALLBACK.equals(row.getTopic())) {
+                ok = deliverCallback(row);
+            } else if (mqPublisher.isEnabled()) {
+                ok = mqPublisher.publish(row);
+            } else {
+                mqPublisher.warnDisabledOnce();
                 skipped++;
                 continue;
             }
-            if (deliverCallback(row)) {
+            if (ok) {
                 row.setState(OutboxState.SENT.name());
                 mapper.updateById(row);
                 sent++;
             } else {
-                row.setRetryCnt(row.getRetryCnt() == null ? 1 : row.getRetryCnt() + 1);
-                mapper.updateById(row);
-                failed++;
+                int retry = row.getRetryCnt() == null ? 1 : row.getRetryCnt() + 1;
+                row.setRetryCnt(retry);
+                if (retry >= mqPublisher.maxRetry()) {
+                    row.setState(OutboxState.DEAD.name());
+                    mapper.updateById(row);
+                    dead++;
+                    log.error("outbox 事件进入死信（重试 {} 次仍未成功，无告警载体仅计数）: eventId={}, topic={}",
+                            retry, row.getEventId(), row.getTopic());
+                } else {
+                    mapper.updateById(row);
+                    failed++;
+                }
             }
         }
         if (!pending.isEmpty()) {
-            log.info("outbox 重试完成: total={}, sent={}, failed={}, skipped={}",
-                    pending.size(), sent, failed, skipped);
+            log.info("outbox 重试完成: total={}, sent={}, failed={}, skipped={}, dead={}",
+                    pending.size(), sent, failed, skipped, dead);
         }
-        return Map.of("total", pending.size(), "sent", sent, "failed", failed, "skipped", skipped);
+        return Map.of("total", pending.size(), "sent", sent, "failed", failed,
+                "skipped", skipped, "dead", dead);
     }
 
     /** 解析回调事件信封并投递；解析异常视为投递失败（保留 PENDING 供人工排查）。 */

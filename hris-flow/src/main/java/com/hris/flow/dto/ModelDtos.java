@@ -37,6 +37,14 @@ public final class ModelDtos {
             LocalDateTime createdAt) {
     }
 
+    /** 保存 BPMN XML 请求（设计器保存，不自动部署）。 */
+    public record ModelXmlRequest(@NotBlank(message = "xml 不能为空") String xml) {
+    }
+
+    /** BPMN XML 校验结果（valid=true 时 errors 为空）。 */
+    public record ModelValidateResponse(boolean valid, List<String> errors) {
+    }
+
     /** 部署结果。 */
     public record DeployResponse(
             Long modelId,

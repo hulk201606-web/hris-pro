@@ -45,6 +45,16 @@ hris:
     # 安装租户列表（逗号分隔）。flow_db 无租户主档不可自行枚举，需配置注入；
     # demo 租户为 100001；留空则跳过安装（不阻断启动）
     seed-tenants: ${FLOW_SEED_TENANTS:}
+    # ---- 事件总线（FLW-F-012 / 批 12 #25）----
+    # mq-enabled 缺省 false：本机与未部署 RocketMQ 的环境不装配 producer、不报错，
+    # outbox 仅落表（旧行为）；部署 RocketMQ 后置 true 即恢复投递。
+    outbox:
+      mq-enabled: ${FLOW_OUTBOX_MQ_ENABLED:false}
+      name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+      topic: ${FLOW_OUTBOX_TOPIC:hris-flow-events}
+      producer-group: ${ROCKETMQ_PRODUCER_GROUP:hris-flow-outbox-producer}
+      # 发送失败累计达到该次数置 DEAD（死信），避免无限重试
+      max-retry: 3
 
 # ---- 健康检查探针（K8s liveness/readiness；不暴露 env/beans/heapdump 等敏感端点）----
 management:

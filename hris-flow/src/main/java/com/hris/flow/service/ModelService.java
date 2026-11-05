@@ -26,10 +26,13 @@ public class ModelService {
 
     private final FlowModelMapper mapper;
     private final RepositoryService repositoryService;
+    private final BpmnXmlValidator bpmnXmlValidator;
 
-    public ModelService(FlowModelMapper mapper, RepositoryService repositoryService) {
+    public ModelService(FlowModelMapper mapper, RepositoryService repositoryService,
+                        BpmnXmlValidator bpmnXmlValidator) {
         this.mapper = mapper;
         this.repositoryService = repositoryService;
+        this.bpmnXmlValidator = bpmnXmlValidator;
     }
 
     public ModelDtos.ModelPageResult list(long page, long size) {
@@ -77,6 +80,41 @@ public class ModelService {
         mapper.updateById(model);
         return new ModelDtos.DeployResponse(model.getId(), model.getProcDefKey(), model.getVersion(),
                 deployment.getId());
+    }
+
+    /** 读取模型 BPMN XML（设计器 importXML 用）。 */
+    public String xml(Long id) {
+        requireTenant();
+        return requireModel(id).getBpmnXml();
+    }
+
+    /** 校验 BPMN XML（不部署、不落库；解析 + Flowable 流程校验）。模型不存在时抛 FLOW_NOT_FOUND。 */
+    public ModelDtos.ModelValidateResponse validateXml(Long id, String xml) {
+        requireTenant();
+        requireModel(id);
+        List<String> errors = bpmnXmlValidator.validate(xml);
+        return new ModelDtos.ModelValidateResponse(errors.isEmpty(), errors);
+    }
+
+    /**
+     * 保存设计器 XML：同 key 生成新版本（version+1，状态 DRAFT），旧版本行保留可追溯。
+     * 不自动部署——部署仍走 POST /models/{id}/deploy。
+     *
+     * @return 新版本模型（前端需以返回的 id 继续保存/部署）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ModelDtos.ModelResponse saveXml(Long id, String xml) {
+        requireTenant();
+        FlowModel source = requireModel(id);
+        FlowModel model = new FlowModel();
+        model.setProcDefKey(source.getProcDefKey());
+        model.setVersion(nextVersion(source.getProcDefKey()));
+        model.setBpmnXml(xml);
+        model.setFormSchemaJson(source.getFormSchemaJson());
+        model.setDeployState(DeployState.DRAFT.name());
+        mapper.insert(model);
+        return new ModelDtos.ModelResponse(model.getId(), model.getProcDefKey(), model.getVersion(),
+                model.getDeployState(), model.getCreatedAt());
     }
 
     /** 查询某模型 key 的全部版本。 */

@@ -75,6 +75,23 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- 事件总线 producer（FLW-F-012）：rocketmq-spring-boot-starter 2.3.x 传递
+             rocketmq-client 5.3.1（与父 pom 版本矩阵的 RocketMQ 5.3.1 对齐）。
+             注意：2.3.x 的自动配置只注册在 META-INF/spring.factories，Boot 3+/4 不再加载，
+             因此本项目不依赖其自动配置，由 OutboxMqConfig 手动构建 DefaultMQProducer
+             （仅在 hris.flow.outbox.mq-enabled=true 时创建）。 -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>2.3.3</version>
+            <exclusions>
+                <!-- 统一由 Boot BOM 管理日志实现，避免 starter 带入旧版绑定 -->
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- S0.4 引擎装配验证用内存库（仅 test scope） -->
         <dependency>
             <groupId>com.h2database</groupId>

@@ -6,11 +6,13 @@ import com.hris.org.dto.ApprovalDtos.ApprovalCallbackRequest;
 import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.org.dto.HcCheckResponse;
 import com.hris.org.dto.OccupancyRequest;
+import com.hris.org.dto.OrgVersionDtos.ActivateDueResponse;
 import com.hris.org.dto.ReportDtos.LegalEntityBriefItem;
 import com.hris.org.dto.ReportDtos.LegalEntityBriefRequest;
 import com.hris.org.service.DeptService;
 import com.hris.org.service.HeadcountService;
 import com.hris.org.service.LegalEntityService;
+import com.hris.org.service.OrgVersionStateService;
 import com.hris.org.service.ReportLineService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -34,13 +37,16 @@ public class OrgInternalController {
     private final ReportLineService reportLineService;
     private final DeptService deptService;
     private final LegalEntityService legalEntityService;
+    private final OrgVersionStateService versionStateService;
 
     public OrgInternalController(HeadcountService headcountService, ReportLineService reportLineService,
-                                 DeptService deptService, LegalEntityService legalEntityService) {
+                                 DeptService deptService, LegalEntityService legalEntityService,
+                                 OrgVersionStateService versionStateService) {
         this.headcountService = headcountService;
         this.reportLineService = reportLineService;
         this.deptService = deptService;
         this.legalEntityService = legalEntityService;
+        this.versionStateService = versionStateService;
     }
 
     /**
@@ -77,6 +83,29 @@ public class OrgInternalController {
     @PostMapping("/legal-entities/brief")
     public R<List<LegalEntityBriefItem>> legalEntityBrief(@Valid @RequestBody LegalEntityBriefRequest req) {
         return R.ok(legalEntityService.brief(req.ids()));
+    }
+
+    /**
+     * 组织版本到期激活（批 11 #23，供 platform 调度中心日任务调用，docs/20 §4.3）：
+     * 激活本租户 DRAFT 且 effective_from &lt;= effectiveDate 的批次，原 ACTIVE 置 SUPERSEDED。
+     * 调度线程无 JWT，租户上下文需显式还原（版本表受租户插件拦截），finally 清理。
+     *
+     * @param tenantId      租户（缺省取透传上下文）
+     * @param effectiveDate 判定基准日 ISO yyyy-MM-dd（缺省今天）
+     */
+    @PostMapping("/versions/activate-due")
+    public R<ActivateDueResponse> activateDueVersions(
+            @RequestParam(value = "tenantId", required = false) Long tenantId,
+            @RequestParam(value = "effectiveDate", required = false) String effectiveDate) {
+        Long ctx = tenantId != null ? tenantId : TraceContext.getTenantId();
+        LocalDate date = effectiveDate == null || effectiveDate.isBlank()
+                ? LocalDate.now() : LocalDate.parse(effectiveDate);
+        TraceContext.setTenantId(ctx);
+        try {
+            return R.ok(new ActivateDueResponse(date, versionStateService.activateDue(date)));
+        } finally {
+            TraceContext.setTenantId(null);
+        }
     }
 
     /**

@@ -25,6 +25,12 @@ public class OrgGradeVersion extends BaseEntity {
     /** 职级快照（主数据，JSON） */
     private String snapshot;
 
+    /** 版本状态 DRAFT/ACTIVE/SUPERSEDED（批 11 #23：同批次快照同值） */
+    private String status;
+
+    /** 计划生效日（未到该日期为草稿，不对外可见） */
+    private LocalDate effectiveFrom;
+
     public String getVersionNo() {
         return versionNo;
     }
@@ -55,5 +61,21 @@ public class OrgGradeVersion extends BaseEntity {
 
     public void setSnapshot(String snapshot) {
         this.snapshot = snapshot;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public LocalDate getEffectiveFrom() {
+        return effectiveFrom;
+    }
+
+    public void setEffectiveFrom(LocalDate effectiveFrom) {
+        this.effectiveFrom = effectiveFrom;
     }
 }

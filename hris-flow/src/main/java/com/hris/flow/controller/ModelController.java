@@ -5,11 +5,14 @@ import com.hris.common.security.RequirePerm;
 import com.hris.flow.dto.ModelDtos;
 import com.hris.flow.service.ModelService;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -51,5 +54,38 @@ public class ModelController {
     @GetMapping("/{id}/versions")
     public R<List<ModelDtos.ModelVersionResponse>> versions(@PathVariable("id") Long id) {
         return R.ok(modelService.versions(id));
+    }
+
+    /**
+     * 读取模型 BPMN XML（批 12 #24，bpmn-js 设计器 importXML 用）。
+     * 直接返回 text/xml 原文，前端取 responseText 即可，无需解包 R 信封。
+     */
+    @RequirePerm("flow:model:read")
+    @GetMapping(value = "/{id}/xml", produces = MediaType.APPLICATION_XML_VALUE)
+    public ResponseEntity<String> xml(@PathVariable("id") Long id) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_XML)
+                .body(modelService.xml(id));
+    }
+
+    /**
+     * 校验 BPMN XML（不部署、不落库）：解析 + Flowable 流程校验，返回 {valid, errors[]}。
+     */
+    @RequirePerm("flow:model:write")
+    @PostMapping("/{id}/validate-xml")
+    public R<ModelDtos.ModelValidateResponse> validateXml(@PathVariable("id") Long id,
+                                                          @Valid @RequestBody ModelDtos.ModelXmlRequest req) {
+        return R.ok(modelService.validateXml(id, req.xml()));
+    }
+
+    /**
+     * 保存设计器 XML：同 key 生成新版本（version+1，DRAFT），不自动部署。
+     * 返回新版本模型，前端后续保存/部署须使用返回的 id。
+     */
+    @RequirePerm("flow:model:write")
+    @PutMapping("/{id}/xml")
+    public R<ModelDtos.ModelResponse> saveXml(@PathVariable("id") Long id,
+                                              @Valid @RequestBody ModelDtos.ModelXmlRequest req) {
+        return R.ok(modelService.saveXml(id, req.xml()));
     }
 }

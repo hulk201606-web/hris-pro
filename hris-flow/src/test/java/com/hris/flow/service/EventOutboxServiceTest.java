@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
@@ -25,8 +26,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * EventOutboxService.dispatchPending 单元测试（docs/19 §8.7-1 最小重试）：
- * 审批回调事件重试成功置 SENT / 失败保留 PENDING；MQ 事件跳过不误标。
+ * EventOutboxService.dispatchPending 单元测试（docs/19 §8.7-1；批 12 #25 事件总线）：
+ * 审批回调重试、MQ 发送成功置 SENT / 异常保留 PENDING / 三次后 DEAD / mq-disabled 兼容。
  */
 @ExtendWith(MockitoExtension.class)
 class EventOutboxServiceTest {
@@ -38,9 +39,17 @@ class EventOutboxServiceTest {
 
     private EventOutboxService service;
 
+    /** 缺省 mq-disabled（旧行为）：仅落表不发送。 */
     @BeforeEach
     void setUp() {
-        service = new EventOutboxService(mapper, callbackDispatcher);
+        service = new EventOutboxService(mapper, callbackDispatcher,
+                new OutboxMqPublisher(false, "hris-flow-events", 3, (t, k, b) -> {
+                }));
+    }
+
+    private EventOutboxService serviceWithMq(boolean enabled, OutboxMqSender sender) {
+        return new EventOutboxService(mapper, callbackDispatcher,
+                new OutboxMqPublisher(enabled, "hris-flow-events", 3, sender));
     }
 
     private EventOutbox pendingRow(String topic, Map<String, Object> payload) {
@@ -138,7 +147,76 @@ class EventOutboxServiceTest {
     }
 
     @Nested
-    @DisplayName("MQ 事件：RocketMQ 未接入，跳过不误标")
+    @DisplayName("MQ 事件投递（mq-enabled=true）")
+    class MqEventsPublish {
+
+        private EventOutbox mqRow(int retryCnt) {
+            EventOutbox row = pendingRow(EventOutboxService.TOPIC_INSTANCE_STARTED,
+                    Map.of("bizType", "ATT_LEAVE", "bizKey", "att_leave_1", "bizState", "RUNNING"));
+            row.setRetryCnt(retryCnt);
+            return row;
+        }
+
+        @Test
+        @DisplayName("发送成功 → 置 SENT，消息体含 eventId/type/bizKey/payload/tenantId")
+        void marksSentOnPublishSuccess() {
+            EventOutbox row = mqRow(0);
+            when(mapper.selectList(any())).thenReturn(List.of(row));
+            List<String> sentBodies = new java.util.ArrayList<>();
+            EventOutboxService mqService = serviceWithMq(true, (topic, key, body) -> {
+                assertEquals("hris-flow-events", topic);
+                assertEquals("EVT-1", key);
+                sentBodies.add(body);
+            });
+
+            Map<String, Integer> stats = mqService.dispatchPending(100);
+
+            assertEquals(OutboxState.SENT.name(), row.getState());
+            assertEquals(1, stats.get("sent"));
+            assertEquals(1, sentBodies.size());
+            assertTrue(sentBodies.get(0).contains("\"eventId\":\"EVT-1\""));
+            assertTrue(sentBodies.get(0).contains(EventOutboxService.TOPIC_INSTANCE_STARTED));
+            assertTrue(sentBodies.get(0).contains("\"tenantId\":9"));
+            verify(mapper).updateById(row);
+        }
+
+        @Test
+        @DisplayName("发送异常 → retryCnt+1 保留 PENDING（fail-open 不阻断审批）")
+        void keepsPendingOnPublishFailure() {
+            EventOutbox row = mqRow(0);
+            when(mapper.selectList(any())).thenReturn(List.of(row));
+            EventOutboxService mqService = serviceWithMq(true, (t, k, b) -> {
+                throw new RuntimeException("broker unavailable");
+            });
+
+            Map<String, Integer> stats = mqService.dispatchPending(100);
+
+            assertEquals(OutboxState.PENDING.name(), row.getState());
+            assertEquals(1, row.getRetryCnt());
+            assertEquals(1, stats.get("failed"));
+            assertEquals(0, stats.get("dead"));
+        }
+
+        @Test
+        @DisplayName("第三次仍失败 → 置 DEAD 并计入 dead 统计")
+        void movesToDeadAfterMaxRetry() {
+            EventOutbox row = mqRow(2);
+            when(mapper.selectList(any())).thenReturn(List.of(row));
+            EventOutboxService mqService = serviceWithMq(true, (t, k, b) -> {
+                throw new IllegalStateException("send timeout");
+            });
+
+            Map<String, Integer> stats = mqService.dispatchPending(100);
+
+            assertEquals(OutboxState.DEAD.name(), row.getState());
+            assertEquals(3, row.getRetryCnt());
+            assertEquals(1, stats.get("dead"));
+            assertEquals(0, stats.get("failed"));
+        }
+    }
+
+    @Nested
+    @DisplayName("MQ 事件：mq-disabled 时保持旧行为（仅落表，跳过不误标）")
     class MqEventsSkipped {
 
         @Test
@@ -157,6 +235,7 @@ class EventOutboxServiceTest {
             assertEquals(OutboxState.PENDING.name(), started.getState());
             verify(callbackDispatcher, never()).deliver(any(), any(), any(), anyBoolean(), any(), any(), any());
             verify(mapper, never()).updateById(any(EventOutbox.class));
+            assertEquals(0, stats.get("dead"));
         }
     }
 }
