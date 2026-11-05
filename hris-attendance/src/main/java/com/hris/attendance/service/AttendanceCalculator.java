@@ -23,7 +23,8 @@ import java.util.List;
  * 状态口径集中在此，报表统计（{@link ReportService}）与月结复用同一套常量。</p>
  *
  * <p>优先级：法定节假日 > 假期类型 > 排班班次 > 默认政策（docs/03-03 §4）。
- * MVP 无节假日历表与考勤政策表，节假日分支与宽限分级走常量兜底（见 OPEN-DECISIONS）。</p>
+ * 法定节假日由节假日历（att_holiday）经 {@link HolidayService#isWorkday} 判定，
+ * 在 {@link DailyAttendanceService#compute} 编排层短路；宽限分级走常量兜底。</p>
  */
 @Service
 public class AttendanceCalculator {
@@ -43,6 +44,14 @@ public class AttendanceCalculator {
     public static final String STATUS_ABSENT = "ABSENT";
     /** 出勤状态：请假 */
     public static final String STATUS_LEAVE = "LEAVE";
+    /**
+     * 出勤状态：法定节假日（假期/休）。
+     *
+     * <p>现有枚举（NORMAL/LATE/EARLY/ABSENT/LEAVE）均为「人」的出勤口径，无一是
+     * 「日历放假日」的语义，故按实体注释扩展新增本值：法定节假日无论有无打卡，
+     * 一律不判旷工/迟到/早退，也不生成异常单。</p>
+     */
+    public static final String STATUS_HOLIDAY = "HOLIDAY";
 
     /** 异常类型：迟到 */
     public static final String EXC_LATE = "LATE";
@@ -105,6 +114,9 @@ public class AttendanceCalculator {
             case STATUS_LATE -> types.add(EXC_LATE);
             case STATUS_EARLY -> types.add(EXC_EARLY);
             case STATUS_ABSENT -> types.add(EXC_ABSENT);
+            // 法定节假日不生成任何异常单（即使无打卡，也不产生缺卡/旷工）
+            case STATUS_HOLIDAY -> {
+            }
             default -> {
                 if (daily.getPunchIn() == null || daily.getPunchOut() == null) {
                     types.add(EXC_MISSING_PUNCH);

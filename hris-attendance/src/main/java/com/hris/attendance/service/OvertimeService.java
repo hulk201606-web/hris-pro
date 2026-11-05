@@ -31,7 +31,7 @@ import java.util.Map;
  *
  * <p>状态机：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED。
  * 倍率（工作日 1.5 / 休息日 2.0 / 法定节假日 3.0）不落库，查询时按开始日派生；
- * 因 DDL 无节假日历表，MVP 只区分工作日与周末（见 OPEN-DECISIONS）。</p>
+ * 法定节假日与调休补班由节假日历（att_holiday）经 {@link HolidayService#isWorkday} 判定。</p>
  *
  * <p>加班模式（mode）DDL 无独立列，MVP 以 reason 前缀 {@code [MODE:xxx]} 承载并在出参解析回 mode，
  * 保证信息不丢失且可无损迁移到二期的新列。</p>
@@ -41,6 +41,13 @@ public class OvertimeService {
 
     /** 流程业务类型 */
     public static final String BIZ_TYPE_OVERTIME = "ATT_OT";
+
+    /** 日期类型：法定节假日（倍率 3.0） */
+    public static final String DAY_TYPE_HOLIDAY = "HOLIDAY";
+    /** 日期类型：休息日（倍率 2.0） */
+    public static final String DAY_TYPE_WEEKEND = "WEEKEND";
+    /** 日期类型：工作日（倍率 1.5，含调休补班日） */
+    public static final String DAY_TYPE_WEEKDAY = "WEEKDAY";
 
     /** 状态：审批中 */
     public static final String STATUS_PROCESSING = "PROCESSING";
@@ -58,10 +65,13 @@ public class OvertimeService {
 
     private final OvertimeRequestMapper overtimeMapper;
     private final FlowIntegration flowIntegration;
+    private final HolidayService holidayService;
 
-    public OvertimeService(OvertimeRequestMapper overtimeMapper, FlowIntegration flowIntegration) {
+    public OvertimeService(OvertimeRequestMapper overtimeMapper, FlowIntegration flowIntegration,
+                           HolidayService holidayService) {
         this.overtimeMapper = overtimeMapper;
         this.flowIntegration = flowIntegration;
+        this.holidayService = holidayService;
     }
 
     /** 提交加班单：时长由 start/end 换算后落单并发起审批。 */
@@ -228,13 +238,27 @@ public class OvertimeService {
         return origin == null || origin.isBlank() ? remark : origin + "；" + remark;
     }
 
+    /** 日期类型判定：节假日历配置优先于星期推断；调休补班日按工作日口径。 */
     private String dayType(LocalDate date) {
+        String source = holidayService.isWorkday(date).source();
+        if (HolidayService.TYPE_HOLIDAY.equals(source)) {
+            return DAY_TYPE_HOLIDAY;
+        }
+        if (HolidayService.TYPE_WORKDAY.equals(source)) {
+            return DAY_TYPE_WEEKDAY;
+        }
         DayOfWeek dow = date.getDayOfWeek();
-        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY ? "WEEKEND" : "WEEKDAY";
+        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY
+                ? DAY_TYPE_WEEKEND : DAY_TYPE_WEEKDAY;
     }
 
+    /** 倍率：法定节假日 3.0 / 休息日 2.0 / 工作日 1.5。 */
     private BigDecimal rate(String dayTypeValue) {
-        return "WEEKEND".equals(dayTypeValue) ? new BigDecimal("2.00") : new BigDecimal("1.50");
+        return switch (dayTypeValue) {
+            case DAY_TYPE_HOLIDAY -> new BigDecimal("3.00");
+            case DAY_TYPE_WEEKEND -> new BigDecimal("2.00");
+            default -> new BigDecimal("1.50");
+        };
     }
 
     private OvertimeResponse toResponse(OvertimeRequest ot) {

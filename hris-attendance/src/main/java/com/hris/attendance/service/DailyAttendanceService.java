@@ -8,10 +8,14 @@ import com.hris.attendance.dto.DailyDtos.DailyComputeRequest;
 import com.hris.attendance.dto.DailyDtos.DailyComputeResult;
 import com.hris.attendance.dto.PageResult;
 import com.hris.attendance.entity.DailyAttendance;
+import com.hris.attendance.entity.MonthlyClosing;
+import com.hris.attendance.entity.PayrollCycle;
 import com.hris.attendance.entity.PunchRecord;
 import com.hris.attendance.entity.Shift;
 import com.hris.attendance.entity.ShiftAssignment;
 import com.hris.attendance.mapper.DailyAttendanceMapper;
+import com.hris.attendance.mapper.MonthlyClosingMapper;
+import com.hris.attendance.mapper.PayrollCycleMapper;
 import com.hris.attendance.mapper.ShiftAssignmentMapper;
 import com.hris.attendance.util.TimeAmountUtil;
 import com.hris.common.exception.BizException;
@@ -44,6 +48,9 @@ public class DailyAttendanceService {
     private final LeaveQueryService leaveQueryService;
     private final OvertimeService overtimeService;
     private final AttendanceCalculator calculator;
+    private final HolidayService holidayService;
+    private final PayrollCycleMapper cycleMapper;
+    private final MonthlyClosingMapper closingMapper;
 
     public DailyAttendanceService(DailyAttendanceMapper dailyMapper,
                                   ShiftAssignmentMapper assignmentMapper,
@@ -51,7 +58,10 @@ public class DailyAttendanceService {
                                   ShiftService shiftService,
                                   LeaveQueryService leaveQueryService,
                                   OvertimeService overtimeService,
-                                  AttendanceCalculator calculator) {
+                                  AttendanceCalculator calculator,
+                                  HolidayService holidayService,
+                                  PayrollCycleMapper cycleMapper,
+                                  MonthlyClosingMapper closingMapper) {
         this.dailyMapper = dailyMapper;
         this.assignmentMapper = assignmentMapper;
         this.punchService = punchService;
@@ -59,12 +69,16 @@ public class DailyAttendanceService {
         this.leaveQueryService = leaveQueryService;
         this.overtimeService = overtimeService;
         this.calculator = calculator;
+        this.holidayService = holidayService;
+        this.cycleMapper = cycleMapper;
+        this.closingMapper = closingMapper;
     }
 
     /** 触发日考勤计算。empIds 为空则对该日有排班的全部员工重算。 */
     @Transactional(rollbackFor = Exception.class)
     public DailyComputeResult compute(DailyComputeRequest req) {
         LocalDate workDate = req.workDate();
+        ensurePayrollNotClosed(workDate);
         List<Long> empIds = req.empIds() == null || req.empIds().isEmpty()
                 ? resolveAssignedEmpIds(workDate)
                 : req.empIds();
@@ -91,9 +105,15 @@ public class DailyAttendanceService {
                 case AttendanceCalculator.STATUS_EARLY -> early++;
                 case AttendanceCalculator.STATUS_ABSENT -> absent++;
                 case AttendanceCalculator.STATUS_LEAVE -> leave++;
+                // 法定节假日不属于任何出勤口径，不计入状态分布（仍计入 employeeCount）
+                case AttendanceCalculator.STATUS_HOLIDAY -> {
+                }
                 default -> normal++;
             }
-            newExceptions += calculator.raiseExceptions(result.daily(), result.shift());
+            // 法定节假日不生成任何异常单（无打卡也不产生缺卡/旷工），编排层直接跳过
+            if (!AttendanceCalculator.STATUS_HOLIDAY.equals(status)) {
+                newExceptions += calculator.raiseExceptions(result.daily(), result.shift());
+            }
         }
         return new DailyComputeResult(workDate, computed, normal, late, early, absent, leave,
                 newExceptions);
@@ -148,8 +168,9 @@ public class DailyAttendanceService {
     /** 单员工单日计算，返回落库后的日考勤结果；休息日（无排班且无打卡）返回 null。 */
     private Computed computeOne(Long empId, LocalDate workDate) {
         List<PunchRecord> punches = punchService.findByDate(empId, workDate);
+        boolean legalHoliday = isLegalHoliday(workDate);
         Shift shift = resolveShift(empId, workDate);
-        if (shift == null && punches.isEmpty()) {
+        if (!legalHoliday && shift == null && punches.isEmpty()) {
             return null;
         }
         LocalDateTime punchIn = punches.stream()
@@ -165,9 +186,37 @@ public class DailyAttendanceService {
 
         BigDecimal leaveHours = leaveQueryService.leaveHoursOn(empId, workDate);
         BigDecimal overtimeHours = overtimeService.overtimeHoursOn(empId, workDate);
-        String status = calculator.resolveStatus(shift, punchIn, punchOut, leaveHours);
+        // 规格优先级：法定节假日 > 假期类型 > 排班班次 > 默认政策。
+        // 节假日无论有无打卡一律置为假期态，跳过迟到/早退/旷工判定；
+        // 有打卡的加班记法仍由既有 overtimeHoursOn 链路决定，不在此破坏。
+        String status = legalHoliday ? AttendanceCalculator.STATUS_HOLIDAY
+                : calculator.resolveStatus(shift, punchIn, punchOut, leaveHours);
         return new Computed(upsert(empId, workDate, punchIn, punchOut, leaveHours, overtimeHours,
                 status), shift);
+    }
+
+    /** 法定节假日判定：按租户查 att_holiday，日历配置优先于星期推断。 */
+    private boolean isLegalHoliday(LocalDate workDate) {
+        return HolidayService.TYPE_HOLIDAY.equals(holidayService.isWorkday(workDate).source());
+    }
+
+    /**
+     * 月结守卫（§8.5-5）：覆盖该日期的薪酬取数周期若已完成月结（DONE），
+     * 历史结果不可重算，差异一律走调整通道。
+     */
+    private void ensurePayrollNotClosed(LocalDate workDate) {
+        List<PayrollCycle> cycles = cycleMapper.selectList(new LambdaQueryWrapper<PayrollCycle>()
+                .le(PayrollCycle::getStartDate, workDate)
+                .ge(PayrollCycle::getEndDate, workDate));
+        for (PayrollCycle cycle : cycles) {
+            MonthlyClosing closing = closingMapper.selectOne(
+                    new LambdaQueryWrapper<MonthlyClosing>()
+                            .eq(MonthlyClosing::getPeriodCode, cycle.getPeriodCode())
+                            .last("LIMIT 1"));
+            if (closing != null && MonthlyClosingService.STATUS_DONE.equals(closing.getStatus())) {
+                throw new BizException(ErrorCode.ATT_ERROR, "月结已锁定，请走调整通道");
+            }
+        }
     }
 
     /** 落库：存在则更新，不存在则插入。 */

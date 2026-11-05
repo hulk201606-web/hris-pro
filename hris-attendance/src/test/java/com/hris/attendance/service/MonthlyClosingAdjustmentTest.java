@@ -114,6 +114,20 @@ class MonthlyClosingAdjustmentTest {
         }
 
         @Test
+        @DisplayName("批次未完成（非 DONE）→ 拒绝追加调整项（B3-② 守卫）")
+        void rejectsAdjustmentWhenClosingNotDone() {
+            when(closingMapper.selectById(900001L)).thenReturn(stubClosing(
+                    MonthlyClosingService.STATUS_RUNNING));
+
+            BizException e = assertThrows(BizException.class,
+                    () -> service.addAdjustment(new AdjustmentCreateRequest(
+                            200001L, 900001L, "retro", new BigDecimal("1"), "补发")));
+
+            assertEquals(ErrorCode.ATT_ERROR.getCode(), e.getCode());
+            verify(adjustmentMapper, never()).insert(any(ClosingAdjustment.class));
+        }
+
+        @Test
         @DisplayName("按批次查询调整项，closingId 为 null 时查全部")
         void queriesAdjustments() {
             when(adjustmentMapper.selectList(any())).thenReturn(List.of());

@@ -138,6 +138,9 @@ public class MonthlyClosingService {
                 case "EARLY" -> early++;
                 case "ABSENT" -> absent++;
                 case "LEAVE" -> leave++;
+                // 法定节假日不属于任何出勤口径，不计入状态分布（加班/请假时长照常累计）
+                case AttendanceCalculator.STATUS_HOLIDAY -> {
+                }
                 default -> normal++;
             }
             overtimeHours = overtimeHours.add(TimeAmountUtil.amount(d.getOvertimeHours()));
@@ -164,12 +167,16 @@ public class MonthlyClosingService {
         return adjustmentMapper.selectList(qw).stream().map(this::toResponse).toList();
     }
 
-    /** 新增调整项：月结锁账后唯一可影响下期的通道。 */
+    /** 新增调整项：月结锁账后唯一可影响下期的通道，仅 DONE 批次允许追加。 */
     @Transactional(rollbackFor = Exception.class)
     public AdjustmentResponse addAdjustment(AdjustmentCreateRequest req) {
         MonthlyClosing closing = closingMapper.selectById(req.closingId());
         if (closing == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "月结批次不存在");
+        }
+        if (!STATUS_DONE.equals(closing.getStatus())) {
+            throw new BizException(ErrorCode.ATT_ERROR,
+                    "月结批次未完成（当前 " + closing.getStatus() + "），仅 DONE 批次允许追加调整项");
         }
         ClosingAdjustment adj = new ClosingAdjustment();
         adj.setId(IdWorker.getId());
