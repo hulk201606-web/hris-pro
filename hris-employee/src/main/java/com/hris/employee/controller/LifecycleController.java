@@ -49,7 +49,7 @@ public class LifecycleController {
 
     /**
      * 发起转正办理（权限点 emp:lifecycle:write）：试用→正式的状态流转入口，创建
-     * EMP_REGULARIZE 生命周期单，转正生效后由状态机落正式在职。
+     * EMP_REGULAR 生命周期单，转正生效后由状态机落正式在职。
      */
     @RequirePerm("emp:lifecycle:write")
     @PostMapping("/regularizations")

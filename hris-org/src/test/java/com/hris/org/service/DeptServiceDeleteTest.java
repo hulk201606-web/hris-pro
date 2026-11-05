@@ -9,6 +9,7 @@ import com.hris.org.entity.OrgDept;
 import com.hris.org.entity.OrgDeptHistory;
 import com.hris.org.entity.OrgHeadcount;
 import com.hris.org.entity.OrgHcOccupancy;
+import com.hris.org.mapper.OrgAdjustmentSnapshotMapper;
 import com.hris.org.mapper.OrgDeptHistoryMapper;
 import com.hris.org.mapper.OrgDeptMapper;
 import com.hris.org.mapper.OrgHeadcountMapper;
@@ -35,8 +36,8 @@ import static org.mockito.Mockito.when;
  * DeptService 删除守卫 + 快照过滤 + move 单元测试（ORG-F-018 深化 / §10.5-B7 / ORG-F-002 深化）。
  *
  * <p>删除是组织数据的高危操作，四类守卫（子部门/在职员工/占用流水/服务异常）任何一环
- * 失守都会造成组织树断链或编制悬空；快照查询若不过滤 ORG_ADJUST_REQUEST 申请单行，
- * 用户会看到「半成品的调整单」冒充历史版本。</p>
+ * 失守都会造成组织树断链或编制悬空；B-7 根治后申请单 JSON 落 org_adjustment_snapshot
+ * 独立表，org_dept_history 回归纯历史语义，快照查询不再需要过滤申请单行。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class DeptServiceDeleteTest {
@@ -45,6 +46,8 @@ class DeptServiceDeleteTest {
     private OrgDeptMapper deptMapper;
     @Mock
     private OrgDeptHistoryMapper deptHistoryMapper;
+    @Mock
+    private OrgAdjustmentSnapshotMapper adjustmentSnapshotMapper;
     @Mock
     private FlowIntegration flowIntegration;
     @Mock
@@ -58,8 +61,8 @@ class DeptServiceDeleteTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration,
-                employeeClient, headcountMapper, occupancyMapper);
+        service = new DeptService(deptMapper, deptHistoryMapper, adjustmentSnapshotMapper,
+                flowIntegration, employeeClient, headcountMapper, occupancyMapper);
     }
 
     private OrgDept dept(Long id, Long parentId, String path) {
@@ -229,11 +232,11 @@ class DeptServiceDeleteTest {
     }
 
     @Nested
-    @DisplayName("snapshot：ORG_ADJUST_REQUEST 申请单行过滤（§10.5-B7）")
+    @DisplayName("snapshot：历史快照查询（B-7 根治后申请单落独立表，查询无需过滤）")
     class SnapshotFilter {
 
         @Test
-        @DisplayName("历史表无真实快照（申请单行已被 kind 过滤）→ 用现行部门现拼快照兜底")
+        @DisplayName("历史表无真实快照（申请单行已在独立表，不再混入）→ 用现行部门现拼快照兜底")
         void fallsBackToCurrentDeptWhenOnlyRequestRows() {
             when(deptHistoryMapper.selectOne(any())).thenReturn(null);
             when(deptMapper.selectById(1L)).thenReturn(dept(1L, 0L, "1"));
@@ -245,7 +248,7 @@ class DeptServiceDeleteTest {
         }
 
         @Test
-        @DisplayName("存在真实快照行 → 直接返回该快照（notLike 过滤在 SQL 侧排除申请单行）")
+        @DisplayName("存在真实快照行 → 直接返回该快照（申请单 JSON 已由独立表隔离）")
         void returnsRealSnapshotRow() {
             OrgDeptHistory row = new OrgDeptHistory();
             row.setDeptId(1L);

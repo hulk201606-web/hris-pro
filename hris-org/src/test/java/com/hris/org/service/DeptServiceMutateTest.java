@@ -7,6 +7,7 @@ import com.hris.org.dto.AdjustRequestResponse;
 import com.hris.org.dto.DeptRequest;
 import com.hris.org.entity.OrgDept;
 import com.hris.org.entity.OrgDeptHistory;
+import com.hris.org.mapper.OrgAdjustmentSnapshotMapper;
 import com.hris.org.mapper.OrgDeptHistoryMapper;
 import com.hris.org.mapper.OrgDeptMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,13 +45,16 @@ class DeptServiceMutateTest {
     @Mock
     private OrgDeptHistoryMapper deptHistoryMapper;
     @Mock
+    private OrgAdjustmentSnapshotMapper adjustmentSnapshotMapper;
+    @Mock
     private FlowIntegration flowIntegration;
 
     private DeptService service;
 
     @BeforeEach
     void setUp() {
-        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration, null, null, null);
+        service = new DeptService(deptMapper, deptHistoryMapper, adjustmentSnapshotMapper,
+                flowIntegration, null, null, null);
     }
 
     private OrgDept parent(long id, int depth) {
@@ -201,7 +205,9 @@ class DeptServiceMutateTest {
 
             assertEquals("PENDING", resp.status());
             assertNotNull(resp.bizKey());
-            verify(deptHistoryMapper).insert(any(OrgDeptHistory.class));
+            // B-7 根治：申请单落独立表，不写 org_dept_history
+            verify(adjustmentSnapshotMapper).insert(any(com.hris.org.entity.OrgAdjustmentSnapshot.class));
+            verify(deptHistoryMapper, never()).insert(any(OrgDeptHistory.class));
         }
     }
 }

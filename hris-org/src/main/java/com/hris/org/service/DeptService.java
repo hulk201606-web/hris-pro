@@ -12,10 +12,12 @@ import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.org.dto.DeptMoveRequest;
 import com.hris.org.dto.DeptNode;
 import com.hris.org.dto.DeptRequest;
+import com.hris.org.entity.OrgAdjustmentSnapshot;
 import com.hris.org.entity.OrgDept;
 import com.hris.org.entity.OrgDeptHistory;
 import com.hris.org.entity.OrgHeadcount;
 import com.hris.org.entity.OrgHcOccupancy;
+import com.hris.org.mapper.OrgAdjustmentSnapshotMapper;
 import com.hris.org.mapper.OrgDeptHistoryMapper;
 import com.hris.org.mapper.OrgDeptMapper;
 import com.hris.org.mapper.OrgHeadcountMapper;
@@ -43,16 +45,19 @@ public class DeptService {
 
     private final OrgDeptMapper deptMapper;
     private final OrgDeptHistoryMapper deptHistoryMapper;
+    private final OrgAdjustmentSnapshotMapper adjustmentSnapshotMapper;
     private final FlowIntegration flowIntegration;
     private final EmployeeClient employeeClient;
     private final OrgHeadcountMapper headcountMapper;
     private final OrgHcOccupancyMapper occupancyMapper;
 
     public DeptService(OrgDeptMapper deptMapper, OrgDeptHistoryMapper deptHistoryMapper,
+                       OrgAdjustmentSnapshotMapper adjustmentSnapshotMapper,
                        FlowIntegration flowIntegration, EmployeeClient employeeClient,
                        OrgHeadcountMapper headcountMapper, OrgHcOccupancyMapper occupancyMapper) {
         this.deptMapper = deptMapper;
         this.deptHistoryMapper = deptHistoryMapper;
+        this.adjustmentSnapshotMapper = adjustmentSnapshotMapper;
         this.flowIntegration = flowIntegration;
         this.employeeClient = employeeClient;
         this.headcountMapper = headcountMapper;
@@ -147,13 +152,12 @@ public class DeptService {
         return toNode(dept);
     }
 
-    /** 历史快照查询（at 为空取最新）。仅取真实部门快照，排除 kind=ORG_ADJUST_REQUEST 的申请单行（§10.5-B7 污染修复）。 */
+    /** 历史快照查询（at 为空取最新）。org_dept_history 已回归纯历史语义（B-7 根治后申请单落独立表），无需过滤。 */
     public Map<String, Object> snapshot(Long id, LocalDate at) {
         LocalDate date = at == null ? LocalDate.now() : at;
         OrgDeptHistory history = deptHistoryMapper.selectOne(new LambdaQueryWrapper<OrgDeptHistory>()
                 .eq(OrgDeptHistory::getDeptId, id)
                 .le(OrgDeptHistory::getSnapshotDate, date)
-                .notLike(OrgDeptHistory::getSnapshot, "ORG_ADJUST_REQUEST")
                 .orderByDesc(OrgDeptHistory::getSnapshotDate)
                 .last("LIMIT 1"));
         if (history != null) {
@@ -172,9 +176,14 @@ public class DeptService {
         return snap;
     }
 
-    /** 组织调整申请：落单 + 预留 flow 调用（MVP 降级不阻断）。 */    @Transactional(rollbackFor = Exception.class)
+    /**
+     * 组织调整申请：落单 + 预留 flow 调用（MVP 降级不阻断）。
+     * 申请单落独立表 org_adjustment_snapshot（B-7 根治，OPEN-DECISIONS 登记），不写 org_dept_history。
+     */
+    @Transactional(rollbackFor = Exception.class)
     public AdjustRequestResponse adjust(AdjustRequestCreate req) {
-        String bizKey = "ORG_ADJUST:" + IdWorker.getId();
+        long adjustmentId = IdWorker.getId();
+        String bizKey = "ORG_ADJUST:" + adjustmentId;
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("action", req.action());
         payload.put("deptId", req.deptId());
@@ -197,12 +206,11 @@ public class DeptService {
         snapshot.put("status", "PENDING");
         snapshot.put("flowInstanceId", null);
 
-        OrgDeptHistory record = new OrgDeptHistory();
+        OrgAdjustmentSnapshot record = new OrgAdjustmentSnapshot();
+        record.setAdjustmentId(adjustmentId);
         record.setDeptId(req.deptId() == null ? 0L : req.deptId());
-        record.setSnapshotDate(req.payload().effectiveFrom() == null
-                ? LocalDate.now() : req.payload().effectiveFrom());
-        record.setSnapshot(JsonUtil.toJson(snapshot));
-        deptHistoryMapper.insert(record);
+        record.setSnapshotJson(JsonUtil.toJson(snapshot));
+        adjustmentSnapshotMapper.insert(record);
 
         Map<String, Object> flowReq = new LinkedHashMap<>();
         flowReq.put("bizType", "ORG_ADJUST");
@@ -215,20 +223,21 @@ public class DeptService {
 
     /**
      * 审批结果回调（flow → org，docs/19 §8.7-1）：幂等更新 ORG_ADJUST 申请单状态。
-     * 申请单以 org_dept_history 快照承载（kind=ORG_ADJUST_REQUEST），非 PENDING 视为重复回调
-     * 直接返回 changed=false；审批通过且 payload 含结构化变更动作（CREATE/UPDATE + name）时
-     * 应用变更后一并落快照。回调调用方须先在 TraceContext 还原租户（内部端点负责）。
+     * 申请单以 org_adjustment_snapshot 独立表承载（B-7 根治），按 bizKey 解析 adjustment_id 定位，
+     * 非 PENDING 视为重复回调直接返回 changed=false；审批通过且 payload 含结构化变更动作
+     * （CREATE/UPDATE + name）时应用变更。回调调用方须先在 TraceContext 还原租户（内部端点负责）。
      */
     @Transactional(rollbackFor = Exception.class)
     public ApprovalCallbackResponse handleAdjustCallback(String bizKey, boolean approved, String comment) {
-        OrgDeptHistory record = deptHistoryMapper.selectOne(new LambdaQueryWrapper<OrgDeptHistory>()
-                .like(OrgDeptHistory::getSnapshot, "\"bizKey\":\"" + bizKey + "\"")
-                .orderByDesc(OrgDeptHistory::getId)
-                .last("LIMIT 1"));
+        OrgAdjustmentSnapshot record = adjustmentSnapshotMapper.selectOne(
+                new LambdaQueryWrapper<OrgAdjustmentSnapshot>()
+                        .eq(OrgAdjustmentSnapshot::getAdjustmentId, parseAdjustmentId(bizKey))
+                        .orderByDesc(OrgAdjustmentSnapshot::getId)
+                        .last("LIMIT 1"));
         if (record == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
         }
-        Map<String, Object> snap = JsonUtil.toMap(record.getSnapshot());
+        Map<String, Object> snap = JsonUtil.toMap(record.getSnapshotJson());
         if (!"ORG_ADJUST_REQUEST".equals(snap.get("kind"))) {
             throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
         }
@@ -245,9 +254,21 @@ public class DeptService {
         if (comment != null && !comment.isBlank()) {
             snap.put("approvalComment", comment);
         }
-        record.setSnapshot(JsonUtil.toJson(snap));
-        deptHistoryMapper.updateById(record);
+        record.setSnapshotJson(JsonUtil.toJson(snap));
+        adjustmentSnapshotMapper.updateById(record);
         return new ApprovalCallbackResponse(true, newStatus);
+    }
+
+    /** 从业务键解析调整申请 ID（格式 ORG_ADJUST:{adjustment_id}），非法格式视为申请不存在。 */
+    private Long parseAdjustmentId(String bizKey) {
+        if (bizKey == null || !bizKey.startsWith("ORG_ADJUST:")) {
+            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
+        }
+        try {
+            return Long.parseLong(bizKey.substring("ORG_ADJUST:".length()));
+        } catch (NumberFormatException e) {
+            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
+        }
     }
 
     /**

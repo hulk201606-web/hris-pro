@@ -1,6 +1,8 @@
 package com.hris.employee.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.hris.common.crypto.CipherTypeHandler;
 import com.hris.common.entity.BaseEntity;
 
 import java.time.LocalDate;
@@ -8,11 +10,12 @@ import java.time.LocalDate;
 /**
  * 员工主档（emp_employee）。证件号/手机号为敏感字段（docs/12 §2.1 加密列 + 掩码影子列）。
  *
- * <p>本增量不接 ShardingSphere 加密插件：certNoCipher / mobileCipher 先按明文落库（与 auth 域 mfa_secret 同策略），
- * 接入加密插件后由逻辑列 cert_no / mobile 承接，物理列 cert_no_cipher / mobile_cipher 存 AES-256-GCM 密文；
- * certNoMask / mobileMask 始终存脱敏值用于列表展示与检索。</p>
+ * <p>ADR-007 敏感列加密：certNoCipher / mobileCipher 经 CipherTypeHandler 在 JDBC 边界
+ * AES-256-GCM 加密落库（enc1: 前缀），读侧双读兼容存量明文；实体字段保持明文语义，
+ * 业务代码零改动。certNoHash（SHA-256）承担等值查重，certNoMask / mobileMask 始终存
+ * 脱敏值用于列表展示与检索。</p>
  */
-@TableName("emp_employee")
+@TableName(value = "emp_employee", autoResultMap = true)
 public class Employee extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -29,7 +32,8 @@ public class Employee extends BaseEntity {
     /** 证件类型（默认 ID_CARD） */
     private String certType;
 
-    /** 证件号密文列（MVP 明文占位，逻辑列 cert_no） */
+    /** 证件号密文列（JDBC 边界加密，实体侧明文语义，逻辑列 cert_no） */
+    @TableField(typeHandler = CipherTypeHandler.EmpCertNo.class)
     private String certNoCipher;
 
     /** 证件号哈希（SHA-256 小写 hex，等值查重用，不随加密改造失效） */
@@ -38,7 +42,8 @@ public class Employee extends BaseEntity {
     /** 证件号掩码（保留首尾） */
     private String certNoMask;
 
-    /** 手机号密文列（MVP 明文占位，逻辑列 mobile） */
+    /** 手机号密文列（JDBC 边界加密，实体侧明文语义，逻辑列 mobile） */
+    @TableField(typeHandler = CipherTypeHandler.EmpMobile.class)
     private String mobileCipher;
 
     /** 手机号掩码 */

@@ -48,7 +48,7 @@ class DeptServiceCrudTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration, null, null, null);
+        service = new DeptService(deptMapper, deptHistoryMapper, null, flowIntegration, null, null, null);
     }
 
     private OrgDept parent(long id, int depth) {

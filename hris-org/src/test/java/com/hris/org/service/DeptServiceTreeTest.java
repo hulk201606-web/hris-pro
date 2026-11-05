@@ -35,7 +35,7 @@ class DeptServiceTreeTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeptService(deptMapper, null, null, null, null, null);
+        service = new DeptService(deptMapper, null, null, null, null, null, null);
     }
 
     private OrgDept dept(Long id, Long parentId, String path) {
