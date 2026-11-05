@@ -11,6 +11,8 @@ import com.hris.flow.service.EventOutboxService;
 import com.hris.flow.service.DelegateService;
 import com.hris.flow.service.InstanceService;
 import com.hris.flow.service.TaskActionService;
+import com.hris.flow.service.TaskOpinionService;
+import com.hris.flow.service.TaskStrategyService;
 import org.flowable.common.engine.impl.identity.Authentication;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
@@ -91,7 +93,8 @@ class TaskActionServiceRejectResubmitEngineTest {
         actionService = new TaskActionService(taskService, runtimeService,
                 engine.getHistoryService(), taskActionMapper, bizRelationService,
                 mock(EventOutboxService.class), mock(InstanceService.class),
-                mock(ApprovalCallbackDispatcher.class), mock(DelegateService.class));
+                mock(ApprovalCallbackDispatcher.class), mock(DelegateService.class),
+                mock(TaskStrategyService.class), mock(TaskOpinionService.class));
     }
 
     @AfterAll

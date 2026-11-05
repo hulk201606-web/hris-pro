@@ -3,7 +3,7 @@ package com.hris.flow.dto;
 import java.util.List;
 
 /**
- * 任务操作请求（同意/驳回/转办/加签，FLW-F-007）。
+ * 任务操作请求（同意/驳回/转办/加签，FLW-F-007；FLW-F-020 增补结构化意见标签）。
  * 撤回无请求体（发起人身份由当前登录用户判定）。
  */
 public record TaskActionRequest(
@@ -17,11 +17,21 @@ public record TaskActionRequest(
          * true=终止（等价作废，删除实例并按 REJECTED 终态回调业务域） */
         Boolean terminate,
         /** 动态表单值（键=字段名，随审批动作落 flow_ext_task_action.form_values） */
-        java.util.Map<String, Object> formValues) {
+        java.util.Map<String, Object> formValues,
+        /** 结构化意见标签（RECHECK_DATA/NEED_MORE_INFO/COMPLIANT/OTHER，随动作落
+         * flow_ext_task_opinion_tag；为空表示不结构化打标） */
+        String tag) {
 
-    /** 便捷构造：不带动态表单值（既有调用与测试兼容）。 */
+    /** 便捷构造：不带动态表单值与意见标签（既有调用与测试兼容）。 */
     public TaskActionRequest(String comment, java.util.List<Long> attachments,
                              Long targetUserId, Boolean terminate) {
-        this(comment, attachments, targetUserId, terminate, null);
+        this(comment, attachments, targetUserId, terminate, null, null);
+    }
+
+    /** 便捷构造：不带意见标签（批 1 动态表单调用兼容）。 */
+    public TaskActionRequest(String comment, java.util.List<Long> attachments,
+                             Long targetUserId, Boolean terminate,
+                             java.util.Map<String, Object> formValues) {
+        this(comment, attachments, targetUserId, terminate, formValues, null);
     }
 }

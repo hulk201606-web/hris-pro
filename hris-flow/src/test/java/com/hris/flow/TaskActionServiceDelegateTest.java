@@ -70,7 +70,7 @@ class TaskActionServiceDelegateTest {
     void setUp() {
         service = new TaskActionService(taskService, runtimeService, historyService, taskActionMapper,
                 bizRelationService, eventOutboxService, instanceService, callbackDispatcher,
-                delegateService);
+                delegateService, mock(TaskStrategyService.class), mock(TaskOpinionService.class));
         TraceContext.setTenantId(100001L);
         TraceContext.setUserId(7L);
     }

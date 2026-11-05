@@ -9,6 +9,7 @@ import com.hris.flow.entity.TaskAction;
 import com.hris.flow.enums.InstanceStatus;
 import com.hris.flow.enums.TaskActionType;
 import com.hris.flow.mapper.TaskActionMapper;
+import com.hris.flow.strategy.StrategyOutcome;
 import com.hris.flow.util.JsonUtil;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 任务操作服务（FLW-F-007，docs/04 §5）：同意/驳回/转办/加签/撤回。
@@ -39,12 +41,15 @@ public class TaskActionService {
     private final InstanceService instanceService;
     private final ApprovalCallbackDispatcher callbackDispatcher;
     private final DelegateService delegateService;
+    private final TaskStrategyService strategyService;
+    private final TaskOpinionService opinionService;
 
     public TaskActionService(TaskService taskService, RuntimeService runtimeService,
                              HistoryService historyService, TaskActionMapper taskActionMapper,
                              BizRelationService bizRelationService, EventOutboxService eventOutboxService,
                              InstanceService instanceService, ApprovalCallbackDispatcher callbackDispatcher,
-                             DelegateService delegateService) {
+                             DelegateService delegateService, TaskStrategyService strategyService,
+                             TaskOpinionService opinionService) {
         this.taskService = taskService;
         this.runtimeService = runtimeService;
         this.historyService = historyService;
@@ -54,16 +59,32 @@ public class TaskActionService {
         this.instanceService = instanceService;
         this.callbackDispatcher = callbackDispatcher;
         this.delegateService = delegateService;
+        this.strategyService = strategyService;
+        this.opinionService = opinionService;
     }
 
-    /** 同意：完成任务，若为末节点则结束实例并回调业务域。 */
+    /**
+     * 同意：完成任务，若为末节点则结束实例并回调业务域。
+     *
+     * <p>会签策略（FLW-F-008）：节点显式配置 {@code strategy} 时先评估计票——
+     * 达标则提前通过并关停剩余会签任务（由 {@link TaskStrategyService} 完成），
+     * 判定为「阈值不可达」时按驳回语义退回发起人；未配置策略的节点行为不变。</p>
+     */
     @Transactional(rollbackFor = Exception.class)
     public void approve(String taskId, TaskActionRequest req) {
         Task task = requireTaskAndCheck(taskId);
+        Optional<StrategyOutcome> outcome = strategyService.evaluate(task, true);
+        if (outcome.isPresent() && outcome.get().rejected()) {
+            returnToInitiator(taskId, task, req, "会签未达标，驳回退回发起人重提（" + outcome.get().message() + "）");
+            return;
+        }
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
         record(taskId, TaskActionType.APPROVE, operator, req, resolveDelegateFrom(task, operator));
         taskService.complete(taskId);
+        if (req != null) {
+            opinionService.recordForAction(taskId, req.tag(), req.comment());
+        }
         eventOutboxService.publish(EventOutboxService.TOPIC_TASK_COMPLETED, tenantId,
                 task.getProcessInstanceId(),
                 Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(), "outcome", "APPROVED"));
@@ -82,24 +103,33 @@ public class TaskActionService {
      *       退回目标取实例历史中最早执行的 userTask（兼容 start 后经网关路由的模板，如 ATT_LEAVE）。</li>
      *   <li>terminate=true：终止语义（等价作废），删除实例并按 REJECTED 终态回调业务域。</li>
      * </ul>
+     *
+     * <p>会签策略（FLW-F-008）：节点配置 {@code VETO} 时任一否决即整体终止（无需再传 terminate）；
+     * 配置 {@code PERCENT} 且阈值已不可达时同样终止。</p>
      */
     @Transactional(rollbackFor = Exception.class)
     public void reject(String taskId, TaskActionRequest req) {
-        if (req != null && Boolean.TRUE.equals(req.terminate())) {
-            terminate(taskId, req);
+        Task task = requireTaskAndCheck(taskId);
+        boolean strategyReject = strategyService.evaluate(task, false)
+                .map(StrategyOutcome::rejected).orElse(false);
+        if (req != null) {
+            opinionService.recordForAction(taskId, req.tag(), req.comment());
+        }
+        if (strategyReject || (req != null && Boolean.TRUE.equals(req.terminate()))) {
+            terminate(taskId, task, req, strategyReject);
         } else {
-            returnToInitiator(taskId, req);
+            returnToInitiator(taskId, task, req, "驳回退回发起人重提");
         }
     }
 
     /** 终止：删除实例（等价作废），以 approved=false / REJECTED 回调业务域。 */
-    private void terminate(String taskId, TaskActionRequest req) {
-        Task task = requireTaskAndCheck(taskId);
+    private void terminate(String taskId, Task task, TaskActionRequest req, boolean strategyReject) {
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
-        record(taskId, TaskActionType.REJECT, operator, req, resolveDelegateFrom(task, operator));
+        TaskActionRequest effective = strategyReject ? withNote(req, "一票否决（会签策略），流程终止") : req;
+        record(taskId, TaskActionType.REJECT, operator, effective, resolveDelegateFrom(task, operator));
         runtimeService.deleteProcessInstance(task.getProcessInstanceId(),
-                "REJECTED:TERMINATED:" + (req == null || req.comment() == null ? "" : req.comment()));
+                "REJECTED:TERMINATED:" + (effective == null || effective.comment() == null ? "" : effective.comment()));
         BizRelation rel = terminateRelation(task.getProcessInstanceId());
         eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, tenantId,
                 task.getProcessInstanceId(),
@@ -107,16 +137,16 @@ public class TaskActionService {
                         "outcome", "REJECTED", "mode", "TERMINATE"));
         if (rel != null) {
             callbackDispatcher.dispatchOnTerminal(rel.getBizType(), rel.getBizKey(), rel.getTenantId(),
-                    false, "REJECTED", req == null ? null : req.comment(), task.getProcessInstanceId());
+                    false, "REJECTED", effective == null ? null : effective.comment(),
+                    task.getProcessInstanceId());
         }
     }
 
     /** 退回发起人重提：活动移回起始用户任务，任务指派发起人，实例与业务单据均保持进行中。 */
-    private void returnToInitiator(String taskId, TaskActionRequest req) {
-        Task task = requireTaskAndCheck(taskId);
+    private void returnToInitiator(String taskId, Task task, TaskActionRequest req, String note) {
         Long operator = TraceContext.getUserId();
         String procInstId = task.getProcessInstanceId();
-        record(taskId, TaskActionType.REJECT, operator, withNote(req, "驳回退回发起人重提"),
+        record(taskId, TaskActionType.REJECT, operator, withNote(req, note),
                 resolveDelegateFrom(task, operator));
         String initiator = requireInitiator(procInstId);
         // 当前活动 = 被驳回任务所在节点（taskDefinitionKey 即活动 ID）
@@ -147,7 +177,8 @@ public class TaskActionService {
                 req == null ? null : req.attachments(),
                 req == null ? null : req.targetUserId(),
                 req == null ? null : req.terminate(),
-                req == null ? null : req.formValues());
+                req == null ? null : req.formValues(),
+                req == null ? null : req.tag());
     }
 
     /** 当前活动节点 ID（运行中实例）。 */

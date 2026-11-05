@@ -77,7 +77,8 @@ class TaskActionServiceRejectTest {
     void setUp() {
         service = new TaskActionService(taskService, runtimeService, historyService, taskActionMapper,
                 bizRelationService, eventOutboxService, instanceService, callbackDispatcher,
-                delegateService);
+                delegateService, org.mockito.Mockito.mock(TaskStrategyService.class),
+                org.mockito.Mockito.mock(TaskOpinionService.class));
         TraceContext.setTenantId(100001L);
         TraceContext.setUserId(2L);
     }
