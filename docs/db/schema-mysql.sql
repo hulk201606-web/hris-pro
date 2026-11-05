@@ -381,6 +381,7 @@ CREATE TABLE emp_employee (
   `pinyin_sort_key`  VARCHAR(128) DEFAULT NULL COMMENT '姓名拼音排序键(应用生成,规避排序规则差异)',
   `cert_type`        VARCHAR(16)  NOT NULL DEFAULT 'ID_CARD' COMMENT '证件类型',
   `cert_no_cipher`   VARCHAR(256) DEFAULT NULL COMMENT '证件号密文(AES-256-GCM,逻辑列 cert_no)',
+  `cert_no_hash`     CHAR(64)     DEFAULT NULL COMMENT '证件号哈希 SHA-256(cert_no)小写十六进制,等值查重用(再入职识别,不随加密改造失效)',
   `cert_no_mask`     VARCHAR(64)  DEFAULT NULL COMMENT '证件号掩码(保留首尾)',
   `mobile_cipher`    VARCHAR(256) DEFAULT NULL COMMENT '手机号密文(逻辑列 mobile)',
   `mobile_mask`      VARCHAR(32)  DEFAULT NULL COMMENT '手机号掩码',
@@ -399,7 +400,8 @@ CREATE TABLE emp_employee (
   UNIQUE KEY `uk_emp_employee_no` (`tenant_id`, `emp_no`),
   KEY `idx_emp_employee_status` (`tenant_id`, `status`),
   KEY `idx_emp_employee_pinyin` (`tenant_id`, `pinyin_sort_key`),
-  KEY `idx_emp_employee_cert` (`tenant_id`, `cert_no_cipher`)
+  KEY `idx_emp_employee_cert` (`tenant_id`, `cert_no_cipher`),
+  KEY `idx_emp_cert_hash` (`tenant_id`, `cert_no_hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='员工主档';
 
 -- 雇佣关系版本链(核心)

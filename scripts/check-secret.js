@@ -167,6 +167,12 @@ const LINE_EXEMPT = [
     reason: 'pymysql 连接参数，右侧为环境变量读取结果 db_password（非字面量）',
   },
   {
+    file: /scripts\/migrate_cert_no_hash\.py$/,
+    // pymysql.connect(password=db_password, ...) 同上：dict 值来自 os.environ.get("DB_PASSWORD")
+    line: /password=db_password/,
+    reason: 'pymysql 连接参数，右侧为环境变量读取结果 db_password（非字面量）',
+  },
+  {
     file: /scripts\/seed_e2e\.py$/,
     // pymysql.connect(password=password, ...) 同上
     line: /password=password/,

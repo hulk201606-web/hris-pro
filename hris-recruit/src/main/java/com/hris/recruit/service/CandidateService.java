@@ -11,6 +11,7 @@ import com.hris.recruit.mapper.CandidateMapper;
 import com.hris.common.dto.PageResult;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
+import com.hris.common.util.MaskUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,7 +53,7 @@ public class CandidateService {
         Candidate e = new Candidate();
         e.setName(req.name());
         e.setMobileCipher(req.mobileCipher());
-        e.setMobileMask(req.mobileMask());
+        e.setMobileMask(effectiveMask(req.mobileMask(), req.mobileCipher()));
         e.setEmail(req.email());
         e.setStatus(req.status());
         mapper.insert(e);
@@ -68,7 +69,7 @@ public class CandidateService {
         }
         e.setName(req.name());
         e.setMobileCipher(req.mobileCipher());
-        e.setMobileMask(req.mobileMask());
+        e.setMobileMask(effectiveMask(req.mobileMask(), req.mobileCipher()));
         e.setEmail(req.email());
         e.setStatus(req.status());
         if (mapper.updateById(e) == 0) {
@@ -85,7 +86,12 @@ public class CandidateService {
         }
     }
 
+    /** 掩码影子列兜底：调用方未传时按原文在服务侧生成，掩码不依赖外部输入。 */
+    private String effectiveMask(String mask, String plain) {
+        return mask == null || mask.isBlank() ? MaskUtil.maskMobile(plain) : mask;
+    }
+
     private CandidateResponse toResponse(Candidate e) {
-        return new CandidateResponse(e.getId(), e.getName(), e.getMobileCipher(), e.getMobileMask(), e.getEmail(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt());
+        return new CandidateResponse(e.getId(), e.getName(), MaskUtil.maskMobile(e.getMobileCipher()), e.getEmail(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt());
     }
 }

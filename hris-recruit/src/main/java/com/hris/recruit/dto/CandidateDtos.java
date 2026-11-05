@@ -19,7 +19,10 @@ public final class CandidateDtos {
     public record CandidateUpdateRequest(String name, String mobileCipher, String mobileMask, String email, String status) {
     }
 
-    /** 响应。 */
-    public record CandidateResponse(Long id, String name, String mobileCipher, String mobileMask, String email, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    /**
+     * 响应。mobileMask 由 mobileCipher（实为明文，见实体注释）在输出侧脱敏生成，
+     * 手机号原文不出候选人域（docs/19 §8.7-3；入职转化走实体字段不经此 DTO）。
+     */
+    public record CandidateResponse(Long id, String name, String mobileMask, String email, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 }

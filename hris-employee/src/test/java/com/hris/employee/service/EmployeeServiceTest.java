@@ -1,5 +1,8 @@
 package com.hris.employee.service;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.employee.dto.EmployeeBrief;
@@ -12,6 +15,7 @@ import com.hris.employee.enums.EmployeeStatus;
 import com.hris.employee.mapper.ChangeAuditMapper;
 import com.hris.employee.mapper.EmployeeMapper;
 import com.hris.employee.mapper.EmploymentMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,7 +25,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.util.HexFormat;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -97,6 +105,16 @@ class EmployeeServiceTest {
                 .thenReturn(new ProfileService.ProfileSnapshot(List.of(), List.of(), List.of(), List.of()));
     }
 
+    /** 独立计算期望哈希（SHA-256 小写 hex），与实现形成对照而非复用实现。 */
+    private String sha256(String plain) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(plain.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     @Nested
     @DisplayName("create：建档默认值")
     class Create {
@@ -121,6 +139,8 @@ class EmployeeServiceTest {
             assertEquals("E001", captor.getValue().getEmpNo());
             assertEquals("1101********34", captor.getValue().getCertNoMask());
             assertEquals("138****8000", captor.getValue().getMobileMask());
+            assertEquals(sha256("110101199001011234"), captor.getValue().getCertNoHash(),
+                "建档应写入 cert_no_hash（SHA-256 小写 hex）");
         }
     }
 
@@ -145,6 +165,8 @@ class EmployeeServiceTest {
             assertEquals("1101********34", audit.getValue().getOldValue());
             assertEquals("1101********78", audit.getValue().getNewValue());
             assertEquals("110101199001015678", emp.getCertNoCipher());
+            assertEquals(sha256("110101199001015678"), emp.getCertNoHash(),
+                "证件号变更应同步刷新 cert_no_hash");
             verify(employeeMapper).updateById(emp);
         }
 
@@ -207,6 +229,32 @@ class EmployeeServiceTest {
             assertTrue(resp.rehire());
             assertEquals(1, resp.historyCount());
             assertEquals("已离职", resp.histories().get(0).statusLabel());
+        }
+
+        @Test
+        @DisplayName("查重条件：cert_no_hash 优先 + hash 为空的存量行回退 cipher 等值")
+        void queriesByHashWithCipherFallback() {
+            // MP 3.5.x 条件/参数为懒渲染：先初始化实体 TableInfo，再渲染 SQL 才能断言查询条件
+            MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+            assistant.setCurrentNamespace("EmployeeServiceTest");
+            TableInfoHelper.initTableInfo(assistant, Employee.class);
+
+            when(employeeMapper.selectList(any())).thenReturn(List.of());
+
+            service.rehireCheck("110101199001011234");
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<LambdaQueryWrapper<Employee>> captor =
+                    ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+            verify(employeeMapper).selectList(captor.capture());
+            String sql = captor.getValue().getSqlSegment();
+            assertTrue(sql.contains("cert_no_hash"), "查询应包含 cert_no_hash 条件，实际 SQL=" + sql);
+            assertTrue(sql.contains("cert_no_cipher"), "存量 hash 空行回退 cipher 等值条件，实际 SQL=" + sql);
+            var params = captor.getValue().getParamNameValuePairs().values();
+            assertTrue(params.contains(sha256("110101199001011234")),
+                "查询应包含 cert_no_hash 哈希值");
+            assertTrue(params.contains("110101199001011234"),
+                "查询应包含原文等值条件（存量 hash 空行回退 cipher 匹配）");
         }
     }
 

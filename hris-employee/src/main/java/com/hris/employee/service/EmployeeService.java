@@ -24,6 +24,10 @@ import com.hris.employee.util.MaskUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +66,7 @@ public class EmployeeService {
         e.setName(req.name());
         e.setCertType(req.certType() == null || req.certType().isBlank() ? "ID_CARD" : req.certType());
         e.setCertNoCipher(req.certNo());
+        e.setCertNoHash(hashCertNo(req.certNo()));
         e.setCertNoMask(MaskUtil.maskCertNo(req.certNo()));
         e.setMobileCipher(req.mobile());
         e.setMobileMask(MaskUtil.maskMobile(req.mobile()));
@@ -144,16 +149,17 @@ public class EmployeeService {
      * 命中已离职 -> 走二次雇佣（工龄是否连续由业务决定）；
      * 命中在职 -> 属重复建档，应直接使用现有档案；
      * 命中黑名单 -> 禁止录用。判断交给调用方，本方法不做裁决。</p>
-     * <p>实现说明：按 certNoCipher 等值查询，依赖该列当前按明文落库
-     * （未接 ShardingSphere 加密插件，见 Employee 类注释）。若改为随机 IV 加密，
-     * 同值密文不同，本查询会静默返回空——届时须增加 cert_no_hash 列改为哈希查询。</p>
+     * <p>实现说明：优先按 cert_no_hash（SHA-256 小写 hex）等值查询，该值不随加密改造失效；
+     * cert_no_hash 为空的存量行回退 cert_no_cipher 等值匹配（docs/19 §8.7-3）。</p>
      */
     public RehireCheckResponse rehireCheck(String certNo) {
         if (certNo == null || certNo.isBlank()) {
             throw new BizException(ErrorCode.PARAM_INVALID, "证件号不能为空");
         }
+        String plain = certNo.trim();
         LambdaQueryWrapper<Employee> qw = new LambdaQueryWrapper<>();
-        qw.eq(Employee::getCertNoCipher, certNo.trim());
+        qw.eq(Employee::getCertNoHash, hashCertNo(plain))
+                .or(nested -> nested.isNull(Employee::getCertNoHash).eq(Employee::getCertNoCipher, plain));
         qw.orderByDesc(Employee::getId);
         List<Employee> hits = employeeMapper.selectList(qw);
 
@@ -205,6 +211,20 @@ public class EmployeeService {
         return m;
     }
 
+    /** 证件号哈希：SHA-256 小写十六进制（等值查重键，生产者路径唯一化）。 */
+    private String hashCertNo(String certNo) {
+        if (certNo == null || certNo.isBlank()) {
+            return null;
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(certNo.trim().getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
     private Employee require(Long id) {
         Employee e = employeeMapper.selectById(id);
         if (e == null) {
@@ -228,6 +248,7 @@ public class EmployeeService {
         if ("cert_no".equals(field)) {
             audit.setNewValue(MaskUtil.maskCertNo(newPlain));
             e.setCertNoCipher(newPlain);
+            e.setCertNoHash(hashCertNo(newPlain));
             e.setCertNoMask(MaskUtil.maskCertNo(newPlain));
         } else {
             audit.setNewValue(MaskUtil.maskMobile(newPlain));

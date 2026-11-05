@@ -384,6 +384,7 @@ CREATE TABLE emp_employee (
   pinyin_sort_key  VARCHAR(128),                                  -- 姓名拼音排序键(应用生成,规避排序规则差异)
   cert_type        VARCHAR(16)  NOT NULL DEFAULT 'ID_CARD',       -- 证件类型
   cert_no_cipher   VARCHAR(256),                                  -- 证件号密文(AES-256-GCM,逻辑列 cert_no)
+  cert_no_hash     CHAR(64),                                      -- 证件号哈希 SHA-256(cert_no)小写十六进制,等值查重用(再入职识别,不随加密改造失效)
   cert_no_mask     VARCHAR(64),                                   -- 证件号掩码(保留首尾)
   mobile_cipher    VARCHAR(256),                                  -- 手机号密文(逻辑列 mobile)
   mobile_mask      VARCHAR(32),                                   -- 手机号掩码
@@ -403,6 +404,7 @@ CREATE TABLE emp_employee (
 );
 CREATE INDEX idx_emp_employee_status ON emp_employee (tenant_id, status);
 CREATE INDEX idx_emp_employee_pinyin ON emp_employee (tenant_id, pinyin_sort_key);
+CREATE INDEX idx_emp_cert_hash ON emp_employee (tenant_id, cert_no_hash);
 
 -- 雇佣关系版本链(核心)
 CREATE TABLE emp_employment (

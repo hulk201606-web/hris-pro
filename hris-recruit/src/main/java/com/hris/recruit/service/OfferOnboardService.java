@@ -48,6 +48,10 @@ public class OfferOnboardService {
         if ("ACCEPTED".equals(offer.getStatus())) {
             throw new BizException(ErrorCode.PARAM_INVALID, "Offer 已录用，不可重复建档");
         }
+        // 可录用态守卫（docs/19 §8.5-6）：仅已发/已接受可转入职，DRAFT/REJECTED 拒绝
+        if (!"SENT".equals(offer.getStatus()) && !"ACCEPTED".equals(offer.getStatus())) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "Offer 状态为 " + offer.getStatus() + "，不可转入职");
+        }
         Application application = applicationMapper.selectById(offer.getApplicationId());
         if (application == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "投递记录不存在");

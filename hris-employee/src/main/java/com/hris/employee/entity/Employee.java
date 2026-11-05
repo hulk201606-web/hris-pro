@@ -32,6 +32,9 @@ public class Employee extends BaseEntity {
     /** 证件号密文列（MVP 明文占位，逻辑列 cert_no） */
     private String certNoCipher;
 
+    /** 证件号哈希（SHA-256 小写 hex，等值查重用，不随加密改造失效） */
+    private String certNoHash;
+
     /** 证件号掩码（保留首尾） */
     private String certNoMask;
 
@@ -94,6 +97,14 @@ public class Employee extends BaseEntity {
 
     public void setCertNoCipher(String certNoCipher) {
         this.certNoCipher = certNoCipher;
+    }
+
+    public String getCertNoHash() {
+        return certNoHash;
+    }
+
+    public void setCertNoHash(String certNoHash) {
+        this.certNoHash = certNoHash;
     }
 
     public String getCertNoMask() {
