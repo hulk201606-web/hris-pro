@@ -58,6 +58,13 @@ public class DocVersionController {
         return R.ok(service.update(id, req));
     }
 
+    /** 提交发布：仅 DRAFT 可提交，置 PENDING 并发起 KBD_PUBLISH 审批流（复用既有 write 权限码）。 */
+    @RequirePerm("kb:doc-version:write")
+    @PostMapping("/{id}/submit")
+    public R<DocVersionResponse> submit(@PathVariable Long id) {
+        return R.ok(service.submit(id));
+    }
+
     @RequirePerm("kb:doc-version:write")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

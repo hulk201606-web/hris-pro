@@ -11,12 +11,18 @@ public final class AppealDtos {
     private AppealDtos() {
     }
 
-    /** 创建请求。 */
-    public record AppealCreateRequest(@NotNull(message = "empId 不能为空") Long empId, @NotNull(message = "cycleId 不能为空") Long cycleId, @NotNull(message = "bizKey 不能为空") String bizKey, String reason, @NotNull(message = "status 不能为空") String status, String procInstId) {
+    /**
+     * 创建请求（服务端强制语义：status 恒置 PROCESSING、biz_key 服务端生成、
+     * proc_inst_id 仅由流程发起回写，调用方均不可指定）。
+     */
+    public record AppealCreateRequest(@NotNull(message = "empId 不能为空") Long empId, @NotNull(message = "cycleId 不能为空") Long cycleId, String reason) {
     }
 
-    /** 更新请求。 */
-    public record AppealUpdateRequest(Long empId, Long cycleId, String bizKey, String reason, String status, String procInstId) {
+    /**
+     * 更新请求（旁路清理：biz_key/status/proc_inst_id 均不可经更新改写——
+     * status 只由审批回调迁移，proc_inst_id 只由发起回写）。
+     */
+    public record AppealUpdateRequest(Long empId, Long cycleId, String reason) {
     }
 
     /** 响应。 */
