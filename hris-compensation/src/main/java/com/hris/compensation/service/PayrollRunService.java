@@ -188,6 +188,9 @@ public class PayrollRunService {
     }
 
     private PayrollRunResponse toResponse(PayrollRun e) {
-        return new PayrollRunResponse(e.getId(), e.getPeriodCode(), e.getPayGroupId(), e.getStatus(), e.getCalcBy(), e.getReviewBy(), e.getCreatedAt(), e.getUpdatedAt());
+        return new PayrollRunResponse(e.getId(), e.getPeriodCode(), e.getPayGroupId(), e.getStatus(),
+                e.getCalcBy(), e.getReviewBy(), e.getCreatedAt(), e.getUpdatedAt(),
+                e.getReviewedBy1(), e.getReviewedAt1(), e.getReviewedBy2(), e.getReviewedAt2(),
+                e.getReviewComment());
     }
 }

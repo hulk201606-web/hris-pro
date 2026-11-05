@@ -69,6 +69,8 @@ public class PayrollCalcService {
     private final CalcResultWriter writer;
     private final AttendanceBriefFetcher attendanceFetcher;
     private final PayrollCalcAsyncRunner asyncRunner;
+    private final SalaryProrationService prorationService;
+    private final CmpCalcConfigService calcConfigService;
 
     /** 仅用于序列化快照（writeValueAsString 线程安全），无反序列化配置需求。 */
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -78,7 +80,9 @@ public class PayrollCalcService {
                               CalcTaskMapper calcTaskMapper, PeriodLockService periodLockService,
                               FormulaSandboxService sandbox, PayItemEvaluator evaluator,
                               CalcResultWriter writer, AttendanceBriefFetcher attendanceFetcher,
-                              @Lazy PayrollCalcAsyncRunner asyncRunner) {
+                              @Lazy PayrollCalcAsyncRunner asyncRunner,
+                              SalaryProrationService prorationService,
+                              CmpCalcConfigService calcConfigService) {
         this.runMapper = runMapper;
         this.detailMapper = detailMapper;
         this.employeePayMapper = employeePayMapper;
@@ -90,6 +94,8 @@ public class PayrollCalcService {
         this.writer = writer;
         this.attendanceFetcher = attendanceFetcher;
         this.asyncRunner = asyncRunner;
+        this.prorationService = prorationService;
+        this.calcConfigService = calcConfigService;
     }
 
     /** 触发整批算薪（同步路径，?mode=sync 兼容/测试用）。返回任务汇总与 run 最新状态。 */
@@ -101,8 +107,10 @@ public class PayrollCalcService {
         List<EmployeePay> empPays = loadEffectiveEmpPays(run.getPayGroupId(), run.getPeriodCode());
         AttendanceBriefFetcher.BriefResult att =
                 fetchAttendance(run.getPeriodCode(), empPays.stream().map(EmployeePay::getEmpId).toList());
+        // CMP-F-011：租户开关「离职当日是否计薪」每批读取一次（配置中心 → 部署默认）
+        boolean payTerminationDay = calcConfigService.payTerminationDay();
         for (EmployeePay empPay : empPays) {
-            calcOne(run, items, empPay.getEmpId(), att);
+            calcOne(run, items, empPay.getEmpId(), att, payTerminationDay);
         }
         run.setStatus("CALC");
         if (runMapper.updateById(run) == 0) {
@@ -150,8 +158,10 @@ public class PayrollCalcService {
                     loadEffectiveEmpPays(run.getPayGroupId(), run.getPeriodCode());
             AttendanceBriefFetcher.BriefResult att =
                     fetchAttendance(run.getPeriodCode(), empPays.stream().map(EmployeePay::getEmpId).toList());
+            // CMP-F-011：与同步路径同口径，异步批亦按租户开关折算
+            boolean payTerminationDay = calcConfigService.payTerminationDay();
             for (EmployeePay empPay : empPays) {
-                calcOne(run, items, empPay.getEmpId(), att);
+                calcOne(run, items, empPay.getEmpId(), att, payTerminationDay);
             }
             run.setStatus("CALC");
             if (runMapper.updateById(run) == 0) {
@@ -180,7 +190,8 @@ public class PayrollCalcService {
         List<PayItem> items = loadItems(run.getPayGroupId());
         EmployeePay empPay = requireEffectiveEmpPay(run.getPayGroupId(), run.getPeriodCode(), empId);
         AttendanceBriefFetcher.BriefResult att = fetchAttendance(run.getPeriodCode(), List.of(empId));
-        return toTaskResponse(calcOne(run, items, empId, empPay, att));
+        return toTaskResponse(calcOne(run, items, empId, empPay, att,
+                calcConfigService.payTerminationDay()));
     }
 
     /** 求值前批量拉取考勤简报（F-010）：periodCode → 自然月区间，fail-open。 */
@@ -191,25 +202,29 @@ public class PayrollCalcService {
 
     /** 单员工求值 + 落明细 + 落任务行（失败不抛出，返回 FAILED 任务行）。 */
     private CalcTask calcOne(PayrollRun run, List<PayItem> items, Long empId,
-                             AttendanceBriefFetcher.BriefResult att) {
+                             AttendanceBriefFetcher.BriefResult att, boolean payTerminationDay) {
         EmployeePay empPay;
         try {
             empPay = requireEffectiveEmpPay(run.getPayGroupId(), run.getPeriodCode(), empId);
         } catch (BizException e) {
             return writer.upsertTask(run.getId(), empId, TASK_SKIPPED, e.getMessage(), null);
         }
-        return calcOne(run, items, empId, empPay, att);
+        return calcOne(run, items, empId, empPay, att, payTerminationDay);
     }
 
     private CalcTask calcOne(PayrollRun run, List<PayItem> items, Long empId, EmployeePay empPay,
-                             AttendanceBriefFetcher.BriefResult att) {
+                             AttendanceBriefFetcher.BriefResult att, boolean payTerminationDay) {
         if (empPay.getSalaryAmountCipher() == null || empPay.getSalaryAmountCipher().isBlank()) {
             // 无定薪金额：跳过而非失败（F-006 SKIPPED 语义）
             return writer.upsertTask(run.getId(), empId, TASK_SKIPPED, "无有效定薪金额", null);
         }
         try {
-            BigDecimal base = parseAmount(empPay.getSalaryAmountCipher(),
+            BigDecimal rawBase = parseAmount(empPay.getSalaryAmountCipher(),
                     "员工 " + empId + " 定薪金额无效");
+            // CMP-F-011：入离职当日折算——入职当日恒计，离职当日由租户开关决定；
+            // 折算窗口取定薪生效区间（cmp_employee_pay.effective_from/to），整月覆盖时原值直出。
+            BigDecimal base = prorationService.prorate(rawBase, empPay.getEffectiveFrom(),
+                    empPay.getEffectiveTo(), YearMonth.parse(run.getPeriodCode()), payTerminationDay);
             Map<String, Object> results = evaluator.evalItems(items, base, run.getPeriodCode(),
                     AttendanceBriefFetcher.lateCount(att, empId),
                     AttendanceBriefFetcher.absentDays(att, empId));

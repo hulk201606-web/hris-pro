@@ -63,17 +63,20 @@ class PayrollCalcServiceTest {
     private AttendanceBriefFetcher attendanceFetcher;
     @Mock
     private PayrollCalcAsyncRunner asyncRunner;
+    @Mock
+    private CmpCalcConfigService calcConfigService;
 
     private PayrollCalcService service;
     private final List<com.hris.compensation.entity.CalcTask> insertedTasks = new java.util.ArrayList<>();
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(calcConfigService.payTerminationDay()).thenReturn(true);
         service = new PayrollCalcService(runMapper, detailMapper, employeePayMapper,
                 payItemMapper, calcTaskMapper, periodLockService, new FormulaSandboxService(),
                 new PayItemEvaluator(new FormulaSandboxService()),
                 new CalcResultWriter(detailMapper, calcTaskMapper),
-                attendanceFetcher, asyncRunner);
+                attendanceFetcher, asyncRunner, new SalaryProrationService(), calcConfigService);
     }
 
     private com.hris.compensation.entity.PayrollRun run(String status) {

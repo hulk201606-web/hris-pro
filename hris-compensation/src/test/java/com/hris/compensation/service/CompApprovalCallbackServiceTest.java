@@ -46,20 +46,39 @@ class CompApprovalCallbackServiceTest {
         return e;
     }
 
+    private PayrollRun runReviewed(String status, Long reviewer1, Long reviewer2) {
+        PayrollRun e = run(status);
+        e.setReviewedBy1(reviewer1);
+        e.setReviewedBy2(reviewer2);
+        return e;
+    }
+
     @Nested
-    @DisplayName("CMP_PAYROLL：REVIEW → APPROVE，幂等")
+    @DisplayName("CMP_PAYROLL：REVIEW → APPROVE（须双人复核已完备），幂等")
     class PayrollCallback {
 
         @Test
-        @DisplayName("REVIEW + approve → APPROVE")
+        @DisplayName("REVIEW + 双人复核完备 + approve → APPROVE")
         void approvesToApprove() {
-            when(payrollRunMapper.selectById(88L)).thenReturn(run("REVIEW"));
+            when(payrollRunMapper.selectById(88L)).thenReturn(runReviewed("REVIEW", 11L, 22L));
 
             ApprovalCallbackResponse resp = service.handleCallback("CMP_PAYROLL", "88", true);
 
             assertTrue(resp.changed());
             assertEquals("APPROVE", resp.status());
             verify(payrollRunMapper).updateById(any(PayrollRun.class));
+        }
+
+        @Test
+        @DisplayName("REVIEW + 双人复核未完备 + approve → changed=false（单步审批通道已收口）")
+        void blocksWhenDualReviewIncomplete() {
+            when(payrollRunMapper.selectById(88L)).thenReturn(runReviewed("REVIEW", 11L, null));
+
+            ApprovalCallbackResponse resp = service.handleCallback("CMP_PAYROLL", "88", true);
+
+            assertFalse(resp.changed());
+            assertEquals("REVIEW", resp.status());
+            verify(payrollRunMapper, never()).updateById(any(PayrollRun.class));
         }
 
         @Test

@@ -34,6 +34,14 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
+# 薪酬算薪参数（CMP-F-011）。租户级覆盖优先级更高：sys_tenant_config 同名 config_key
+# （PLT 配置中心广播表）未配置/不可读时回退此处；生产改租户参数无需重启。
+hris:
+  cmp:
+    calc:
+      # 离职当日是否计薪：true=当日按 1 天计（缺省），false=当日不计（截止前一日）
+      pay-termination-day: ${CMP_PAY_TERMINATION_DAY:true}
+
 logging:
   level:
     com.hris: info

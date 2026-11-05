@@ -107,6 +107,39 @@ public class PeriodLockService {
         }
     }
 
+    /** 该期间是否处于 ACTIVE 关账锁（供调整单等旁路判断）。 */
+    public boolean isPeriodLocked(String periodCode) {
+        return periodCode != null && hasActiveLock(periodCode);
+    }
+
+    /**
+     * 调整通道守卫（CMP-F-020）：锁定期内只允许向「下一期间」补差。
+     *
+     * <p>取当前生效锁中 periodCode 最大者作为已关账边界，目标期间必须严格大于该边界；
+     * 否则拒绝（PARAM_INVALID，附原因）。无 ACTIVE 锁时放行。periodCode 为 yyyy-MM，
+     * 字典序与时间序一致。</p>
+     */
+    public void ensureAdjustmentChannelAllowed(String targetPeriodCode) {
+        String locked = latestActiveLockPeriod();
+        if (locked == null) {
+            return;
+        }
+        if (targetPeriodCode == null || targetPeriodCode.compareTo(locked) <= 0) {
+            throw new BizException(ErrorCode.PARAM_INVALID,
+                    "期间 " + locked + " 已关账，仅可对下一期间（periodCode 大于 " + locked
+                            + "）新建调整单，禁止回改锁定期间");
+        }
+    }
+
+    /** 当前生效锁的最大期间（无锁返回 null）。 */
+    public String latestActiveLockPeriod() {
+        PeriodLock active = mapper.selectOne(new LambdaQueryWrapper<PeriodLock>()
+                .eq(PeriodLock::getStatus, STATUS_ACTIVE)
+                .orderByDesc(PeriodLock::getPeriodCode)
+                .last("limit 1"));
+        return active == null ? null : active.getPeriodCode();
+    }
+
     private boolean hasActiveLock(String period) {
         return mapper.selectCount(new LambdaQueryWrapper<PeriodLock>()
                 .eq(PeriodLock::getPeriodCode, period)

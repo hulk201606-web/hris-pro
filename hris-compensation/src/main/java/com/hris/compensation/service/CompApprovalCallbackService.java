@@ -19,7 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>状态迁移语义（与 docs/db/schema-mysql.sql 枚举对齐）：
  * <ul>
  *   <li>CMP_PAYROLL → cmp_payroll_run.status（INIT/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK）：
- *       REVIEW 时 approve→APPROVE（复核通过）；PAID/LOCK/APPROVE 为终态 changed=false；
+ *       REVIEW 时 approve→APPROVE（复核通过，须双人复核已完备，见 CMP-F-013b）；
+ *       PAID/LOCK/APPROVE 为终态 changed=false；
  *       reject 无载体（枚举无 REJECTED，驳回即维持 REVIEW 待修正重提）changed=false。</li>
  *   <li>CMP_ADJUST → cmp_payroll_adjustment 无审批状态/流程字段，回调无迁移载体，
  *       返回 changed=false（见报告遗留说明）。</li>
@@ -59,8 +60,11 @@ public class CompApprovalCallbackService {
     }
 
     /**
-     * 算薪批次审批：REVIEW → approve:APPROVE。
-     * INIT/TRIAL/CALC 未达复核阶段，APPROVE/PAID/LOCK 已过审批环节，均 changed=false。
+     * 算薪批次审批：REVIEW → approve:APPROVE，但须先完成双人复核（CMP-F-013b）。
+     *
+     * <p>单步审批通道已收口：回调只做「流程侧放行」，业务侧仍要求 reviewed_by_1/2 两名不同
+     * 用户已复核；未满足则 changed=false（批次保持 REVIEW，等 /review 端点补齐复核人）。
+     * INIT/TRIAL/CALC 未达复核阶段，APPROVE/PAID/LOCK 已过审批环节，均 changed=false。</p>
      */
     private ApprovalCallbackResponse handlePayroll(String bizKey, boolean approved) {
         PayrollRun e = payrollRunMapper.selectById(parseBizKey(bizKey));
@@ -72,6 +76,10 @@ public class CompApprovalCallbackService {
         }
         if (!approved) {
             // 驳回无载体：枚举无 REJECTED，维持 REVIEW 待修正重提
+            return new ApprovalCallbackResponse(false, e.getStatus());
+        }
+        if (!PayrollReviewService.dualReviewCompleted(e)) {
+            log.info("流程侧审批通过但双人复核未完成，暂不流转 APPROVE: bizKey={}", bizKey);
             return new ApprovalCallbackResponse(false, e.getStatus());
         }
         e.setStatus("APPROVE");
