@@ -1,0 +1,17 @@
+# =====================================================================
+# hris-pro 备份 systemd timer 模板
+# 依据：docs/18-生产化基线评估与实施计划.md §4.9
+# 安装步骤见 hris-backup.service 文件头注释
+# =====================================================================
+[Unit]
+Description=hris-pro daily backup timer
+
+[Timer]
+# 每日 03:10；RandomizedDelaySec 打散同集群多机的备份时刻，避免 IO 尖峰
+OnCalendar=*-*-* 03:10:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=hris-backup.service
+
+[Install]
+WantedBy=timers.target

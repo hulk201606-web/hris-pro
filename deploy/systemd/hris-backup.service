@@ -1,0 +1,30 @@
+# =====================================================================
+# hris-pro 备份 systemd service 模板
+# 依据：docs/18-生产化基线评估与实施计划.md §4.9
+#
+# 安装步骤（生产机，假设仓库部署在 /opt/hris-pro）：
+#   1) cp deploy/systemd/hris-backup.service /etc/systemd/system/
+#      cp deploy/systemd/hris-backup.timer    /etc/systemd/system/
+#   2) mkdir -p /etc/hris-pro
+#      cp deploy/systemd/backup.env.example /etc/hris-pro/backup.env
+#      编辑 /etc/hris-pro/backup.env 填入真实口令，然后：
+#      chmod 600 /etc/hris-pro/backup.env && chown root:root /etc/hris-pro/backup.env
+#   3) systemctl daemon-reload
+#      systemctl enable --now hris-backup.timer
+# 验收：
+#   systemctl list-timers hris-backup.timer --no-pager
+#   systemctl start hris-backup.service && journalctl -u hris-backup.service -n 50 --no-pager
+# =====================================================================
+[Unit]
+Description=hris-pro backup (mysql + nacos + milvus + minio)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/hris-pro
+# 口令放独立文件，权限 600，仅 root 可读；不进 crontab 不进 git
+EnvironmentFile=/etc/hris-pro/backup.env
+ExecStart=/bin/bash /opt/hris-pro/scripts/backup-all.sh
+# 备份失败必须显式失败（非 0 退出码），否则 systemd 不会告警
+SuccessExitStatus=0
