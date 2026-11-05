@@ -43,12 +43,14 @@ class NotifyDispatchServiceTest {
     private SysNotifyRecordMapper recordMapper;
     @Mock
     private WebhookPoster poster;
+    @Mock
+    private com.hris.platform.service.NotifyPreferenceService preferenceService;
 
     private NotifyDispatchService service;
 
     @BeforeEach
     void setUp() {
-        service = new NotifyDispatchService(templateMapper, recordMapper, poster);
+        service = new NotifyDispatchService(templateMapper, recordMapper, poster, preferenceService);
     }
 
     private SysNotifyTemplate template(String channel, String webhookUrl) {
@@ -152,6 +154,39 @@ class NotifyDispatchServiceTest {
 
             assertEquals("FAILED", resp.status());
             verify(poster, never()).postJson(anyString(), anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("偏好闸门（PLT-F-004）")
+    class PreferenceGate {
+
+        @Test
+        @DisplayName("指定 userId 且偏好命中跳过 → SKIPPED_PREFERENCE 摘要，不外呼不回写记录")
+        void skippedByPreference() {
+            when(templateMapper.selectById(9L)).thenReturn(template("DINGTALK", "https://oapi.example.com/robot"));
+            when(preferenceService.skipReason(eq(5L), eq("DINGTALK"), any()))
+                    .thenReturn("SKIPPED_PREFERENCE: 渠道对该用户已禁用");
+
+            TestSendResponse resp = service.testSend(9L, new TestSendRequest("https://oapi.example.com/robot", 5L));
+
+            assertEquals("SKIPPED_PREFERENCE", resp.status());
+            assertTrue(resp.failedReason().startsWith("SKIPPED_PREFERENCE"));
+            verify(poster, never()).postJson(anyString(), anyString());
+            verify(recordMapper, never()).insert(any(SysNotifyRecord.class));
+        }
+
+        @Test
+        @DisplayName("未指定 userId 不触发偏好闸门，维持原测试发送语义")
+        void noUserSkipsGate() {
+            when(templateMapper.selectById(9L)).thenReturn(template("DINGTALK", "https://oapi.example.com/robot"));
+            when(poster.postJson(anyString(), anyString()))
+                    .thenReturn(WebhookPoster.PostResult.ok(200, "{}"));
+
+            TestSendResponse resp = service.testSend(9L, new TestSendRequest("https://oapi.example.com/robot"));
+
+            assertEquals("SENT", resp.status());
+            verify(preferenceService, never()).skipReason(any(), anyString(), any());
         }
     }
 

@@ -32,8 +32,16 @@ public final class NotificationDtos {
             LocalDateTime updatedAt) {
     }
 
-    /** 模板测试发送请求（webhookUrl 可选，覆盖模板配置的地址） */
-    public record TestSendRequest(String webhookUrl) {
+    /**
+     * 模板测试发送请求（webhookUrl 可选覆盖模板地址；userId 可选指定模拟目标用户，
+     * 指定后发送前按 sys_notify_preference 做偏好闸门，PLT-F-004）
+     */
+    public record TestSendRequest(String webhookUrl, Long userId) {
+
+        /** 便捷构造：仅覆盖地址，不指定模拟目标用户（既有调用与测试兼容）。 */
+        public TestSendRequest(String webhookUrl) {
+            this(webhookUrl, null);
+        }
     }
 
     /** 测试发送结果摘要：失败不抛出，以 status/failedReason 表达 */

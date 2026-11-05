@@ -43,19 +43,27 @@ public class TaskQueryService {
     private final FlowModelMapper flowModelMapper;
     private final TimeoutCfgMapper timeoutCfgMapper;
     private final CcService ccService;
+    private final DelegateService delegateService;
 
     public TaskQueryService(TaskService taskService, HistoryService historyService,
                             BizRelationMapper bizRelationMapper, FlowModelMapper flowModelMapper,
-                            TimeoutCfgMapper timeoutCfgMapper, CcService ccService) {
+                            TimeoutCfgMapper timeoutCfgMapper, CcService ccService,
+                            DelegateService delegateService) {
         this.taskService = taskService;
         this.historyService = historyService;
         this.bizRelationMapper = bizRelationMapper;
         this.flowModelMapper = flowModelMapper;
         this.timeoutCfgMapper = timeoutCfgMapper;
         this.ccService = ccService;
+        this.delegateService = delegateService;
     }
 
-    /** 我的待办（候选人或已指派）。 */
+    /**
+     * 我的待办（候选人或已指派），含委托代理并入（FLW-F-009）：
+     * 生效期内（now ∈ [start_at,end_at] 且 ACTIVE）以我为 to_user 的委托，把
+     * from_user 的待办（proc_def_key 匹配或 NULL 全匹配）并入结果，TaskView 以
+     * delegatedFrom=from_user 标记委托来源。
+     */
     public PageResult<TaskView> todo(long page, long size) {
         String tenantId = requireTenant();
         String uid = requireUser();
@@ -64,7 +72,28 @@ public class TaskQueryService {
                 .taskCandidateOrAssigned(uid);
         long total = q.count();
         List<Task> tasks = q.orderByTaskCreateTime().desc().listPage(offset(page, size), safeSize(size));
-        return new PageResult<>(buildViews(tasks), page, size, total);
+        List<TaskView> views = new ArrayList<>(buildViews(tasks));
+        // 委托并入：我作为被委托人（to_user），合并各委托发起人（from_user）的待办
+        List<com.hris.flow.entity.FlowExtDelegate> delegations =
+                delegateService.activeDelegationsTo(Long.valueOf(tenantId), Long.valueOf(uid),
+                        java.time.LocalDateTime.now());
+        for (com.hris.flow.entity.FlowExtDelegate d : delegations) {
+            TaskQuery dq = taskService.createTaskQuery()
+                    .taskTenantId(tenantId)
+                    .taskCandidateOrAssigned(String.valueOf(d.getFromUser()));
+            if (d.getProcDefKey() != null && !d.getProcDefKey().isBlank()) {
+                dq.processDefinitionKey(d.getProcDefKey());
+            }
+            total += dq.count();
+            List<Task> dTasks = dq.orderByTaskCreateTime().desc().listPage(0, safeSize(size));
+            final Long from = d.getFromUser();
+            dTasks.stream().map(this::buildView).forEach(v ->
+                    views.add(new TaskView(v.taskId(), v.instanceId(), v.procDefKey(), v.bizType(),
+                            v.bizKey(), v.nodeName(), v.assignee(), v.status(), v.startTime(),
+                            v.createTime(), v.endTime(), v.durationInMillis(), v.formSchemaJson(),
+                            v.overdue(), from)));
+        }
+        return new PageResult<>(views, page, size, total);
     }
 
     /**
@@ -103,7 +132,7 @@ public class TaskQueryService {
             views.add(new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
                     bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
                     "DONE", fmt(t.getStartTime()), fmt(t.getCreateTime()), fmt(t.getEndTime()),
-                    t.getDurationInMillis() == null ? 0L : t.getDurationInMillis(), null, false));
+                    t.getDurationInMillis() == null ? 0L : t.getDurationInMillis(), null, false, null));
         }
         return new PageResult<>(views, page, size, total);
     }
@@ -133,7 +162,7 @@ public class TaskQueryService {
             views.add(new TaskView(null, p.getId(), p.getProcessDefinitionKey(),
                     p.getProcessDefinitionKey(), p.getBusinessKey(), name, null,
                     status, fmt(p.getStartTime()), fmt(p.getStartTime()), fmt(p.getEndTime()),
-                    p.getDurationInMillis() == null ? 0L : p.getDurationInMillis(), null, false));
+                    p.getDurationInMillis() == null ? 0L : p.getDurationInMillis(), null, false, null));
         }
         return new PageResult<>(views, page, size, total);
     }
@@ -149,16 +178,34 @@ public class TaskQueryService {
                 .map(Task::getProcessDefinitionId).filter(java.util.Objects::nonNull).distinct().toList());
         List<TaskView> views = new ArrayList<>();
         for (Task t : tasks) {
-            BizRelation rel = relMap.get(t.getProcessInstanceId());
-            String procKey = procKeyOf(t, rel);
-            TimeoutCfg cfg = t.getProcessDefinitionId() == null ? null
-                    : cfgMap.get(t.getProcessDefinitionId() + "#" + t.getTaskDefinitionKey());
-            views.add(new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
-                    bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
-                    "TODO", fmt(t.getCreateTime()), fmt(t.getCreateTime()), null, 0L,
-                    schemaMap.get(procKey), isOverdue(t, cfg)));
+            views.add(buildView(t, relMap, schemaMap, cfgMap));
         }
         return views;
+    }
+
+    /** 单任务视图组装（待办委托并入复用）。 */
+    private TaskView buildView(Task t) {
+        List<String> instIds = t.getProcessInstanceId() == null
+                ? List.of() : List.of(t.getProcessInstanceId());
+        Map<String, BizRelation> relMap = bizByInstIds(instIds);
+        Map<String, TimeoutCfg> cfgMap = t.getProcessDefinitionId() == null
+                ? Map.of() : timeoutCfgByProcDefIds(List.of(t.getProcessDefinitionId()));
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        keys.add(procKeyOf(t, relMap.get(t.getProcessInstanceId())));
+        Map<String, String> schemaMap = formSchemaByKeys(keys);
+        return buildView(t, relMap, schemaMap, cfgMap);
+    }
+
+    private TaskView buildView(Task t, Map<String, BizRelation> relMap,
+                               Map<String, String> schemaMap, Map<String, TimeoutCfg> cfgMap) {
+        BizRelation rel = relMap.get(t.getProcessInstanceId());
+        String procKey = procKeyOf(t, rel);
+        TimeoutCfg cfg = t.getProcessDefinitionId() == null ? null
+                : cfgMap.get(t.getProcessDefinitionId() + "#" + t.getTaskDefinitionKey());
+        return new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
+                bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
+                "TODO", fmt(t.getCreateTime()), fmt(t.getCreateTime()), null, 0L,
+                schemaMap.get(procKey), isOverdue(t, cfg), null);
     }
 
     private Map<String, BizRelation> bizByInstIds(List<String> procInstIds) {

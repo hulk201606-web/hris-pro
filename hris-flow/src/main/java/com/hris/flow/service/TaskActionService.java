@@ -38,11 +38,13 @@ public class TaskActionService {
     private final EventOutboxService eventOutboxService;
     private final InstanceService instanceService;
     private final ApprovalCallbackDispatcher callbackDispatcher;
+    private final DelegateService delegateService;
 
     public TaskActionService(TaskService taskService, RuntimeService runtimeService,
                              HistoryService historyService, TaskActionMapper taskActionMapper,
                              BizRelationService bizRelationService, EventOutboxService eventOutboxService,
-                             InstanceService instanceService, ApprovalCallbackDispatcher callbackDispatcher) {
+                             InstanceService instanceService, ApprovalCallbackDispatcher callbackDispatcher,
+                             DelegateService delegateService) {
         this.taskService = taskService;
         this.runtimeService = runtimeService;
         this.historyService = historyService;
@@ -51,6 +53,7 @@ public class TaskActionService {
         this.eventOutboxService = eventOutboxService;
         this.instanceService = instanceService;
         this.callbackDispatcher = callbackDispatcher;
+        this.delegateService = delegateService;
     }
 
     /** 同意：完成任务，若为末节点则结束实例并回调业务域。 */
@@ -59,7 +62,7 @@ public class TaskActionService {
         Task task = requireTaskAndCheck(taskId);
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
-        record(taskId, TaskActionType.APPROVE, operator, req, null);
+        record(taskId, TaskActionType.APPROVE, operator, req, resolveDelegateFrom(task, operator));
         taskService.complete(taskId);
         eventOutboxService.publish(EventOutboxService.TOPIC_TASK_COMPLETED, tenantId,
                 task.getProcessInstanceId(),
@@ -94,7 +97,7 @@ public class TaskActionService {
         Task task = requireTaskAndCheck(taskId);
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
-        record(taskId, TaskActionType.REJECT, operator, req, null);
+        record(taskId, TaskActionType.REJECT, operator, req, resolveDelegateFrom(task, operator));
         runtimeService.deleteProcessInstance(task.getProcessInstanceId(),
                 "REJECTED:TERMINATED:" + (req == null || req.comment() == null ? "" : req.comment()));
         BizRelation rel = terminateRelation(task.getProcessInstanceId());
@@ -113,7 +116,8 @@ public class TaskActionService {
         Task task = requireTaskAndCheck(taskId);
         Long operator = TraceContext.getUserId();
         String procInstId = task.getProcessInstanceId();
-        record(taskId, TaskActionType.REJECT, operator, withNote(req, "驳回退回发起人重提"), null);
+        record(taskId, TaskActionType.REJECT, operator, withNote(req, "驳回退回发起人重提"),
+                resolveDelegateFrom(task, operator));
         String initiator = requireInitiator(procInstId);
         // 当前活动 = 被驳回任务所在节点（taskDefinitionKey 即活动 ID）
         String current = task.getTaskDefinitionKey();
@@ -245,6 +249,22 @@ public class TaskActionService {
         instanceService.withdraw(task.getProcessInstanceId(), "发起人撤回");
     }
 
+    /**
+     * 委托代办留痕判定（FLW-F-009）：操作人（被委托人 to_user）处理的是生效委托中
+     * from_user 名下的任务时，返回 from_user 作为 delegateFrom；否则 null。
+     * 流程定义 Key 取 processDefinitionId 前缀（':' 之前）。
+     */
+    private Long resolveDelegateFrom(Task task, Long operator) {
+        if (operator == null || task == null) {
+            return null;
+        }
+        String defId = task.getProcessDefinitionId();
+        String procDefKey = defId == null ? null : (defId.contains(":") ? defId.substring(0, defId.indexOf(':')) : defId);
+        Long tenantId = TraceContext.getTenantId();
+        return delegateService.resolveDelegateFrom(operator, tenantId,
+                task.getAssignee(), procDefKey);
+    }
+
     private Task requireTask(String taskId) {
         String tenantId = requireTenant();
         Task task = taskService.createTaskQuery().taskId(taskId).taskTenantId(tenantId).singleResult();
@@ -265,10 +285,14 @@ public class TaskActionService {
             return task;
         }
         long candidate = taskService.createTaskQuery().taskId(taskId).taskCandidateUser(uid).count();
-        if (candidate == 0) {
-            throw new BizException(ErrorCode.FLOW_NO_PERMISSION, "无权处理该流程任务");
+        if (candidate > 0) {
+            return task;
         }
-        return task;
+        // 委托代办放行（FLW-F-009）：任务 assignee 为生效委托的发起人时，被委托人可处理
+        if (resolveDelegateFrom(task, userId) != null) {
+            return task;
+        }
+        throw new BizException(ErrorCode.FLOW_NO_PERMISSION, "无权处理该流程任务");
     }
 
     private void record(String taskId, TaskActionType action, Long operator,

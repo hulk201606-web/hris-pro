@@ -50,6 +50,8 @@ class TaskQueryServiceUnassignedTest {
     @Mock
     com.hris.flow.service.CcService ccService;
     @Mock
+    com.hris.flow.service.DelegateService delegateService;
+    @Mock
     TaskQuery query;
 
     private TaskQueryService service;
@@ -57,7 +59,7 @@ class TaskQueryServiceUnassignedTest {
     @BeforeEach
     void setUp() {
         service = new TaskQueryService(taskService, historyService, bizRelationMapper,
-                flowModelMapper, timeoutCfgMapper, ccService);
+                flowModelMapper, timeoutCfgMapper, ccService, delegateService);
         TraceContext.setTenantId(100001L);
         TraceContext.setUserId(5L);
     }

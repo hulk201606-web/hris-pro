@@ -67,6 +67,8 @@ class TaskActionServiceRejectTest {
     @Mock
     ApprovalCallbackDispatcher callbackDispatcher;
     @Mock
+    DelegateService delegateService;
+    @Mock
     TaskQuery query;
 
     private TaskActionService service;
@@ -74,7 +76,8 @@ class TaskActionServiceRejectTest {
     @BeforeEach
     void setUp() {
         service = new TaskActionService(taskService, runtimeService, historyService, taskActionMapper,
-                bizRelationService, eventOutboxService, instanceService, callbackDispatcher);
+                bizRelationService, eventOutboxService, instanceService, callbackDispatcher,
+                delegateService);
         TraceContext.setTenantId(100001L);
         TraceContext.setUserId(2L);
     }

@@ -90,7 +90,7 @@ public class CcService {
             views.add(new TaskView(null, c.getProcInstId(),
                     rel == null ? null : rel.getBizType(), rel == null ? null : rel.getBizType(),
                     rel == null ? null : rel.getBizKey(), c.getCcNode(), null, status,
-                    time, time, null, 0L, null, false));
+                    time, time, null, 0L, null, false, null));
         }
         return new PageResult<>(views, page, size, total);
     }

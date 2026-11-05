@@ -19,11 +19,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 通知分发（PLT-F-003 深化）：渲染模板文本后按渠道 POST webhook 机器人。
+ * 通知分发（PLT-F-003 深化；PLT-F-004 接线偏好闸门）：渲染模板文本后按渠道 POST webhook 机器人。
  *
  * <p>支持渠道：钉钉机器人（msgtype=text）、企微机器人（msgtype=text）、通用 WEBHOOK。
  * 渲染复用 {@link NotifyTemplateService#renderText} 的占位符语义；失败不抛出到调用方，
  * 以 {@link TestSendResponse} 摘要表达，同时回写 sys_notify_record 状态（SENT/FAILED）。</p>
+ *
+ * <p>PLT-F-004 接线点：test-send 请求体可携带模拟目标 userId，发送前读
+ * sys_notify_preference——该渠道对目标用户禁用（enabled=0）或处于免打扰时段
+ * （支持跨午夜）则跳过发送，摘要 status=SKIPPED_PREFERENCE。当前系统无自动群发
+ * 触发点，未来群发（批量按 userId 派发）应在每次实际投递前调用
+ * {@link NotifyPreferenceService#skipReason} 复用同一闸门。</p>
  */
 @Service
 public class NotifyDispatchService {
@@ -33,23 +39,39 @@ public class NotifyDispatchService {
     private final SysNotifyTemplateMapper templateMapper;
     private final SysNotifyRecordMapper recordMapper;
     private final WebhookPoster poster;
+    private final NotifyPreferenceService preferenceService;
 
     public NotifyDispatchService(SysNotifyTemplateMapper templateMapper,
                                  SysNotifyRecordMapper recordMapper,
-                                 WebhookPoster poster) {
+                                 WebhookPoster poster,
+                                 NotifyPreferenceService preferenceService) {
         this.templateMapper = templateMapper;
         this.recordMapper = recordMapper;
         this.poster = poster;
+        this.preferenceService = preferenceService;
     }
 
     /**
-     * 模板测试发送：渲染样例文本并发送到 webhook（body 可覆盖地址）。
-     * 目标不可用/SSRF 拒绝/网络失败均返回失败摘要，不抛异常。
+     * 模板测试发送：渲染样例文本并发送到 webhook（body 可覆盖地址/指定模拟目标 userId）。
+     * 目标不可用/SSRF 拒绝/网络失败均返回失败摘要，不抛异常；目标用户偏好禁用或
+     * 免打扰时段返回 SKIPPED_PREFERENCE 摘要。
      */
     public TestSendResponse testSend(Long templateId, TestSendRequest req) {
         SysNotifyTemplate t = templateMapper.selectById(templateId);
         if (t == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "通知模板不存在");
+        }
+        // PLT-F-004：模拟目标用户的偏好闸门（未指定 userId 时跳过闸门，保持原测试语义）
+        Long targetUser = req == null ? null : req.userId();
+        if (targetUser != null) {
+            String skip = preferenceService.skipReason(targetUser, t.getChannel(),
+                    java.time.LocalTime.now());
+            if (skip != null) {
+                log.info("notify test-send skipped by preference: templateId={}, channel={}, userId={}",
+                        t.getId(), t.getChannel(), targetUser);
+                return new TestSendResponse(t.getId(), t.getChannel(), null,
+                        "SKIPPED_PREFERENCE", null, null, skip);
+            }
         }
         String url = req == null || req.webhookUrl() == null || req.webhookUrl().isBlank()
                 ? t.getWebhookUrl() : req.webhookUrl().trim();
