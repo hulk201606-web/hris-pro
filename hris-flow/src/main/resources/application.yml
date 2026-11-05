@@ -39,6 +39,13 @@ logging:
     com.hris: info
     org.flowable: info
 
+# ---- 预置流程模板种子（FLW-F-019：启动时对预置模板幂等安装 + 部署）----
+hris:
+  flow:
+    # 安装租户列表（逗号分隔）。flow_db 无租户主档不可自行枚举，需配置注入；
+    # demo 租户为 100001；留空则跳过安装（不阻断启动）
+    seed-tenants: ${FLOW_SEED_TENANTS:}
+
 # ---- 健康检查探针（K8s liveness/readiness；不暴露 env/beans/heapdump 等敏感端点）----
 management:
   endpoints:

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/emp">
+
+    <!--
+      调动（FLW-F-019 预置，docs/03-07 §3）：调出确认 → 调入确认 → HRBP。
+      调出确认=原直属上级（AssigneeResolver 解析结果 assignee）；
+      调入确认=目标直属上级（发起方 variables 传 targetSupervisorEmpId，缺省回落 assignee）。
+    -->
+    <process id="EMP_TRANSFER" name="调动审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="outConfirm"/>
+        <userTask id="outConfirm" name="调出方确认" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="outConfirm" targetRef="inConfirm"/>
+        <userTask id="inConfirm" name="调入方确认"
+                  flowable:assignee="${variables:getOrDefault('targetSupervisorEmpId', assignee)}"/>
+        <sequenceFlow id="flow3" sourceRef="inConfirm" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP备案" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow4" sourceRef="hrbp" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

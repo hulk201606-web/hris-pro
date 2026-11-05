@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/kbd">
+
+    <!-- 知识发布（FLW-F-019 预置，docs/03-07 §3）：知识管理员单节点轻量审批。 -->
+    <process id="KBD_PUBLISH" name="知识发布审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="kbAdmin"/>
+        <userTask id="kbAdmin" name="知识管理员审批" flowable:candidateGroups="KNOWLEDGE_ADMIN"/>
+        <sequenceFlow id="flow2" sourceRef="kbAdmin" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

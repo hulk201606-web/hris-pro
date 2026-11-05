@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/att">
+
+    <!-- 加班（FLW-F-019 预置，docs/03-07 §3）：直属上级单节点审批。 -->
+    <process id="ATT_OT" name="加班审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="supervisor"/>
+        <userTask id="supervisor" name="直属上级审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="supervisor" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

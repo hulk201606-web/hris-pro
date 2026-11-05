@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/rcs">
+
+    <!-- 招聘需求（FLW-F-019 预置，docs/03-07 §3）：部门 → HRBP → 分管三级审批。 -->
+    <process id="RCS_REQUISITION" name="招聘需求审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="deptHead"/>
+        <userTask id="deptHead" name="部门负责人审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="deptHead" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow3" sourceRef="hrbp" targetRef="vp"/>
+        <userTask id="vp" name="分管审批" flowable:candidateGroups="VP"/>
+        <sequenceFlow id="flow4" sourceRef="vp" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

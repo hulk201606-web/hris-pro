@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/cmp">
+
+    <!-- 发薪总额审批（FLW-F-019 预置，docs/03-07 §3）：薪酬主管 → 财务 → 租户管理员三级审批。 -->
+    <process id="CMP_PAYROLL" name="发薪总额审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="compMgr"/>
+        <userTask id="compMgr" name="薪酬主管审批" flowable:candidateGroups="COMP_MANAGER"/>
+        <sequenceFlow id="flow2" sourceRef="compMgr" targetRef="finance"/>
+        <userTask id="finance" name="财务复核" flowable:candidateGroups="FINANCE"/>
+        <sequenceFlow id="flow3" sourceRef="finance" targetRef="tenantAdmin"/>
+        <userTask id="tenantAdmin" name="租户管理员批准" flowable:candidateGroups="TENANT_ADMIN"/>
+        <sequenceFlow id="flow4" sourceRef="tenantAdmin" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

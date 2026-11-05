@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/cmp">
+
+    <!-- 调薪（FLW-F-019 预置，docs/03-07 §3）：上级 → HRBP → 薪酬委员会三级审批。 -->
+    <process id="CMP_ADJUST" name="调薪审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="supervisor"/>
+        <userTask id="supervisor" name="直属上级审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="supervisor" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow3" sourceRef="hrbp" targetRef="compCommittee"/>
+        <userTask id="compCommittee" name="薪酬委员会审批" flowable:candidateGroups="COMP_COMMITTEE"/>
+        <sequenceFlow id="flow4" sourceRef="compCommittee" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

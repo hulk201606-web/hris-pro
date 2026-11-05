@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/emp">
+
+    <!--
+      合同续签（FLW-F-019 预置，docs/03-07 §3）：HRBP → 法务(可选) → 分管。
+      法务评审由路由变量 legalReview 控制（发起方 variables 传入，缺省跳过）；
+      分管为候选组 VP。
+    -->
+    <process id="EMP_CONTRACT_RENEW" name="合同续签审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow2" sourceRef="hrbp" targetRef="legalGw"/>
+        <exclusiveGateway id="legalGw" name="是否需法务评审" default="flow5"/>
+        <sequenceFlow id="flow3" sourceRef="legalGw" targetRef="legal">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('legalReview', false)}
+            </conditionExpression>
+        </sequenceFlow>
+        <userTask id="legal" name="法务评审" flowable:candidateGroups="LEGAL"/>
+        <sequenceFlow id="flow4" sourceRef="legal" targetRef="vp"/>
+        <sequenceFlow id="flow5" sourceRef="legalGw" targetRef="vp"/>
+        <userTask id="vp" name="分管审批" flowable:candidateGroups="VP"/>
+        <sequenceFlow id="flow6" sourceRef="vp" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

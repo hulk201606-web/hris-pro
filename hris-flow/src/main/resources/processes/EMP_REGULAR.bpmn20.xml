@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/emp">
+
+    <!--
+      转正（FLW-F-019 预置，docs/03-07 §3）：自评 → 上级 → HRBP。
+      自评节点由发起人本人办理（Authentication 发起人经 flowable:initiator 注入变量 initiator）；
+      上级节点复用 AssigneeResolver 解析结果 assignee。
+    -->
+    <process id="EMP_REGULAR" name="转正审批" isExecutable="true">
+        <startEvent id="start" flowable:initiator="initiator"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="selfReview"/>
+        <userTask id="selfReview" name="转正自评" flowable:assignee="${initiator}"/>
+        <sequenceFlow id="flow2" sourceRef="selfReview" targetRef="supervisor"/>
+        <userTask id="supervisor" name="上级审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow3" sourceRef="supervisor" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow4" sourceRef="hrbp" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

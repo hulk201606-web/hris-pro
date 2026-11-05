@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/emp">
+
+    <!-- 关键信息变更（FLW-F-019 预置，docs/03-07 §3）：HRBP 单节点轻量审批。 -->
+    <process id="EMP_PROFILE_CHG" name="关键信息变更审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow2" sourceRef="hrbp" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/att">
+
+    <!--
+      请假（FLW-F-019 预置，docs/03-07 §3）：按天数阶梯路由（规格为 DMN 阶梯，MVP 用排他网关等价实现）。
+      天数变量 days 与发起方 payload 字段一致（LeaveRequestService: days）；
+      变量缺省时按 0 天处理走上级审批，与原单节点行为兼容。
+    -->
+    <process id="ATT_LEAVE" name="请假审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="daysGw"/>
+        <exclusiveGateway id="daysGw" name="请假天数阶梯" default="flow4"/>
+        <sequenceFlow id="flow2" sourceRef="daysGw" targetRef="supervisor">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('days', 0) &lt;= 3}
+            </conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="flow3" sourceRef="daysGw" targetRef="hrbp">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('days', 0) &lt;= 7}
+            </conditionExpression>
+        </sequenceFlow>
+        <userTask id="supervisor" name="上级审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow5" sourceRef="supervisor" targetRef="end"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow6" sourceRef="hrbp" targetRef="end"/>
+        <userTask id="director" name="总监审批" flowable:candidateGroups="DIRECTOR"/>
+        <sequenceFlow id="flow7" sourceRef="director" targetRef="end"/>
+        <sequenceFlow id="flow4" sourceRef="daysGw" targetRef="director"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

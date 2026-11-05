@@ -7,7 +7,11 @@ import com.hris.common.trace.TraceContext;
 import com.hris.flow.dto.PageResult;
 import com.hris.flow.dto.TaskView;
 import com.hris.flow.entity.BizRelation;
+import com.hris.flow.entity.FlowModel;
+import com.hris.flow.entity.TimeoutCfg;
 import com.hris.flow.mapper.BizRelationMapper;
+import com.hris.flow.mapper.FlowModelMapper;
+import com.hris.flow.mapper.TimeoutCfgMapper;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -40,12 +44,17 @@ public class TaskQueryService {
     private final TaskService taskService;
     private final HistoryService historyService;
     private final BizRelationMapper bizRelationMapper;
+    private final FlowModelMapper flowModelMapper;
+    private final TimeoutCfgMapper timeoutCfgMapper;
 
     public TaskQueryService(TaskService taskService, HistoryService historyService,
-                            BizRelationMapper bizRelationMapper) {
+                            BizRelationMapper bizRelationMapper, FlowModelMapper flowModelMapper,
+                            TimeoutCfgMapper timeoutCfgMapper) {
         this.taskService = taskService;
         this.historyService = historyService;
         this.bizRelationMapper = bizRelationMapper;
+        this.flowModelMapper = flowModelMapper;
+        this.timeoutCfgMapper = timeoutCfgMapper;
     }
 
     /** 我的待办（候选人或已指派）。 */
@@ -59,12 +68,21 @@ public class TaskQueryService {
         List<Task> tasks = q.orderByTaskCreateTime().desc().listPage(offset(page, size), safeSize(size));
         Map<String, BizRelation> relMap = bizByInstIds(tasks.stream()
                 .map(Task::getProcessInstanceId).filter(java.util.Objects::nonNull).distinct().toList());
+        // 死代码最小激活（docs/19 §8.7-6）：form_schema_json 随待办返回 + 超期 overdue 标记
+        Map<String, String> schemaMap = formSchemaByKeys(tasks.stream()
+                .map(t -> procKeyOf(t, relMap.get(t.getProcessInstanceId()))).collect(Collectors.toSet()));
+        Map<String, TimeoutCfg> cfgMap = timeoutCfgByProcDefIds(tasks.stream()
+                .map(Task::getProcessDefinitionId).filter(java.util.Objects::nonNull).distinct().toList());
         List<TaskView> views = new ArrayList<>();
         for (Task t : tasks) {
             BizRelation rel = relMap.get(t.getProcessInstanceId());
+            String procKey = procKeyOf(t, rel);
+            TimeoutCfg cfg = t.getProcessDefinitionId() == null ? null
+                    : cfgMap.get(t.getProcessDefinitionId() + "#" + t.getTaskDefinitionKey());
             views.add(new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
                     bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
-                    "TODO", fmt(t.getCreateTime()), fmt(t.getCreateTime()), null, 0L));
+                    "TODO", fmt(t.getCreateTime()), fmt(t.getCreateTime()), null, 0L,
+                    schemaMap.get(procKey), isOverdue(t, cfg)));
         }
         return new PageResult<>(views, page, size, total);
     }
@@ -88,7 +106,7 @@ public class TaskQueryService {
             views.add(new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
                     bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
                     "DONE", fmt(t.getStartTime()), fmt(t.getCreateTime()), fmt(t.getEndTime()),
-                    t.getDurationInMillis() == null ? 0L : t.getDurationInMillis()));
+                    t.getDurationInMillis() == null ? 0L : t.getDurationInMillis(), null, false));
         }
         return new PageResult<>(views, page, size, total);
     }
@@ -121,7 +139,7 @@ public class TaskQueryService {
             views.add(new TaskView(null, p.getId(), p.getProcessDefinitionKey(),
                     p.getProcessDefinitionKey(), p.getBusinessKey(), name, null,
                     status, fmt(p.getStartTime()), fmt(p.getStartTime()), fmt(p.getEndTime()),
-                    p.getDurationInMillis() == null ? 0L : p.getDurationInMillis()));
+                    p.getDurationInMillis() == null ? 0L : p.getDurationInMillis(), null, false));
         }
         return new PageResult<>(views, page, size, total);
     }
@@ -141,6 +159,60 @@ public class TaskQueryService {
 
     private String bizKeyOf(BizRelation rel) {
         return rel == null ? null : rel.getBizKey();
+    }
+
+    /** 流程定义 key：优先取业务映射 bizType（兼作定义 key），缺省从 processDefinitionId 解析。 */
+    private String procKeyOf(Task task, BizRelation rel) {
+        if (rel != null && rel.getBizType() != null && !rel.getBizType().isBlank()) {
+            return rel.getBizType();
+        }
+        String defId = task.getProcessDefinitionId();
+        if (defId == null) {
+            return null;
+        }
+        int idx = defId.indexOf(':');
+        return idx > 0 ? defId.substring(0, idx) : defId;
+    }
+
+    /** 按流程定义 key 批量取最新版模型的 form_schema_json（死代码激活：前端可渲染表单）。 */
+    private Map<String, String> formSchemaByKeys(java.util.Set<String> keys) {
+        Map<String, String> result = new java.util.HashMap<>();
+        for (String key : keys) {
+            if (key == null || key.isBlank()) {
+                continue;
+            }
+            List<FlowModel> models = flowModelMapper.selectList(new LambdaQueryWrapper<FlowModel>()
+                    .eq(FlowModel::getProcDefKey, key)
+                    .orderByDesc(FlowModel::getVersion)
+                    .last("limit 1"));
+            if (models != null && !models.isEmpty() && models.get(0).getFormSchemaJson() != null) {
+                result.put(key, models.get(0).getFormSchemaJson());
+            }
+        }
+        return result;
+    }
+
+    /** 按流程定义 ID 批量取超时配置，key = procDefId#nodeId。 */
+    private Map<String, TimeoutCfg> timeoutCfgByProcDefIds(List<String> procDefIds) {
+        if (procDefIds.isEmpty()) {
+            return Map.of();
+        }
+        List<TimeoutCfg> cfgs = timeoutCfgMapper.selectList(new LambdaQueryWrapper<TimeoutCfg>()
+                .in(TimeoutCfg::getProcDefId, procDefIds));
+        if (cfgs == null || cfgs.isEmpty()) {
+            return Map.of();
+        }
+        return cfgs.stream()
+                .filter(c -> c.getProcDefId() != null && c.getNodeId() != null)
+                .collect(Collectors.toMap(c -> c.getProcDefId() + "#" + c.getNodeId(), c -> c, (a, b) -> a));
+    }
+
+    /** 超期判定：配置了超时时长（escalateAfterH 小时）且任务创建时间已超期（不做自动催办/升级）。 */
+    private boolean isOverdue(Task task, TimeoutCfg cfg) {
+        return cfg != null && cfg.getEscalateAfterH() != null && cfg.getEscalateAfterH() > 0
+                && task.getCreateTime() != null
+                && System.currentTimeMillis() - task.getCreateTime().getTime()
+                        > cfg.getEscalateAfterH() * 3600_000L;
     }
 
     private int offset(long page, long size) {

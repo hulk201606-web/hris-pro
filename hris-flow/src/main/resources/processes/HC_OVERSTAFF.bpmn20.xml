@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/org">
+
+    <!--
+      超编占用（FLW-F-019 预置，docs/03-07 §3）：编制校验网关 → 分管。
+      编制校验结果为路由变量 exceeded（发起方 variables 传入）；
+      缺省视为超编需分管审批（保守路由，避免未传变量时绕过审批）。
+    -->
+    <process id="HC_OVERSTAFF" name="超编占用审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="checkGw"/>
+        <exclusiveGateway id="checkGw" name="编制校验" default="flow2"/>
+        <sequenceFlow id="flow2" sourceRef="checkGw" targetRef="vp"/>
+        <userTask id="vp" name="分管审批" flowable:candidateGroups="VP"/>
+        <sequenceFlow id="flow3" sourceRef="vp" targetRef="end"/>
+        <sequenceFlow id="flow4" sourceRef="checkGw" targetRef="end">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${!variables:getOrDefault('exceeded', true)}
+            </conditionExpression>
+        </sequenceFlow>
+        <endEvent id="end"/>
+    </process>
+</definitions>

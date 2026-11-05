@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/emp">
+
+    <!--
+      入职审批（FLW-F-019 预置，docs/03-07 §3）：HRBP → 部门负责人 →（超编 → 总监）。
+      部门负责人由发起时 AssigneeResolver 四级解析注入变量 assignee；
+      超编标志为路由变量 overstaff（发起方 variables 传入，缺省视为不超编）。
+    -->
+    <process id="EMP_ONBOARD" name="入职审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow2" sourceRef="hrbp" targetRef="deptHead"/>
+        <userTask id="deptHead" name="部门负责人确认" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow3" sourceRef="deptHead" targetRef="overstaffGw"/>
+        <exclusiveGateway id="overstaffGw" name="是否超编" default="flow5"/>
+        <sequenceFlow id="flow4" sourceRef="overstaffGw" targetRef="director">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('overstaff', false)}
+            </conditionExpression>
+        </sequenceFlow>
+        <userTask id="director" name="总监审批" flowable:candidateGroups="DIRECTOR"/>
+        <sequenceFlow id="flow6" sourceRef="director" targetRef="end"/>
+        <sequenceFlow id="flow5" sourceRef="overstaffGw" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

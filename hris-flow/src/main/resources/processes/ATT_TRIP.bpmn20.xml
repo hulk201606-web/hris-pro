@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/att">
+
+    <!--
+      出差（FLW-F-019 预置，docs/03-07 §3）：上级 →（涉外 → 行政）。
+      涉外标志为路由变量 abroad（发起方 variables 传入，缺省视为非涉外跳过行政节点）。
+    -->
+    <process id="ATT_TRIP" name="出差审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="supervisor"/>
+        <userTask id="supervisor" name="上级审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="supervisor" targetRef="abroadGw"/>
+        <exclusiveGateway id="abroadGw" name="是否涉外" default="flow5"/>
+        <sequenceFlow id="flow3" sourceRef="abroadGw" targetRef="admin">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('abroad', false)}
+            </conditionExpression>
+        </sequenceFlow>
+        <userTask id="admin" name="行政备案" flowable:candidateGroups="ADMIN"/>
+        <sequenceFlow id="flow4" sourceRef="admin" targetRef="end"/>
+        <sequenceFlow id="flow5" sourceRef="abroadGw" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

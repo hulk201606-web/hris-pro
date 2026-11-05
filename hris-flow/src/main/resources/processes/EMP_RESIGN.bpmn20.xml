@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/emp">
+
+    <!--
+      离职（FLW-F-019 预置，docs/03-07 §3）：上级 → HRBP →（涉核心岗 → 总监）。
+      上级=AssigneeResolver 解析结果 assignee；
+      核心岗标志为路由变量 corePost（发起方 variables 传入，缺省视为非核心岗）。
+    -->
+    <process id="EMP_RESIGN" name="离职审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="supervisor"/>
+        <userTask id="supervisor" name="直属上级审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="supervisor" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow3" sourceRef="hrbp" targetRef="corePostGw"/>
+        <exclusiveGateway id="corePostGw" name="是否涉核心岗" default="flow5"/>
+        <sequenceFlow id="flow4" sourceRef="corePostGw" targetRef="director">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('corePost', false)}
+            </conditionExpression>
+        </sequenceFlow>
+        <userTask id="director" name="总监审批" flowable:candidateGroups="DIRECTOR"/>
+        <sequenceFlow id="flow6" sourceRef="director" targetRef="end"/>
+        <sequenceFlow id="flow5" sourceRef="corePostGw" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

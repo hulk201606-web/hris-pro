@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/rcs">
+
+    <!--
+      Offer 审批（FLW-F-019 预置，docs/03-07 §3）：招聘经理 → HRBP →（超带宽 → 薪酬委员会）。
+      薪酬带宽校验结果为路由变量 overBand（发起方 variables 传入，缺省视为带宽内）。
+    -->
+    <process id="RCS_OFFER" name="Offer审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="recruitMgr"/>
+        <userTask id="recruitMgr" name="招聘经理审批" flowable:assignee="${assignee}"/>
+        <sequenceFlow id="flow2" sourceRef="recruitMgr" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow3" sourceRef="hrbp" targetRef="bandGw"/>
+        <exclusiveGateway id="bandGw" name="是否超薪酬带宽" default="flow5"/>
+        <sequenceFlow id="flow4" sourceRef="bandGw" targetRef="compCommittee">
+            <conditionExpression xsi:type="tFormalExpression">
+                ${variables:getOrDefault('overBand', false)}
+            </conditionExpression>
+        </sequenceFlow>
+        <userTask id="compCommittee" name="薪酬委员会审批" flowable:candidateGroups="COMP_COMMITTEE"/>
+        <sequenceFlow id="flow6" sourceRef="compCommittee" targetRef="end"/>
+        <sequenceFlow id="flow5" sourceRef="bandGw" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/org">
+
+    <!-- 组织调整（FLW-F-019 预置，docs/03-07 §3）：HRBP → 分管 → 租户管理员三级审批。 -->
+    <process id="ORG_ADJUST" name="组织调整审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP审核" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow2" sourceRef="hrbp" targetRef="vp"/>
+        <userTask id="vp" name="分管审批" flowable:candidateGroups="VP"/>
+        <sequenceFlow id="flow3" sourceRef="vp" targetRef="tenantAdmin"/>
+        <userTask id="tenantAdmin" name="租户管理员确认" flowable:candidateGroups="TENANT_ADMIN"/>
+        <sequenceFlow id="flow4" sourceRef="tenantAdmin" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>
