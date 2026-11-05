@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://hris.com/flow/prf">
+
+    <!-- 绩效申诉（PRF-F-009，docs/03-07 清单补充）：申诉直诉 HRBP 单节点轻量审批，
+         结论由审批回调回写 prf_appeal.status（APPROVED/REJECTED）。 -->
+    <process id="PRF_APPEAL" name="绩效申诉审批" isExecutable="true">
+        <startEvent id="start"/>
+        <sequenceFlow id="flow1" sourceRef="start" targetRef="hrbp"/>
+        <userTask id="hrbp" name="HRBP受理" flowable:candidateGroups="HRBP"/>
+        <sequenceFlow id="flow2" sourceRef="hrbp" targetRef="end"/>
+        <endEvent id="end"/>
+    </process>
+</definitions>

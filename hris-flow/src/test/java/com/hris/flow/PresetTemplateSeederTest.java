@@ -64,7 +64,7 @@ class PresetTemplateSeederTest {
     }
 
     @Test
-    @DisplayName("模型不存在时逐条 create + deploy（17 条预置 + GENERIC_APPROVAL）")
+    @DisplayName("模型不存在时逐条 create + deploy（18 条预置 + GENERIC_APPROVAL）")
     void shouldCreateAndDeployWhenAbsent() {
         when(flowModelMapper.selectList(any())).thenReturn(List.of());
         when(modelService.create(any())).thenReturn(
@@ -76,8 +76,8 @@ class PresetTemplateSeederTest {
                 ArgumentCaptor.forClass(ModelDtos.ModelCreateRequest.class);
         verify(modelService, times(PresetTemplateSeeder.seedKeys().size())).create(captor.capture());
         verify(modelService, times(PresetTemplateSeeder.seedKeys().size())).deploy(1L);
-        assertEquals(PresetTemplateSeeder.PRESET_KEYS.size(), 17);
-        assertEquals(18, PresetTemplateSeeder.seedKeys().size());
+        assertEquals(PresetTemplateSeeder.PRESET_KEYS.size(), 18);
+        assertEquals(19, PresetTemplateSeeder.seedKeys().size());
     }
 
     @Test
@@ -119,7 +119,7 @@ class PresetTemplateSeederTest {
 
         seeder("100001").run(null);
 
-        // 除 ATT_LEAVE 外的 17 条仍被处理
+        // 除 ATT_LEAVE 外的 18 条仍被处理
         verify(modelService, times(PresetTemplateSeeder.seedKeys().size() - 1)).deploy(1L);
     }
 

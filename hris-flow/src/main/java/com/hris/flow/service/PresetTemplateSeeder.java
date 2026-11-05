@@ -39,7 +39,7 @@ public class PresetTemplateSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(PresetTemplateSeeder.class);
 
-    /** docs/03-07 §3 预置清单（17 条），顺序即安装顺序。 */
+    /** docs/03-07 §3 预置清单 + PRF_APPEAL（PRF 发起侧接入所需，2026-11-05 补充），顺序即安装顺序。 */
     public static final List<String> PRESET_KEYS = List.of(
             "EMP_ONBOARD", "EMP_REGULAR", "EMP_TRANSFER", "EMP_RESIGN",
             "EMP_CONTRACT_RENEW", "EMP_PROFILE_CHG",
@@ -47,7 +47,7 @@ public class PresetTemplateSeeder implements ApplicationRunner {
             "ORG_ADJUST", "HC_OVERSTAFF",
             "RCS_REQUISITION", "RCS_OFFER",
             "CMP_ADJUST", "CMP_PAYROLL",
-            "KBD_PUBLISH");
+            "PRF_APPEAL", "KBD_PUBLISH");
 
     /** MVP 已有的通用模板，一并纳入幂等兼容。 */
     public static final String GENERIC_KEY = "GENERIC_APPROVAL";
