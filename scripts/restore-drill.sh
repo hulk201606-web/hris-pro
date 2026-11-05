@@ -152,6 +152,29 @@ IFS='	' read -r ge ru hi <<< "$(q "
   || fail "三类引擎表不全：act_ge_*=${ge} act_ru_*=${ru} act_hi_*=${hi}（均须 > 0）"
 echo "[校验 3.5] act_ge_*=${ge} / act_ru_*=${ru} / act_hi_*=${hi} 三类均 > 0：OK"
 
+# ---------- 步骤 3.6：敏感列密文抽样校验（ADR-007：DBA/备份不再可见明文，
+# 原明文抽样断言调整为「密文存储 + 经 CryptoService 同款算法解密抽样比对」。
+# HRIS_CRYPTO_KEY 未配置时跳过（演练实例可能早于加密上线）。） ----------
+if [ -n "${HRIS_CRYPTO_KEY:-}" ]; then
+  PY_BIN="$(command -v python3 || command -v python)"
+  [ -n "$PY_BIN" ] || fail "密文抽样校验需要 python3"
+  SAMPLE_TSV="$(mktemp)"
+  {
+    q "SELECT 'emp_employee:cert_no', cert_no_cipher, IFNULL(cert_no_hash,'') FROM emp_db.emp_employee WHERE cert_no_cipher LIKE 'enc1:%' LIMIT 3;"
+    q "SELECT 'emp_employee:mobile', mobile_cipher, '' FROM emp_db.emp_employee WHERE mobile_cipher LIKE 'enc1:%' LIMIT 3;"
+    q "SELECT 'cmp_employee_pay:salary_amount', salary_amount_cipher, '' FROM cmp_db.cmp_employee_pay WHERE salary_amount_cipher LIKE 'enc1:%' LIMIT 3;"
+    q "SELECT 'cmp_payroll_detail:amount', amount_cipher, '' FROM cmp_db.cmp_payroll_detail WHERE amount_cipher LIKE 'enc1:%' LIMIT 3;"
+  } > "$SAMPLE_TSV"
+  sample_count="$(grep -c . "$SAMPLE_TSV" || true)"
+  [ "$sample_count" -gt 0 ] || fail "恢复实例中无任何 enc1: 密文行（备份早于加密迁移或密文被清空）"
+  "$PY_BIN" "${SCRIPT_DIR}/decrypt_sample_check.py" < "$SAMPLE_TSV" \
+    || fail "敏感列密文抽样解密校验失败（见上方 [FAIL] 明细）"
+  rm -f "$SAMPLE_TSV"
+  echo "[校验 3.6] 敏感列密文抽样 ${sample_count} 行：enc1: 格式在位 + 解密比对通过：OK"
+else
+  echo "[SKIP 3.6] 未设 HRIS_CRYPTO_KEY，跳过敏感列密文抽样校验（加密全量落地后应配置该变量）"
+fi
+
 # ---------- 步骤 4：应用能连上恢复库（真实可用性验证） ----------
 auth_tables="$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='auth_db';")"
 echo "[校验 4.0] auth_db 表数=${auth_tables}"
