@@ -11,12 +11,16 @@ public final class RequisitionDtos {
     private RequisitionDtos() {
     }
 
-    /** 创建请求。 */
-    public record RequisitionCreateRequest(@NotNull(message = "reqNo 不能为空") String reqNo, @NotNull(message = "deptId 不能为空") Long deptId, @NotNull(message = "positionId 不能为空") Long positionId, @NotNull(message = "headcount 不能为空") Integer headcount, String reason, @NotNull(message = "status 不能为空") String status) {
+    /**
+     * 创建请求。状态不接受入参：新建固定 DRAFT，提交走 submit 端点（防状态机旁路）。
+     */
+    public record RequisitionCreateRequest(@NotNull(message = "reqNo 不能为空") String reqNo, @NotNull(message = "deptId 不能为空") Long deptId, @NotNull(message = "positionId 不能为空") Long positionId, @NotNull(message = "headcount 不能为空") Integer headcount, String reason) {
     }
 
-    /** 更新请求。 */
-    public record RequisitionUpdateRequest(String reqNo, Long deptId, Long positionId, Integer headcount, String reason, String status) {
+    /**
+     * 更新请求。状态不接受入参：仅可经 submit 端点或审批回调迁移（防状态机旁路）。
+     */
+    public record RequisitionUpdateRequest(String reqNo, Long deptId, Long positionId, Integer headcount, String reason) {
     }
 
     /** 响应。 */

@@ -61,6 +61,13 @@ public class PayrollRunController {
     public R<PayrollRunResponse> update(@PathVariable Long id, @Valid @RequestBody PayrollRunUpdateRequest req) {
         return R.ok(service.update(id, req));
     }
+    /** 提交审批（INIT/TRIAL/CALC→REVIEW 并发起流程，复用写权限）。 */
+
+    @RequirePerm("cmp:payroll-run:write")
+    @PostMapping("/{id}/submit")
+    public R<PayrollRunResponse> submit(@PathVariable Long id) {
+        return R.ok(service.submit(id));
+    }
     /** 按 ID 删除记录。权限点见 @RequirePerm。 */
 
     @RequirePerm("cmp:payroll-run:write")

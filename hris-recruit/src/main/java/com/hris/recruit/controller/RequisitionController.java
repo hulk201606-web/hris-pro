@@ -64,6 +64,13 @@ public class RequisitionController {
         return R.ok(service.update(id, req));
     }
 
+    /** 提交审批（DRAFT→APPROVING 并发起流程，复用写权限）。 */
+    @RequirePerm("rcu:requisition:write")
+    @PostMapping("/{id}/submit")
+    public R<RequisitionResponse> submit(@PathVariable Long id) {
+        return R.ok(service.submit(id));
+    }
+
     /** 删除记录（写权限）。 */
     @RequirePerm("rcu:requisition:write")
     @DeleteMapping("/{id}")
