@@ -32,7 +32,11 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,6 +76,8 @@ class DailyAttendanceServiceTest {
     private MonthlyClosingMapper closingMapper;
     @Mock
     private GroupService groupService;
+    @Mock
+    private DailyCloseService dailyCloseService;
 
     private DailyAttendanceService service;
 
@@ -79,10 +85,13 @@ class DailyAttendanceServiceTest {
     void setUp() {
         service = new DailyAttendanceService(dailyMapper, assignmentMapper, punchService,
                 shiftService, leaveQueryService, overtimeService, calculator, holidayService,
-                groupService, cycleMapper, closingMapper);
+                groupService, cycleMapper, closingMapper, dailyCloseService);
         // 默认员工未加入考勤组 → 降级租户并集（旧行为：日历对全部年度生效）；
         // 仅 ClosingLock 分支不触发该查询，用 lenient
         lenient().when(groupService.boundCalendarYearsForEmp(EMP_ID)).thenReturn(List.of());
+        // 批次 12#27：组策略缺省 FIXED + Asia/Shanghai + 不校验围栏
+        lenient().when(groupService.policyForEmp(EMP_ID))
+                .thenReturn(GroupService.GroupPolicy.DEFAULTS);
     }
 
     private void stubNoClosing() {
@@ -137,6 +146,21 @@ class DailyAttendanceServiceTest {
         }
 
         @Test
+        @DisplayName("期间日考勤月结锁 ACTIVE → 拒绝重算「期间已月结」")
+        void rejectsRecalcWhenDailyCloseActive() {
+            doThrow(new BizException(ErrorCode.ATT_ERROR,
+                    "期间 2026-10 已月结，不可重算；差异请走月结调整通道"))
+                    .when(dailyCloseService).ensureNotClosed(WORK_DATE);
+
+            BizException e = assertThrows(BizException.class, () -> service.compute(req()));
+
+            assertEquals(ErrorCode.ATT_ERROR.getCode(), e.getCode());
+            assertTrue(e.getMessage().contains("已月结"), "须提示期间已月结");
+            verify(dailyMapper, never()).insert(any(DailyAttendance.class));
+            verify(dailyMapper, never()).updateById(any(DailyAttendance.class));
+        }
+
+        @Test
         @DisplayName("月结未完成（RUNNING）或无月结批次 → 正常重算")
         void allowsRecalcWhenClosingNotDone() {
             PayrollCycle cycle = new PayrollCycle();
@@ -154,7 +178,7 @@ class DailyAttendanceServiceTest {
                     new WorkdayCheckResponse(WORK_DATE, true, "WEEKDAY"));
             stubShift();
             stubBaseCalc();
-            when(calculator.resolveStatus(any(), any(), any(), any()))
+            when(calculator.resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt()))
                     .thenReturn(AttendanceCalculator.STATUS_ABSENT);
 
             DailyComputeResult result = service.compute(req());
@@ -185,7 +209,7 @@ class DailyAttendanceServiceTest {
             ArgumentCaptor<DailyAttendance> captor = ArgumentCaptor.forClass(DailyAttendance.class);
             verify(dailyMapper).insert(captor.capture());
             assertEquals(AttendanceCalculator.STATUS_HOLIDAY, captor.getValue().getAttStatus());
-            verify(calculator, never()).resolveStatus(any(), any(), any(), any());
+            verify(calculator, never()).resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt());
             verify(calculator, never()).raiseExceptions(any(), any());
         }
 
@@ -233,7 +257,7 @@ class DailyAttendanceServiceTest {
             assertEquals(AttendanceCalculator.STATUS_HOLIDAY, saved.getAttStatus());
             assertEquals(0, new BigDecimal("2.00").compareTo(saved.getOvertimeHours()),
                     "节假日加班时长链路不受影响");
-            verify(calculator, never()).resolveStatus(any(), any(), any(), any());
+            verify(calculator, never()).resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt());
         }
 
         @Test
@@ -245,13 +269,13 @@ class DailyAttendanceServiceTest {
                     new WorkdayCheckResponse(WORK_DATE, true, "WEEKDAY"));
             stubShift();
             stubBaseCalc();
-            when(calculator.resolveStatus(any(), any(), any(), any()))
+            when(calculator.resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt()))
                     .thenReturn(AttendanceCalculator.STATUS_LATE);
 
             DailyComputeResult result = service.compute(req());
 
             assertEquals(1, result.lateCount());
-            verify(calculator).resolveStatus(any(), any(), any(), any());
+            verify(calculator).resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt());
             assertEquals(0, result.newExceptionCount());
         }
     }
@@ -292,13 +316,13 @@ class DailyAttendanceServiceTest {
             when(punchService.findByDate(EMP_ID, workDate2027)).thenReturn(List.of(punch));
             when(assignmentMapper.selectOne(any())).thenReturn(null);
             stubBaseCalcFor(workDate2027);
-            when(calculator.resolveStatus(any(), any(), any(), any()))
+            when(calculator.resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt()))
                     .thenReturn(AttendanceCalculator.STATUS_NORMAL);
 
             service.compute(new DailyComputeRequest(workDate2027, List.of(EMP_ID)));
 
             verify(holidayService, never()).isWorkday(any());
-            verify(calculator).resolveStatus(any(), any(), any(), any());
+            verify(calculator).resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt());
         }
 
         @Test
@@ -310,13 +334,13 @@ class DailyAttendanceServiceTest {
                     new WorkdayCheckResponse(WORK_DATE, true, "WORKDAY"));
             stubShift();
             stubBaseCalc();
-            when(calculator.resolveStatus(any(), any(), any(), any()))
+            when(calculator.resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt()))
                     .thenReturn(AttendanceCalculator.STATUS_NORMAL);
 
             DailyComputeResult result = service.compute(req());
 
             assertEquals(1, result.normalCount());
-            verify(calculator).resolveStatus(any(), any(), any(), any());
+            verify(calculator).resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt());
         }
 
         private void stubBaseCalcFor(LocalDate workDate) {
@@ -324,6 +348,62 @@ class DailyAttendanceServiceTest {
             when(overtimeService.overtimeHoursOn(EMP_ID, workDate)).thenReturn(BigDecimal.ZERO);
             when(dailyMapper.selectOne(any())).thenReturn(null);
             when(dailyMapper.insert(any(DailyAttendance.class))).thenReturn(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("组时区与工作制（批12#27）")
+    class GroupTimezoneAndWorkMode {
+
+        @Test
+        @DisplayName("打卡 UTC 时刻按组时区换算为判定基准（01:00Z / 10:00Z → 09:00 / 18:00 Asia/Shanghai）")
+        void convertsPunchTimeToGroupZone() {
+            stubNoClosing();
+            PunchRecord in = new PunchRecord();
+            in.setEmpId(EMP_ID);
+            in.setType(PunchService.TYPE_IN);
+            in.setPunchTime(LocalDateTime.parse("2026-10-01T01:00:00"));
+            PunchRecord out = new PunchRecord();
+            out.setEmpId(EMP_ID);
+            out.setType(PunchService.TYPE_OUT);
+            out.setPunchTime(LocalDateTime.parse("2026-10-01T10:00:00"));
+            when(punchService.findByDate(EMP_ID, WORK_DATE)).thenReturn(List.of(in, out));
+            when(holidayService.isWorkday(WORK_DATE)).thenReturn(
+                    new WorkdayCheckResponse(WORK_DATE, true, "WEEKDAY"));
+            stubShift();
+            stubBaseCalc();
+            when(calculator.resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt()))
+                    .thenReturn(AttendanceCalculator.STATUS_NORMAL);
+
+            service.compute(req());
+
+            ArgumentCaptor<LocalDateTime> inCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            ArgumentCaptor<LocalDateTime> outCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            verify(calculator).resolveStatus(any(), inCaptor.capture(), outCaptor.capture(),
+                    any(), anyBoolean(), anyInt());
+            assertEquals(LocalDateTime.parse("2026-10-01T09:00:00"), inCaptor.getValue());
+            assertEquals(LocalDateTime.parse("2026-10-01T18:00:00"), outCaptor.getValue());
+        }
+
+        @Test
+        @DisplayName("弹性工作制策略透传给计算器（flexible=true + 弹性区间）")
+        void passesFlexiblePolicyToCalculator() {
+            stubNoClosing();
+            when(groupService.policyForEmp(EMP_ID)).thenReturn(new GroupService.GroupPolicy(
+                    900001L, GroupService.WORK_MODE_FLEXIBLE,
+                    java.time.ZoneId.of("Asia/Shanghai"), null, true, 60));
+            when(punchService.findByDate(EMP_ID, WORK_DATE)).thenReturn(List.of());
+            when(holidayService.isWorkday(WORK_DATE)).thenReturn(
+                    new WorkdayCheckResponse(WORK_DATE, true, "WEEKDAY"));
+            stubShift();
+            stubBaseCalc();
+            when(calculator.resolveStatus(any(), any(), any(), any(), anyBoolean(), anyInt()))
+                    .thenReturn(AttendanceCalculator.STATUS_NORMAL);
+
+            service.compute(req());
+
+            verify(calculator).resolveStatus(any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq(true),
+                    org.mockito.ArgumentMatchers.eq(60));
         }
     }
 }

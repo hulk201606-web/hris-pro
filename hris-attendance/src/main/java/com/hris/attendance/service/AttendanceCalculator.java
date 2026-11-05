@@ -88,6 +88,23 @@ public class AttendanceCalculator {
      */
     public String resolveStatus(Shift shift, LocalDateTime punchIn, LocalDateTime punchOut,
                                 BigDecimal leaveHours) {
+        return resolveStatus(shift, punchIn, punchOut, leaveHours, false, 0);
+    }
+
+    /**
+     * 状态判定（含工作制，批12#27）。
+     *
+     * <p>FIXED：沿用「上班时刻 + 宽限」判迟到、「下班时刻」判早退。
+     * FLEXIBLE（MVP 简化，明确标注）：迟到判定只看**日累计工时下限**——
+     * 只要打卡落在「班次上班 + 宽限 + 弹性区间」之内即视为正常；超出弹性区间时，
+     * 日累计工时达到班次时长也不判迟到，未达则按迟到（工时不足）口径归集，
+     * 且不做早退判定（弹性下班时间由员工自行安排）。</p>
+     *
+     * @param flexible           是否弹性工作制（考勤组 work_mode=FLEXIBLE）
+     * @param timeWindowMinutes  弹性区间（分钟，0 表示不额外放宽）
+     */
+    public String resolveStatus(Shift shift, LocalDateTime punchIn, LocalDateTime punchOut,
+                                BigDecimal leaveHours, boolean flexible, int timeWindowMinutes) {
         if (TimeAmountUtil.amount(leaveHours)
                 .compareTo(BigDecimal.valueOf(TimeAmountUtil.HOURS_PER_DAY)) >= 0) {
             return STATUS_LEAVE;
@@ -98,6 +115,9 @@ public class AttendanceCalculator {
         if (punchIn == null && punchOut == null) {
             return STATUS_ABSENT;
         }
+        if (flexible) {
+            return resolveFlexible(shift, punchIn, punchOut, timeWindowMinutes);
+        }
         LocalTime lateLine = shift.getStartTime().plusMinutes(LATE_GRACE_MINUTES);
         if (punchIn != null && punchIn.toLocalTime().isAfter(lateLine)) {
             return STATUS_LATE;
@@ -106,6 +126,41 @@ public class AttendanceCalculator {
             return STATUS_EARLY;
         }
         return STATUS_NORMAL;
+    }
+
+    /**
+     * 弹性工作制判定（MVP）：弹性区间内到达即正常；否则以日累计工时对比班次时长，
+     * 不足则按迟到归集（缺卡仍由异常生成逻辑按 MISSING_PUNCH 处理）。
+     */
+    private String resolveFlexible(Shift shift, LocalDateTime punchIn, LocalDateTime punchOut,
+                                   int timeWindowMinutes) {
+        if (punchIn == null) {
+            // 只有下班卡：无法判断到达时刻，交由缺卡异常闭环，状态不额外判迟到
+            return STATUS_NORMAL;
+        }
+        LocalTime latestStart = shift.getStartTime()
+                .plusMinutes((long) LATE_GRACE_MINUTES + Math.max(0, timeWindowMinutes));
+        if (!punchIn.toLocalTime().isAfter(latestStart)) {
+            return STATUS_NORMAL;
+        }
+        if (punchOut == null) {
+            return STATUS_NORMAL;
+        }
+        long workedMinutes = minutesBetween(punchIn, punchOut);
+        long requiredMinutes = shiftMinutes(shift);
+        return workedMinutes >= requiredMinutes ? STATUS_NORMAL : STATUS_LATE;
+    }
+
+    /** 两次打卡的时长（分钟）；下班早于上班时按跨天补齐 24h。 */
+    private long minutesBetween(LocalDateTime punchIn, LocalDateTime punchOut) {
+        long minutes = Duration.between(punchIn, punchOut).toMinutes();
+        return minutes < 0 ? minutes + Duration.ofDays(1).toMinutes() : minutes;
+    }
+
+    /** 班次时长（分钟），跨天班次按次日下班补齐。 */
+    private long shiftMinutes(Shift shift) {
+        long minutes = Duration.between(shift.getStartTime(), shift.getEndTime()).toMinutes();
+        return minutes <= 0 ? minutes + Duration.ofDays(1).toMinutes() : minutes;
     }
 
     /**

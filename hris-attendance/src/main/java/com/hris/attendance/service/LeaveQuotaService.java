@@ -2,11 +2,13 @@ package com.hris.attendance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hris.attendance.dto.LeaveQuotaDtos.LeaveLedgerResponse;
 import com.hris.attendance.dto.LeaveQuotaDtos.LeaveQuotaResponse;
 import com.hris.attendance.dto.LeaveQuotaDtos.QuotaBalanceResponse;
 import com.hris.attendance.dto.LeaveQuotaDtos.QuotaGrantRequest;
 import com.hris.attendance.dto.LeaveQuotaDtos.QuotaTransferRequest;
+import com.hris.attendance.dto.PageResult;
 import com.hris.attendance.entity.LeaveLedger;
 import com.hris.attendance.entity.LeaveQuota;
 import com.hris.attendance.entity.LeaveType;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -168,6 +171,40 @@ public class LeaveQuotaService {
                         TimeAmountUtil.amount(l.getChangeAmount()), l.getBizRef(),
                         l.getCreatedAt()))
                 .toList();
+    }
+
+    /**
+     * 额度流水分页查询（批11#20 统一前端接入用）：时间区间按 created_at 过滤，
+     * 排序为「发生时间倒序 + ID 倒序」，保证同一毫秒内的多条流水顺序稳定。
+     */
+    public PageResult<LeaveLedgerResponse> ledgerPage(Long empId, Long leaveTypeId,
+                                                      LocalDateTime from, LocalDateTime to,
+                                                      long page, long size) {
+        Page<LeaveLedger> p = new Page<>(page, size);
+        LambdaQueryWrapper<LeaveLedger> qw = new LambdaQueryWrapper<>();
+        if (empId != null) {
+            qw.eq(LeaveLedger::getEmpId, empId);
+        }
+        if (leaveTypeId != null) {
+            qw.eq(LeaveLedger::getLeaveTypeId, leaveTypeId);
+        }
+        if (from != null) {
+            qw.ge(LeaveLedger::getCreatedAt, from);
+        }
+        if (to != null) {
+            qw.le(LeaveLedger::getCreatedAt, to);
+        }
+        qw.orderByDesc(LeaveLedger::getCreatedAt).orderByDesc(LeaveLedger::getId);
+        Page<LeaveLedger> result = ledgerMapper.selectPage(p, qw);
+        Map<Long, LeaveType> types = loadTypesByLedger(result.getRecords());
+        List<LeaveLedgerResponse> records = result.getRecords().stream()
+                .map(l -> new LeaveLedgerResponse(l.getId(), l.getEmpId(), l.getLeaveTypeId(),
+                        types.get(l.getLeaveTypeId()) == null ? null
+                                : types.get(l.getLeaveTypeId()).getName(),
+                        TimeAmountUtil.amount(l.getChangeAmount()), l.getBizRef(),
+                        l.getCreatedAt()))
+                .toList();
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     /**

@@ -26,6 +26,61 @@ public class AttGroup extends BaseEntity {
      */
     private Integer holidayCalendarYear;
 
+    /** 工作制：FIXED=固定（缺省）/ FLEXIBLE=弹性（批12#27） */
+    private String workMode;
+
+    /** 组时区（IANA，缺省 Asia/Shanghai）：决定「今天」与迟到/早退比较基准 */
+    private String timezone;
+
+    /** 弹性区间（分钟，FLEXIBLE 生效，0=关闭） */
+    private Integer timeWindowMinutes;
+
+    /** 绑定考勤围栏 ID（逻辑外键 att_location.id，空=不校验围栏） */
+    private Long locationId;
+
+    /** 是否强制定位打卡 1=是（缺省）0=否；仅组绑围栏时生效 */
+    private Integer requireLocation;
+
+    public String getWorkMode() {
+        return workMode;
+    }
+
+    public void setWorkMode(String workMode) {
+        this.workMode = workMode;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public Integer getTimeWindowMinutes() {
+        return timeWindowMinutes;
+    }
+
+    public void setTimeWindowMinutes(Integer timeWindowMinutes) {
+        this.timeWindowMinutes = timeWindowMinutes;
+    }
+
+    public Long getLocationId() {
+        return locationId;
+    }
+
+    public void setLocationId(Long locationId) {
+        this.locationId = locationId;
+    }
+
+    public Integer getRequireLocation() {
+        return requireLocation;
+    }
+
+    public void setRequireLocation(Integer requireLocation) {
+        this.requireLocation = requireLocation;
+    }
+
     public Integer getHolidayCalendarYear() {
         return holidayCalendarYear;
     }

@@ -252,4 +252,48 @@ class AttendanceCalculatorTest {
             verify(exceptionMapper, never()).insert(any(AttendanceException.class));
         }
     }
+
+    @Nested
+    @DisplayName("弹性工作制迟到口径（批12#27 MVP）")
+    class FlexibleWorkMode {
+
+        private String resolveFlexible(String in, String out, int windowMinutes) {
+            return newCalculator().resolveStatus(shift("09:00", "18:00"),
+                    in == null ? null : at(in), out == null ? null : at(out),
+                    BigDecimal.ZERO, true, windowMinutes);
+        }
+
+        @Test
+        @DisplayName("固定制下班次 09:30 打卡 → 迟到（对照组）")
+        void fixedModeLate() {
+            assertEquals(AttendanceCalculator.STATUS_LATE,
+                    newCalculator().resolveStatus(shift("09:00", "18:00"), at("09:30"), at("18:00"),
+                            BigDecimal.ZERO));
+        }
+
+        @Test
+        @DisplayName("弹性制 + 落在弹性区间内（09:30，区间 60 分钟）→ 正常，不看钟点")
+        void flexibleWithinWindowIsNormal() {
+            assertEquals(AttendanceCalculator.STATUS_NORMAL, resolveFlexible("09:30", "18:00", 60));
+        }
+
+        @Test
+        @DisplayName("弹性制 + 超出弹性区间但日累计工时达标 → 正常")
+        void flexibleOutsideWindowWithEnoughHoursIsNormal() {
+            // 10:30 到达（区间 60 分钟 + 宽限 15 分钟 = 10:15 之后），但工作到 19:30 满 9h
+            assertEquals(AttendanceCalculator.STATUS_NORMAL, resolveFlexible("10:30", "19:30", 60));
+        }
+
+        @Test
+        @DisplayName("弹性制 + 超出弹性区间且日累计工时不足 → 按迟到归集（工时不足）")
+        void flexibleInsufficientHoursIsLate() {
+            assertEquals(AttendanceCalculator.STATUS_LATE, resolveFlexible("10:30", "12:00", 60));
+        }
+
+        @Test
+        @DisplayName("弹性制 + 仅下班卡 → 不判迟到（缺卡异常另行闭环）")
+        void flexibleOnlyOutIsNormal() {
+            assertEquals(AttendanceCalculator.STATUS_NORMAL, resolveFlexible(null, "18:00", 60));
+        }
+    }
 }

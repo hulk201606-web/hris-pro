@@ -15,17 +15,25 @@ public final class GroupDtos {
     /**
      * 班组创建/更新请求。name 必填，code 留空由服务端按前缀生成；
      * holidayCalendarYear 绑定节假日历年度（空 = 不绑定）。
+     * 批12#27 新增：workMode=FIXED/FLEXIBLE（空=FIXED）、timezone=IANA 时区（空=Asia/Shanghai）、
+     * timeWindowMinutes=弹性区间、locationId=绑定围栏、requireLocation=是否强制定位（空=true）。
      */
     public record GroupRequest(
             @NotBlank(message = "班组名称不能为空") String name,
             String code,
             Long leaderEmpId,
-            Integer holidayCalendarYear) {
+            Integer holidayCalendarYear,
+            String workMode,
+            String timezone,
+            Integer timeWindowMinutes,
+            Long locationId,
+            Boolean requireLocation) {
     }
 
     /** 班组响应。 */
     public record GroupResponse(Long id, String name, String code, Long leaderEmpId,
-                                Integer holidayCalendarYear,
+                                Integer holidayCalendarYear, String workMode, String timezone,
+                                Integer timeWindowMinutes, Long locationId, Boolean requireLocation,
                                 LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 

@@ -48,4 +48,16 @@ public final class ClosingDtos {
     public record AdjustmentResponse(Long id, Long empId, Long closingId, String adjustType,
                                      BigDecimal amount, String reason, LocalDateTime createdAt) {
     }
+
+    /** 日考勤月结解锁请求：reason 必填（审计留痕，批11#19）。 */
+    public record DailyCloseUnlockRequest(
+            @NotBlank(message = "解锁理由不能为空") String reason) {
+    }
+
+    /** 日考勤月结锁响应（lock/unlock 与 active 查询共用）。 */
+    public record DailyCloseResponse(Long id, String period, String status, Long closedBy,
+                                     LocalDateTime closedAt, Long releasedBy,
+                                     LocalDateTime releasedAt, String releaseReason,
+                                     LocalDateTime createdAt, LocalDateTime updatedAt) {
+    }
 }

@@ -4,7 +4,9 @@ import com.hris.attendance.dto.DailyDtos.DailyAttendanceResponse;
 import com.hris.attendance.dto.DailyDtos.DailyComputeRequest;
 import com.hris.attendance.dto.DailyDtos.DailyComputeResult;
 import com.hris.attendance.dto.PageResult;
+import com.hris.attendance.dto.PunchDtos.PunchTodayResponse;
 import com.hris.attendance.service.DailyAttendanceService;
+import com.hris.attendance.service.PunchService;
 import com.hris.common.api.R;
 import com.hris.common.security.RequirePerm;
 import jakarta.validation.Valid;
@@ -20,17 +22,30 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 /**
- * 日考勤端点（ATT-F-008 / ATT-F-009）：查询与触发计算。
+ * 日考勤端点（ATT-F-008 / ATT-F-009）：查询、触发计算与当日自助状态。
  */
 @RestController
 @RequestMapping("/api/v1/att/daily")
 public class DailyAttendanceController {
 
     private final DailyAttendanceService dailyAttendanceService;
+    private final PunchService punchService;
 
-    public DailyAttendanceController(DailyAttendanceService dailyAttendanceService) {
+    public DailyAttendanceController(DailyAttendanceService dailyAttendanceService,
+                                     PunchService punchService) {
         this.dailyAttendanceService = dailyAttendanceService;
+        this.punchService = punchService;
     }
+
+    /**
+     * 当日考勤状态（批11#20 统一前端契约，等价于 /att/punches/today）。
+     * 「今天」按考勤组时区取，字段：empId/workDate/shiftName/punchIn/punchOut/punchStatus。
+     */
+    @GetMapping("/today")
+    public R<PunchTodayResponse> today(@RequestParam Long empId) {
+        return R.ok(punchService.today(empId));
+    }
+
     /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @GetMapping

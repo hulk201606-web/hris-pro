@@ -48,7 +48,7 @@ class GroupMemberServiceTest {
     @BeforeEach
     void setUp() {
         service = new GroupMemberService(memberMapper, groupService);
-        realGroupService = new GroupService(groupMapper, memberMapper);
+        realGroupService = new GroupService(groupMapper, memberMapper, null);
     }
 
     private static AttGroupMember member(Long groupId, Long empId) {

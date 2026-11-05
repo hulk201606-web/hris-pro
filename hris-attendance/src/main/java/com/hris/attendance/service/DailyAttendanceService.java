@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,6 +54,7 @@ public class DailyAttendanceService {
     private final GroupService groupService;
     private final PayrollCycleMapper cycleMapper;
     private final MonthlyClosingMapper closingMapper;
+    private final DailyCloseService dailyCloseService;
 
     public DailyAttendanceService(DailyAttendanceMapper dailyMapper,
                                   ShiftAssignmentMapper assignmentMapper,
@@ -64,7 +66,8 @@ public class DailyAttendanceService {
                                   HolidayService holidayService,
                                   GroupService groupService,
                                   PayrollCycleMapper cycleMapper,
-                                  MonthlyClosingMapper closingMapper) {
+                                  MonthlyClosingMapper closingMapper,
+                                  DailyCloseService dailyCloseService) {
         this.dailyMapper = dailyMapper;
         this.assignmentMapper = assignmentMapper;
         this.punchService = punchService;
@@ -76,12 +79,14 @@ public class DailyAttendanceService {
         this.groupService = groupService;
         this.cycleMapper = cycleMapper;
         this.closingMapper = closingMapper;
+        this.dailyCloseService = dailyCloseService;
     }
 
     /** 触发日考勤计算。empIds 为空则对该日有排班的全部员工重算。 */
     @Transactional(rollbackFor = Exception.class)
     public DailyComputeResult compute(DailyComputeRequest req) {
         LocalDate workDate = req.workDate();
+        dailyCloseService.ensureNotClosed(workDate);
         ensurePayrollNotClosed(workDate);
         List<Long> empIds = req.empIds() == null || req.empIds().isEmpty()
                 ? resolveAssignedEmpIds(workDate)
@@ -190,13 +195,29 @@ public class DailyAttendanceService {
 
         BigDecimal leaveHours = leaveQueryService.leaveHoursOn(empId, workDate);
         BigDecimal overtimeHours = overtimeService.overtimeHoursOn(empId, workDate);
+        // 组策略（批12#27）：kick 判定基准 = 组时区；工作制决定迟到口径
+        GroupService.GroupPolicy policy = groupService.policyForEmp(empId);
+        LocalDateTime localIn = toZoneLocal(punchIn, policy);
+        LocalDateTime localOut = toZoneLocal(punchOut, policy);
         // 规格优先级：法定节假日 > 假期类型 > 排班班次 > 默认政策。
         // 节假日无论有无打卡一律置为假期态，跳过迟到/早退/旷工判定；
         // 有打卡的加班记法仍由既有 overtimeHoursOn 链路决定，不在此破坏。
         String status = legalHoliday ? AttendanceCalculator.STATUS_HOLIDAY
-                : calculator.resolveStatus(shift, punchIn, punchOut, leaveHours);
+                : calculator.resolveStatus(shift, localIn, localOut, leaveHours,
+                        policy.flexible(), policy.timeWindowMinutes());
         return new Computed(upsert(empId, workDate, punchIn, punchOut, leaveHours, overtimeHours,
                 status), shift);
+    }
+
+    /**
+     * 打卡时刻换算到组时区（入库时间为 UTC，班次时间为组时区本地时间，比较必须同基准）。
+     * 无组时区（未入组）按缺省 Asia/Shanghai 处理，见 {@link GroupService.GroupPolicy#DEFAULTS}。
+     */
+    private LocalDateTime toZoneLocal(LocalDateTime utc, GroupService.GroupPolicy policy) {
+        if (utc == null) {
+            return null;
+        }
+        return utc.atZone(ZoneOffset.UTC).withZoneSameInstant(policy.zone()).toLocalDateTime();
     }
 
     /**

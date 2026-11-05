@@ -3,6 +3,7 @@ package com.hris.attendance.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -17,6 +18,9 @@ public final class PunchDtos {
     /**
      * 打卡请求。punch_time 为客户端采集的 UTC 时刻，
      * 幂等键为 emp_id + 考勤日 + punch_type（B-4 修正，非秒级 punch_time）。
+     *
+     * <p>批12#27：lat/lng 为可选定位坐标，考勤组绑定围栏时用于半径校验
+     * （组 require_location=true 且无坐标 → 拒绝「需定位打卡」）。</p>
      */
     public record PunchCreateRequest(
             @NotNull(message = "员工 ID 不能为空") Long empId,
@@ -25,7 +29,9 @@ public final class PunchDtos {
             String source,
             String location,
             String deviceId,
-            Long attGroupId) {
+            Long attGroupId,
+            BigDecimal lat,
+            BigDecimal lng) {
     }
 
     /** 打卡记录响应。 */

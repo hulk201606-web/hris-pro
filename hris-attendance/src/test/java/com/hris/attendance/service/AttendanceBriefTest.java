@@ -38,7 +38,7 @@ class AttendanceBriefTest {
     void setUp() {
         // attendanceBrief 只依赖 dailyMapper，其余依赖传 null 不会被触碰
         service = new DailyAttendanceService(dailyMapper, null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     private static DailyAttendance daily(Long empId, String status) {
