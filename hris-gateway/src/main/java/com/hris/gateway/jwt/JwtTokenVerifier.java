@@ -52,6 +52,6 @@ public class JwtTokenVerifier {
         Long empId = claims.get(GatewayConstants.CLAIM_EMP_ID) == null
                 ? null
                 : ((Number) claims.get(GatewayConstants.CLAIM_EMP_ID)).longValue();
-        return new GatewayPrincipal(userId, tenantId, empId);
+        return new GatewayPrincipal(userId, tenantId, empId, claims.getId());
     }
 }

@@ -10,5 +10,8 @@ package com.hris.gateway.jwt;
  * @param tenantId JWT tenant_id（租户上下文唯一可信来源）
  * @param empId    JWT emp_id（可能为空，如平台级账号）
  */
-public record GatewayPrincipal(Long userId, Long tenantId, Long empId) {
+/**
+ * 网关侧已验签主体。jti 用于登出/禁用黑名单校验（auth:bl:{jti}，与 auth RedisTokenStore 键约定一致）。
+ */
+public record GatewayPrincipal(Long userId, Long tenantId, Long empId, String jti) {
 }

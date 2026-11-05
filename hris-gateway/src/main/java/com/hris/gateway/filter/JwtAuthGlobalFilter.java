@@ -14,6 +14,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -32,6 +33,11 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthGlobalFilter.class);
 
+    /** 登出/禁用黑名单键（与 auth RedisTokenStore 约定一致：auth:bl:{jti}）。 */
+    private static final String BLACKLIST_KEY_PREFIX = "auth:bl:";
+
+    private final ReactiveStringRedisTemplate blacklistRedis;
+
     public static final int ORDER = -600;
 
     private final JwtTokenVerifier verifier;
@@ -39,10 +45,11 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     private final GatewayErrorWriter errorWriter;
 
     public JwtAuthGlobalFilter(JwtTokenVerifier verifier, PermQueryService permQueryService,
-                               GatewayErrorWriter errorWriter) {
+                               GatewayErrorWriter errorWriter, ReactiveStringRedisTemplate blacklistRedis) {
         this.verifier = verifier;
         this.permQueryService = permQueryService;
         this.errorWriter = errorWriter;
+        this.blacklistRedis = blacklistRedis;
     }
 
     /**
@@ -77,6 +84,25 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             return errorWriter.write(exchange, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
         }
 
+        // 登出/禁用黑名单校验（docs/19 §10.5-A1）：auth 登出/禁用时把 access jti 写入
+        // Redis 黑名单（TTL=剩余有效期），网关在此拦截——否则 15 分钟 TTL 内登出后令牌仍可通行。
+        // fail-open：Redis 不可用时放行并告警（可用性优先，风险窗口 ≤ access 剩余 TTL）。
+        return blacklistRedis.hasKey(BLACKLIST_KEY_PREFIX + principal.jti())
+                .onErrorResume(ex -> {
+                    log.warn("blacklist check failed, fail-open: jti={}, err={}", principal.jti(), ex.getMessage());
+                    return reactor.core.publisher.Mono.just(false);
+                })
+                .flatMap(blacked -> {
+                    if (Boolean.TRUE.equals(blacked)) {
+                        log.warn("token blacklisted, path={}, jti={}", exchange.getRequest().getPath().value(), principal.jti());
+                        return errorWriter.write(exchange, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
+                    }
+                    return proceedWithPerms(exchange, chain, principal);
+                });
+    }
+
+    private Mono<Void> proceedWithPerms(ServerWebExchange exchange, GatewayFilterChain chain,
+                                        GatewayPrincipal principal) {
         // 验签通过后实时查权限，再丢弃伪造头、以 token/查询结果为准重写身份与权限头
         return permQueryService.permsOf(principal.userId(), principal.tenantId())
                 .flatMap(perms -> {
