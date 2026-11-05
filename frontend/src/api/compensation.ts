@@ -68,3 +68,4 @@ export function previewPayroll(periodCode: string, empIds: number[]): Promise<Pa
   if (isMockEnabled()) return adminMock.payrollPreview(periodCode, empIds);
   return post<PayrollPreviewLine[]>('/cmp/payroll-preview', { periodCode, empIds });
 }
+

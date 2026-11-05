@@ -4,9 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hris.compensation.dto.PayslipDtos.PayslipCreateRequest;
+import com.hris.compensation.dto.PayslipDtos.PayslipMeResponse;
 import com.hris.compensation.dto.PayslipDtos.PayslipResponse;
 import com.hris.compensation.dto.PayslipDtos.PayslipUpdateRequest;
+import com.hris.compensation.entity.PayrollDetail;
+import com.hris.compensation.entity.PayrollRun;
 import com.hris.compensation.entity.Payslip;
+import com.hris.compensation.mapper.PayrollDetailMapper;
+import com.hris.compensation.mapper.PayrollRunMapper;
 import com.hris.compensation.mapper.PayslipMapper;
 import com.hris.common.dto.PageResult;
 import com.hris.common.exception.BizException;
@@ -15,6 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Payslip 服务（CRUD）。
@@ -22,10 +30,17 @@ import java.util.List;
 @Service
 public class PayslipService {
 
-    private final PayslipMapper mapper;
+    /** 自助工资条列表上限：工资条按月产生，100 条足够覆盖个人视图。 */
+    private static final long SELF_LIST_LIMIT = 100;
 
-    public PayslipService(PayslipMapper mapper) {
+    private final PayslipMapper mapper;
+    private final PayrollRunMapper runMapper;
+    private final PayrollDetailMapper detailMapper;
+
+    public PayslipService(PayslipMapper mapper, PayrollRunMapper runMapper, PayrollDetailMapper detailMapper) {
         this.mapper = mapper;
+        this.runMapper = runMapper;
+        this.detailMapper = detailMapper;
     }
 
     /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
@@ -83,6 +98,49 @@ public class PayslipService {
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "Payslip 不存在");
         }
+    }
+
+    /** 员工自助工资条列表：按当前员工过滤，仅掩码字段；补充批次周期与应发掩码。 */
+    public List<PayslipMeResponse> listMe(Long empId) {
+        List<Payslip> payslips = mapper.selectList(new LambdaQueryWrapper<Payslip>()
+                .eq(Payslip::getEmpId, empId)
+                .orderByDesc(Payslip::getId)
+                .last("LIMIT " + SELF_LIST_LIMIT));
+        if (payslips.isEmpty()) {
+            return List.of();
+        }
+        List<Long> runIds = payslips.stream()
+                .map(Payslip::getRunId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, String> periodByRun = loadPeriods(runIds);
+        Map<Long, String> grossByRun = loadGrossMasks(empId, runIds);
+        return payslips.stream()
+                .map(e -> new PayslipMeResponse(e.getId(), e.getRunId(),
+                        periodByRun.get(e.getRunId()), grossByRun.get(e.getRunId()),
+                        e.getNetPayMask(), e.getSendStatus(), e.getSentAt()))
+                .toList();
+    }
+
+    private Map<Long, String> loadPeriods(List<Long> runIds) {
+        if (runIds.isEmpty()) {
+            return Map.of();
+        }
+        return runMapper.selectBatchIds(runIds).stream()
+                .filter(r -> r.getPeriodCode() != null)
+                .collect(Collectors.toMap(PayrollRun::getId, PayrollRun::getPeriodCode, (a, b) -> a));
+    }
+
+    private Map<Long, String> loadGrossMasks(Long empId, List<Long> runIds) {
+        if (runIds.isEmpty()) {
+            return Map.of();
+        }
+        return detailMapper.selectList(new LambdaQueryWrapper<PayrollDetail>()
+                        .eq(PayrollDetail::getEmpId, empId)
+                        .in(PayrollDetail::getRunId, runIds)).stream()
+                .filter(d -> d.getAmountMask() != null)
+                .collect(Collectors.toMap(PayrollDetail::getRunId, PayrollDetail::getAmountMask, (a, b) -> a));
     }
 
     private PayslipResponse toResponse(Payslip e) {

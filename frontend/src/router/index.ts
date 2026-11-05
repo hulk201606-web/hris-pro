@@ -66,16 +66,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'self/payroll',
         name: 'MyPayroll',
-        component: () => import('../views/self/PlaceholderView.vue'),
+        component: () => import('../views/self/MyPayrollView.vue'),
         meta: { title: '我的薪酬' },
-        props: { title: '我的薪酬' },
       },
       {
         path: 'self/leave',
         name: 'MyLeave',
-        component: () => import('../views/self/PlaceholderView.vue'),
+        component: () => import('../views/self/MyLeaveView.vue'),
         meta: { title: '我的假期' },
-        props: { title: '我的假期' },
       },
     ],
   },

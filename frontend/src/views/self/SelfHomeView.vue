@@ -15,6 +15,8 @@ import {
   IdcardOutlined,
 } from '@ant-design/icons-vue';
 import { fetchTodoTasks } from '../../api/flow';
+import { fetchMyQuotaBalance } from '../../api/self';
+import type { MyLeaveQuota } from '../../api/self';
 import { useUserStore } from '../../stores/user';
 
 interface QuickEntry {
@@ -36,12 +38,19 @@ const router = useRouter();
 const userStore = useUserStore();
 
 const todoCount = ref(0);
-// 假期额度占位：二期对接 GET /att/my/quotas（假勤域尚未纳入本期 openapi）
-const leaveBalance = ref(12.5);
+// 假期余额：接 GET /att/leave-quotas/me，按当前年度周期求和可用额度
+const leaveBalance = ref<number | null>(null);
 const loading = ref(true);
 
 const displayName = computed(() => userStore.displayName || '同事');
 const tenantName = computed(() => userStore.tenantName || '');
+
+function sumAvailable(quotas: MyLeaveQuota[]): number {
+  const year = String(new Date().getFullYear());
+  const rows = quotas.filter((q) => q.period === year);
+  const scope = rows.length > 0 ? rows : quotas;
+  return scope.reduce((sum, q) => sum + Number(q.availableQuota || 0), 0);
+}
 
 function go(route: string) {
   router.push(route);
@@ -53,6 +62,12 @@ onMounted(async () => {
     todoCount.value = page.total;
   } catch {
     todoCount.value = 0;
+  }
+  try {
+    const balance = await fetchMyQuotaBalance();
+    leaveBalance.value = sumAvailable(balance.quotas ?? []);
+  } catch {
+    leaveBalance.value = null;
   } finally {
     loading.value = false;
   }
@@ -74,7 +89,14 @@ onMounted(async () => {
       </a-col>
       <a-col :xs="24" :sm="12">
         <a-card :bordered="false" class="stat-card">
-          <a-statistic title="剩余年假" :value="leaveBalance" precision="1" suffix="天" />
+          <a-statistic
+            v-if="leaveBalance !== null"
+            title="剩余假期"
+            :value="leaveBalance"
+            precision="1"
+            suffix="天"
+          />
+          <a-statistic v-else title="剩余假期" :value="0" :loading="loading" suffix="天" />
         </a-card>
       </a-col>
     </a-row>

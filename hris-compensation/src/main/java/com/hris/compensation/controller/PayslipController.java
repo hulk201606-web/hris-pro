@@ -1,6 +1,7 @@
 package com.hris.compensation.controller;
 
 import com.hris.compensation.dto.PayslipDtos.PayslipCreateRequest;
+import com.hris.compensation.dto.PayslipDtos.PayslipMeResponse;
 import com.hris.compensation.dto.PayslipDtos.PayslipResponse;
 import com.hris.compensation.dto.PayslipDtos.PayslipUpdateRequest;
 import com.hris.compensation.entity.Payslip;
@@ -8,6 +9,9 @@ import com.hris.compensation.service.PayslipService;
 import com.hris.common.api.R;
 import com.hris.common.audit.AuditLog;
 import com.hris.common.dto.PageResult;
+import com.hris.common.exception.BizException;
+import com.hris.common.exception.ErrorCode;
+import com.hris.common.security.AuthContextHolder;
 import com.hris.common.security.RequirePerm;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * Payslip 端点。
@@ -33,6 +39,17 @@ public class PayslipController {
         this.service = service;
     }
     /** 分页查询列表。权限点见 @RequirePerm。 */
+
+    /** 员工本人工资条自助视图：按当前用户过滤，仅掩码字段；照 /att/leave-quotas/me 口径解析当前用户。 */
+    @AuditLog(value = "查看我的工资单", module = "cmp")
+    @GetMapping("/me")
+    public R<List<PayslipMeResponse>> me() {
+        Long empId = AuthContextHolder.getUserId();
+        if (empId == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED, "无法识别当前员工身份");
+        }
+        return R.ok(service.listMe(empId));
+    }
 
     @RequirePerm("cmp:payslip:read")
     @AuditLog(value = "查看工资单列表", module = "cmp")

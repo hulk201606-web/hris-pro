@@ -56,6 +56,16 @@ public class LeaveQuotaController {
         return R.ok(leaveQuotaService.ledgers(empId, leaveTypeId));
     }
 
+    /** 当前员工假期台账自助视图；照 /me 口径取网关透传的当前用户 ID，避免全租户流水泄露。 */
+    @GetMapping("/me/ledgers")
+    public R<List<LeaveLedgerResponse>> myLedgers(@RequestParam(required = false) Long leaveTypeId) {
+        Long target = AuthContextHolder.getUserId();
+        if (target == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED, "无法识别当前员工身份");
+        }
+        return R.ok(leaveQuotaService.ledgers(target, leaveTypeId));
+    }
+
     @RequirePerm("att:leave:quota:write")
     @PostMapping("/grant")
     public R<LeaveQuotaResponse> grant(@Valid @RequestBody QuotaGrantRequest req) {

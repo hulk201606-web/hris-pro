@@ -26,4 +26,12 @@ public final class PayslipDtos {
      */
     public record PayslipResponse(Long id, Long runId, Long empId, String netPayMask, String sendStatus, LocalDateTime sentAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
+
+    /**
+     * 员工自助工资条响应：仅掩码字段，绝不携带 cipher；
+     * periodCode 取自算薪批次，grossMask 取自该员工当期核算明细的应发掩码。
+     */
+    public record PayslipMeResponse(Long id, Long runId, String periodCode, String grossMask,
+                                    String netPayMask, String sendStatus, LocalDateTime sentAt) {
+    }
 }
