@@ -6,8 +6,8 @@
 | Date | Source | Open Item | Related Constraints | Current Leaning | Blocked By | Resolves When | Status |
 |------|--------|-----------|---------------------|-----------------|------------|---------------|--------|
 | 2026-10-16 | Phase 3 一期 | 组织调整申请单表：当前借用 org_dept_history（快照 JSON，kind=ORG_ADJUST_REQUEST）承载，是否新增独立 org_dept_adjust_request 表 | org_db DDL 无 adjust-request 表；一期范围收敛 | 倾向 MVP 借用快照表，二期补独立表 | 等二期 org 深化 | 二期开发前评审 | OPEN |
-| 2026-10-16 | Phase 3 一期 | JWT refresh 黑名单/轮换当前进程内内存，多实例需 Redis | 一期单实例部署；08 §1 设计为 Redis 黑名单 | 倾向一期内存态+代码注释标注，二期接 Redis | 等 Redis 联调环境 | 多实例部署前 | OPEN |
-| 2026-10-16 | Phase 3 一期 | flow 服务调用接口（FlowClient Feign）签名未落地 | flow 服务尚未开发；已做降级不阻断 | 倾向 flow 服务落地后按实际签名校准 | 等 flow 服务 | flow 服务开发时 | OPEN |
+| 2026-11-05 | Phase 3 一期 | JWT refresh 黑名单/轮换当前进程内内存，多实例需 Redis | 一期单实例部署；08 §1 设计为 Redis 黑名单 | TokenStore 抽象 + RedisTokenStore | 已完成 | 多实例部署前 | RESOLVED（2026-11-05，2454701；注意：网关侧 access 黑名单校验仍未接，见网关行） |
+| 2026-11-05 | Phase 3 一期 | flow 服务调用接口（FlowClient Feign）签名未落地 | flow 服务尚未开发；已做降级不阻断 | 内部端点 POST /internal/flow/instances（StartInstanceRequest 契约） | 已完成 | flow 服务开发时 | RESOLVED（2026-11-05，各域 FlowClient/FlowIntegration 已接） |
 | 2026-10-16 | Phase 3 一期 | 前端自助端缺 /emp/employees/me 便捷端点（openapi 仅 /{id}） | SELF 语义要求本人数据，前端以 employeeId 定位 | 倾向后端补 /me 端点或确认 X-Self 语义 | 等后端 auth/emp 补端点 | 一期联调前 | OPEN |
 | 2026-10-16 | Phase 3 一期 | 菜单接口 MenuNode 缺 route/icon 字段，动态菜单需本地 code→路由/图标注册表 | docs/07 menus 端点契约未细化 | 倾向前端静态菜单 + 预留 loadMenus | 等 auth menus 契约细化 | 二期菜单深化 | OPEN |
 | 2026-10-16 | Phase 3 一期 | 前端主包 1.59MB（AntD 全量注册），需按需引入或分包 | Vite 构建 chunk 告警 | 倾向二期 unplugin-vue-components 按需引入 | 等二期前端优化 | 二期 | OPEN |
