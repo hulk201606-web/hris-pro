@@ -71,7 +71,7 @@ public class AuthService {
         }
         Long tenantId = tenant.getId();
         TraceContext.setTenantId(tenantId);
-        try {
+        {
             AuthUser user = userMapper.selectOne(new LambdaQueryWrapper<AuthUser>()
                     .eq(AuthUser::getUsername, req.username().trim().toLowerCase()));
             if (user == null) {
@@ -89,9 +89,10 @@ public class AuthService {
             String refresh = tokenService.issueRefresh(user.getId(), tenantId);
             return TokenResponse.of(access, refresh,
                     tokenService.accessTtlSeconds(), tokenService.refreshTtlSeconds());
-        } finally {
-            TraceContext.setTenantId(null);
         }
+        // 注意：这里不再 finally 清理 TraceContext——登录审计切面（@AuditLog）在本方法
+        // 返回后才 emit，提前清理会让审计行 tenant_id=0（docs/19 §9 遗留-3）。
+        // 请求级清理由 TraceIdFilter 的 finally TraceContext.clear() 兜底，无串号风险。
     }
 
     /**
@@ -101,7 +102,7 @@ public class AuthService {
     public TokenResponse refresh(RefreshRequest req) {
         TokenService.RefreshToken rt = tokenService.parseRefresh(req.refreshToken());
         TraceContext.setTenantId(rt.tenantId());
-        try {
+        {
             AuthUser user = userMapper.selectById(rt.userId());
             if (user == null) {
                 throw new BizException(ErrorCode.UNAUTHORIZED, "账号不存在");
@@ -115,9 +116,8 @@ public class AuthService {
             String refresh = tokenService.issueRefresh(rt.userId(), rt.tenantId());
             return TokenResponse.of(access, refresh,
                     tokenService.accessTtlSeconds(), tokenService.refreshTtlSeconds());
-        } finally {
-            TraceContext.setTenantId(null);
         }
+        // 同 login：不再 finally 清理，审计切面需要真实租户；请求级清理由 TraceIdFilter 兜底。
     }
 
     /**
@@ -133,7 +133,7 @@ public class AuthService {
      */
     public MeResponse me(LoginUser current) {
         TraceContext.setTenantId(current.tenantId());
-        try {
+        {
             AuthUser user = userMapper.selectById(current.userId());
             if (user == null || user.getStatus() == null || user.getStatus() != STATUS_ENABLED) {
                 throw new BizException(ErrorCode.UNAUTHORIZED, "账号已失效");
@@ -156,9 +156,8 @@ public class AuthService {
                     tenant.getId(), tenant.getCode(), tenant.getName(), tenant.getPlan(),
                     tenant.getTimezone(), tenant.getDomain());
             return new MeResponse(ui, roleInfos, perms, scopeInfos, brand);
-        } finally {
-            TraceContext.setTenantId(null);
         }
+        // 同 login：不再 finally 清理（me 若加审计注解也需要真实租户）；TraceIdFilter 兜底。
     }
 
     /**
