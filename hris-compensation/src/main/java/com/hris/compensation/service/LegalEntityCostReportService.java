@@ -60,6 +60,8 @@ public class LegalEntityCostReportService {
     private final JdbcTemplate jdbcTemplate;
     private final EmployeeClient employeeClient;
     private final OrgClient orgClient;
+    /** 快照读取能力（批 12 #29）：可选装配，source=snapshot 时使用。 */
+    private CostSnapshotService costSnapshotService;
 
     public LegalEntityCostReportService(
             @Qualifier("aggregateJdbcTemplate") JdbcTemplate jdbcTemplate,
@@ -67,6 +69,32 @@ public class LegalEntityCostReportService {
         this.jdbcTemplate = jdbcTemplate;
         this.employeeClient = employeeClient;
         this.orgClient = orgClient;
+    }
+
+    /** 可选依赖注入（保留原构造签名，避免影响既有装配与单测）。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setCostSnapshotService(CostSnapshotService service) {
+        this.costSnapshotService = service;
+    }
+
+    /**
+     * 按来源取报表：{@code live}（缺省）/ {@code snapshot}（读物化快照）。
+     * 快照不存法人名称（历史快照不与 org 改名联动），name 恒为 null。
+     *
+     * @throws BizException source 非法
+     */
+    public List<LegalEntityCostRow> legalEntityCost(String periodCode, String source) {
+        String mode = source == null || source.isBlank() ? "live" : source.trim().toLowerCase();
+        if ("live".equals(mode)) {
+            return legalEntityCost(periodCode);
+        }
+        if ("snapshot".equals(mode)) {
+            if (costSnapshotService == null) {
+                throw new BizException(ErrorCode.CMP_ERROR, "快照能力未装配，请使用 source=live");
+            }
+            return costSnapshotService.reportRows(periodCode);
+        }
+        throw new BizException(ErrorCode.PARAM_INVALID, "source 仅支持 live|snapshot");
     }
 
     /** 明细聚合行（脱离 MP 实体链路的轻量读取模型，包内可见供单测构造）。 */

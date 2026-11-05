@@ -12,6 +12,12 @@
     <name>hris-rag</name>
     <description>知识库/文档/切片/问答</description>
 
+    <properties>
+        <!-- Apache Tika（简历文件文本层抽取，批 12 #28）：2.x 的 3.x 分支要求 Java 11+，
+             与 JDK 21 基线和 Boot 4 兼容；版本未进父 BOM 管理，故此处显式声明。 -->
+        <tika.version>3.2.2</tika.version>
+    </properties>
+
     <dependencies>
         <!-- OpenAPI 契约生成（/v3/api-docs）。版本由父 pom 的 springdoc-openapi-bom 统一托管，
              故此处刻意不写 <version>，请勿补——补上即脱离 BOM 管理。生产默认关闭（见
@@ -77,6 +83,18 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+        <!-- 文件文本层抽取（PDF/DOCX/纯文本）：tika-core 为 API/检测，parsers-standard 含
+             PDFBox/POI 等标准解析器（扫描件无文本层时仅返回警告，OCR 引擎未接入）。 -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>${tika.version}</version>
         </dependency>
     </dependencies>
 

@@ -40,7 +40,8 @@ public class CryptoAutoConfig {
         byte[] key = CryptoKeyGuard.requireStrongKey(base64Key);
         CryptoService svc = new CryptoService(key);
         CryptoService.setInstance(svc);
-        log.info("敏感列加密已启用（AES-256-GCM，密文前缀 {}）", CryptoService.PREFIX);
+        log.info("敏感列加密已启用（AES-256-GCM 信封加密，新写前缀 {}，存量只读前缀 {}，keyId={}）",
+                CryptoService.PREFIX_V2, CryptoService.PREFIX, svc.currentKeyId());
         return svc;
     }
 }

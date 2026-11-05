@@ -31,10 +31,14 @@ public class ReportController {
     /**
      * 多法人成本合并报表：按周期返回各法人 {headcount, grossTotal, deductionTotal, taxTotal, netTotal}。
      * deductionTotal = 应发-实发（社保+个税+其他扣减合计），taxTotal 恒为 null（MVP 无逐人个税数据源）。
+     *
+     * @param source live（缺省，实时聚合算薪明细）/ snapshot（读 cmp_cost_snapshot 物化快照，
+     *               见批 12 #29；快照由 POST /cost-snapshot/refresh 按月刷新）
      */
     @RequirePerm("cmp:payroll-detail:read")
     @GetMapping("/legal-entity-cost")
-    public R<List<LegalEntityCostRow>> legalEntityCost(@RequestParam String periodCode) {
-        return R.ok(service.legalEntityCost(periodCode));
+    public R<List<LegalEntityCostRow>> legalEntityCost(@RequestParam String periodCode,
+                                                       @RequestParam(defaultValue = "live") String source) {
+        return R.ok(service.legalEntityCost(periodCode, source));
     }
 }
