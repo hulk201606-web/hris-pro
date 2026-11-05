@@ -25,8 +25,8 @@ import java.util.Set;
  * <ul>
  *   <li>ALLOWED_CLASS_SET = 空集：禁 new 实例与静态方法调用（如 new java.io.File / System.exit）；</li>
  *   <li>FEATURE_SET 排除 Lambda/Module/While/ForLoop：压缩攻击面，只保留表达式求值能力；</li>
- *   <li>变量白名单：base/lateCount/absentDays + 前序薪酬项 code，越界变量求值时报错定位；</li>
- *   <li>函数白名单：round/min/max/taxMonthly，均为注册函数，无反射入口。</li>
+ *   <li>变量白名单：base/lateCount/absentDays/priorTax + 前序薪酬项 code，越界变量求值时报错定位；</li>
+ *   <li>函数白名单：round/min/max/taxMonthly/taxCumulative，均为注册函数，无反射入口。</li>
  * </ul>
  *
  * <p>数值口径：所有字面量解析为 BigDecimal（ALWAYS_PARSE_*_INTO_DECIMAL），避免浮点误差；
@@ -35,12 +35,15 @@ import java.util.Set;
 @Service
 public class FormulaSandboxService {
 
-    /** 基础变量：定薪基本额 + 考勤扣项占位（F-010 考勤联动另批接入，本批固定 0）。 */
-    public static final Set<String> BASE_VARIABLES = Set.of("base", "lateCount", "absentDays");
+    /**
+     * 基础变量：定薪基本额 + 考勤扣项（F-010 live 接入）+ priorTax（F-008 累计预扣：
+     * 本年已预扣税额累计，缺省 0，跨期间连续账接入后由算薪引擎注入真值）。
+     */
+    public static final Set<String> BASE_VARIABLES = Set.of("base", "lateCount", "absentDays", "priorTax");
 
     /** 函数白名单（响应中返回，供前端提示）。 */
     public static final Set<String> FUNCTION_WHITELIST =
-            Set.of("round(x,n)", "min(x,y)", "max(x,y)", "taxMonthly(taxable)");
+            Set.of("round(x,n)", "min(x,y)", "max(x,y)", "taxMonthly(taxable)", "taxCumulative(cumTaxable)");
 
     /** 独立引擎实例：避免污染 AviatorEvaluator 全局单例的选项与函数表。 */
     private final AviatorEvaluatorInstance engine;
@@ -58,6 +61,7 @@ public class FormulaSandboxService {
         // 注册函数白名单
         engine.addFunction(new RoundFunction());
         engine.addFunction(new TaxMonthlyFunction());
+        engine.addFunction(new TaxCumulativeFunction());
         engine.addFunction(new MinFunction());
         engine.addFunction(new MaxFunction());
     }
@@ -116,12 +120,13 @@ public class FormulaSandboxService {
                 FUNCTION_WHITELIST, BASE_VARIABLES);
     }
 
-    /** 演示变量集（缺省 dry-run 用；lateCount/absentDays 为 F-010 占位，本批固定 0）。 */
+    /** 演示变量集（缺省 dry-run 用；lateCount/absentDays 为 F-010 考勤变量，priorTax 为 F-008 累计预扣变量）。 */
     private Map<String, Object> demoEnv() {
         Map<String, Object> env = new LinkedHashMap<>();
         env.put("base", new BigDecimal("10000"));
         env.put("lateCount", 0);
         env.put("absentDays", 0);
+        env.put("priorTax", 0);
         return env;
     }
 

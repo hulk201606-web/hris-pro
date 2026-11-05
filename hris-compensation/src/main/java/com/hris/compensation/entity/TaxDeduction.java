@@ -1,13 +1,15 @@
 package com.hris.compensation.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.hris.common.crypto.CipherTypeHandler;
 import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * 个税专项附加扣除（域：薪酬，分层：实体/DO，密域）。员工个税专项附加扣除信息，deductionAmountCipher 为密文存储。
+ * 个税专项附加扣除（域：薪酬，分层：实体/DO，密域）。员工个税专项附加扣除信息，deductionAmountCipher 经 CipherTypeHandler 加密落库（ADR-007，实体侧明文语义）。
  */
-@TableName("cmp_tax_deduction")
+@TableName(value = "cmp_tax_deduction", autoResultMap = true)
 public class TaxDeduction extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -38,6 +40,7 @@ public class TaxDeduction extends BaseEntity {
     public void setEffectiveTo(LocalDate effectiveTo) {
         this.effectiveTo = effectiveTo;
     }
+    @TableField(typeHandler = CipherTypeHandler.CmpTaxDeductionAmount.class)
     private String deductionAmountCipher;  // 专项附加扣除金额密文(逻辑列 deduction_amount)
 
     public String getDeductionAmountCipher() {

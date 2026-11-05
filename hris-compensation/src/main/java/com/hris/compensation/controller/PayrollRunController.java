@@ -89,11 +89,19 @@ public class PayrollRunController {
         return R.ok();
     }
 
-    /** 触发算薪（CMP-F-005，同步 MVP；INIT/TRIAL/CALC 可算，过期间锁守卫）。 */
+    /**
+     * 触发算薪（CMP-F-005 / 批 8 #18a）。缺省异步：run.status → CALCULATING 后经专用线程池
+     * 计算，完成流转 CALC，进度经 GET /{id}/calc-progress 轮询；CALCULATING 中重复触发返回
+     * PARAM_INVALID「计算进行中」。?mode=sync 保留同步路径（兼容/测试用）。
+     */
     @RequirePerm("cmp:payroll-run:write")
     @PostMapping("/{id}/calculate")
-    public R<CalcRunResponse> calculate(@PathVariable Long id) {
-        return R.ok(calcService.calcRun(id));
+    public R<CalcRunResponse> calculate(@PathVariable Long id,
+            @RequestParam(defaultValue = "async") String mode) {
+        if ("sync".equalsIgnoreCase(mode)) {
+            return R.ok(calcService.calcRun(id));
+        }
+        return R.ok(calcService.calcRunAsync(id));
     }
 
     /** 逐员工任务列表（CMP-F-006，可按 status 过滤定位失败）。 */

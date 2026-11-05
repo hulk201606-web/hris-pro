@@ -14,6 +14,13 @@ spring:
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD}
     driver-class-name: ${DB_DRIVER:com.mysql.cj.jdbc.Driver}
+    # 聚合只读数据源（批 8 #17 MVP）：配置 aggregate.url 即启用，报表聚合查询路由到该库
+    # （readOnly 连接池）；缺省不配置回退主库，无需独立数据库即可部署。
+    # 真·独立聚合库由 DBA 供数后仅改 url 即完成切换（username/password/driver 可选覆盖）。
+    # aggregate:
+    #   url: ${DB_AGGREGATE_URL:jdbc:mysql://127.0.0.1:3306/cmp_agg_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC}
+    #   username: ${DB_AGGREGATE_USERNAME:agg_reader}
+    #   password: ${DB_AGGREGATE_PASSWORD}
 
 mybatis-plus:
   configuration:

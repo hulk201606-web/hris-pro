@@ -1,13 +1,15 @@
 package com.hris.compensation.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.hris.common.crypto.CipherTypeHandler;
 import com.hris.common.entity.BaseEntity;
 
 
 /**
- * 算薪明细（域：薪酬，分层：实体/DO，密域）。单员工单次算薪的逐项金额明细，amountCipher/netAmountCipher 为密文，非授权视图返回 mask 掩码。
+ * 算薪明细（域：薪酬，分层：实体/DO，密域）。单员工单次算薪的逐项金额明细，amountCipher/netAmountCipher 经 CipherTypeHandler 加密落库（ADR-007，实体侧明文语义），非授权视图返回 mask 掩码。
  */
-@TableName("cmp_payroll_detail")
+@TableName(value = "cmp_payroll_detail", autoResultMap = true)
 public class PayrollDetail extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -38,6 +40,7 @@ public class PayrollDetail extends BaseEntity {
     public void setInputSnapshot(String inputSnapshot) {
         this.inputSnapshot = inputSnapshot;
     }
+    @TableField(typeHandler = CipherTypeHandler.CmpPayrollDetailAmount.class)
     private String amountCipher;  // 应发金额密文(逻辑列 amount)
 
     public String getAmountCipher() {
@@ -56,6 +59,7 @@ public class PayrollDetail extends BaseEntity {
     public void setAmountMask(String amountMask) {
         this.amountMask = amountMask;
     }
+    @TableField(typeHandler = CipherTypeHandler.CmpPayrollDetailNetAmount.class)
     private String netAmountCipher;  // 实发金额密文(逻辑列 net_amount)
 
     public String getNetAmountCipher() {

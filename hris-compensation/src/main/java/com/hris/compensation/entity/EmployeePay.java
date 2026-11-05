@@ -1,13 +1,15 @@
 package com.hris.compensation.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.hris.common.crypto.CipherTypeHandler;
 import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * 员工薪资档案（域：薪酬，分层：实体/DO，密域）。记录员工定薪金额与银行账号，密级：salaryAmountCipher/bankAccountCipher 为密文存储，非授权视图仅返回 salaryAmountMask/bankAccountMask 掩码；读取须具备 cmp:salary:read 权限。
+ * 员工薪资档案（域：薪酬，分层：实体/DO，密域）。记录员工定薪金额与银行账号，密级：salaryAmountCipher/bankAccountCipher 经 CipherTypeHandler 加密落库（ADR-007，实体侧明文语义），非授权视图仅返回 salaryAmountMask/bankAccountMask 掩码；读取须具备 cmp:salary:read 权限。
  */
-@TableName("cmp_employee_pay")
+@TableName(value = "cmp_employee_pay", autoResultMap = true)
 public class EmployeePay extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -56,6 +58,7 @@ public class EmployeePay extends BaseEntity {
     public void setEffectiveTo(LocalDate effectiveTo) {
         this.effectiveTo = effectiveTo;
     }
+    @TableField(typeHandler = CipherTypeHandler.CmpEmployeePaySalary.class)
     private String salaryAmountCipher;  // 定薪金额密文(逻辑列 salary_amount)
 
     public String getSalaryAmountCipher() {
@@ -74,6 +77,7 @@ public class EmployeePay extends BaseEntity {
     public void setSalaryAmountMask(String salaryAmountMask) {
         this.salaryAmountMask = salaryAmountMask;
     }
+    @TableField(typeHandler = CipherTypeHandler.CmpEmployeePayBankAccount.class)
     private String bankAccountCipher;  // 银行账号密文(逻辑列 bank_account)
 
     public String getBankAccountCipher() {

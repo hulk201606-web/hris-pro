@@ -12,15 +12,14 @@ import java.util.Map;
  * 薪酬项求值器（CMP-F-005 核心，供整批计算与单人重算复用）。
  *
  * <p>求值语义：变量集 = 定薪基本额（base，来自 cmp_employee_pay）
- * + 考勤扣项占位变量（lateCount/absentDays，F-010 考勤联动另批接入，本批固定 0）
+ * + 考勤扣项变量（lateCount/absentDays，F-010 live 接入：求值前由算薪引擎经
+ * att attendance-brief 批量拉取，att 不可用时降级 0 并标注 fallback）
+ * + 累计预扣变量（priorTax，F-008 年度累计预扣：本年已预扣税额累计，缺省 0）
  * + 已求值前序项（按 seq 顺序，后项可引用前项 code）。
  * NET 项公式缺省 = sum(EARNING)-sum(DEDUCTION)-sum(TAX)。</p>
  */
 @Component
 public class PayItemEvaluator {
-
-    /** 考勤扣项占位变量（F-010 另批接入，本批固定 0）。 */
-    private static final BigDecimal PLACEHOLDER_ZERO = BigDecimal.ZERO;
 
     private final FormulaSandboxService sandbox;
 
@@ -31,13 +30,17 @@ public class PayItemEvaluator {
     /**
      * 按 seq 顺序逐项求值。
      *
+     * @param lateCount  周期内迟到次数（F-010，att 不可用时传 0）
+     * @param absentDays 周期内缺勤天数（F-010，att 不可用时传 0）
      * @return 结果快照：base / 各项 code（Decimal 字符串）/ periodCode
      */
-    public Map<String, Object> evalItems(List<PayItem> items, BigDecimal base, String periodCode) {
+    public Map<String, Object> evalItems(List<PayItem> items, BigDecimal base, String periodCode,
+                                         long lateCount, long absentDays) {
         Map<String, Object> env = new LinkedHashMap<>();
         env.put("base", base);
-        env.put("lateCount", PLACEHOLDER_ZERO);
-        env.put("absentDays", PLACEHOLDER_ZERO);
+        env.put("lateCount", BigDecimal.valueOf(lateCount));
+        env.put("absentDays", BigDecimal.valueOf(absentDays));
+        env.put("priorTax", BigDecimal.ZERO);
         Map<String, Object> results = new LinkedHashMap<>();
         results.put("base", base.toPlainString());
         for (PayItem item : items) {

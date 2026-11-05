@@ -1,13 +1,15 @@
 package com.hris.compensation.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.hris.common.crypto.CipherTypeHandler;
 import com.hris.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * 工资单（域：薪酬，分层：实体/DO，密域）。发放给员工的月度工资单，netPayCipher 为实发金额密文，非授权视图返回 netPayMask；发送状态 UNSENT→SENT。
+ * 工资单（域：薪酬，分层：实体/DO，密域）。发放给员工的月度工资单，netPayCipher 经 CipherTypeHandler 加密落库（ADR-007，实体侧明文语义），非授权视图返回 netPayMask；发送状态 UNSENT→SENT。
  */
-@TableName("cmp_payslip")
+@TableName(value = "cmp_payslip", autoResultMap = true)
 public class Payslip extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -29,6 +31,7 @@ public class Payslip extends BaseEntity {
     public void setEmpId(Long empId) {
         this.empId = empId;
     }
+    @TableField(typeHandler = CipherTypeHandler.CmpPayslipNetPay.class)
     private String netPayCipher;  // 实发净额密文(逻辑列 net_pay)
 
     public String getNetPayCipher() {

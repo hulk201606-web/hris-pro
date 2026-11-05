@@ -1,9 +1,9 @@
 package com.hris.compensation.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hris.common.api.R;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
+import com.hris.common.trace.TraceContext;
 import com.hris.compensation.client.EmployeeClient;
 import com.hris.compensation.client.OrgClient;
 import com.hris.compensation.dto.ReportDtos.EmploymentBriefRow;
@@ -11,12 +11,10 @@ import com.hris.compensation.dto.ReportDtos.HeadcountStructureBriefRequest;
 import com.hris.compensation.dto.ReportDtos.LegalEntityBriefItem;
 import com.hris.compensation.dto.ReportDtos.LegalEntityBriefRequest;
 import com.hris.compensation.dto.ReportDtos.LegalEntityCostRow;
-import com.hris.compensation.entity.PayrollDetail;
-import com.hris.compensation.entity.PayrollRun;
-import com.hris.compensation.mapper.PayrollDetailMapper;
-import com.hris.compensation.mapper.PayrollRunMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -28,10 +26,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * CMP-F-017 多法人成本合并报表（MVP 口径：单库聚合）。
+ * CMP-F-017 多法人成本合并报表（MVP 口径：聚合查询走可选只读聚合数据源）。
  *
- * <p><b>架构局限（docs/19 §8.4）</b>：多法人在同一库内是行级区分（tenant_id + legal_entity_id），
- * 本服务按行聚合实现；大数据量性能与跨库/跨实例合并需只读聚合库，属架构级方案，另行评审。</p>
+ * <p><b>聚合数据源（批 8 #17 MVP）</b>：run/明细两条聚合查询经 aggregateJdbcTemplate 执行，
+ * 配置 spring.datasource.aggregate.url 时路由到聚合只读库，缺省回退主库（配置驱动切换，
+ * 见 AggregateDataSourceConfig）。真·独立聚合库由 DBA 供数后仅改 URL。SQL 显式携带
+ * tenant_id（脱离 MP TenantLine 插件链路，隔离语义不变）+ deleted=0 逻辑删除过滤。</p>
  *
  * <p><b>法人归属口径</b>：MVP 用员工现行雇佣关系（emp_employment status=1 且 effective_to IS NULL）
  * 映射法人，不做历史雇佣回溯——期间内调动法人的员工全部计入当前法人，注明局限。</p>
@@ -39,25 +39,38 @@ import java.util.Set;
  * <p><b>金额口径</b>：cmp_payroll_detail.amount_cipher/net_amount_cipher 当前为 MVP 明文占位
  * （与 emp 域 cert_no_cipher 同策略，加密插件接入前按原值解析），按 DECIMAL 聚合；
  * deductionTotal = 应发 - 实发（社保+个税+其他扣减合计，无法拆分），taxTotal 恒为 null。
- * 密域关系：本端点挂 payroll read 权限码，只返回法人级汇总总额，不返回单人明细与密文，
- * 与 cmp:salary:read 密域权限（单人明文）互不影响。</p>
+ * 密域关系：本端点挂 payroll read 权限码，只返回法人级汇总总额，不返回单人明细与密文。</p>
  */
 @Service
 public class LegalEntityCostReportService {
 
     private static final Logger log = LoggerFactory.getLogger(LegalEntityCostReportService.class);
 
-    private final PayrollRunMapper runMapper;
-    private final PayrollDetailMapper detailMapper;
+    private static final String RUN_IDS_SQL = """
+            SELECT id FROM cmp_payroll_run
+            WHERE period_code = ? AND tenant_id = ? AND deleted = 0
+            """;
+
+    private static final String DETAIL_SQL_PREFIX = """
+            SELECT run_id, emp_id, amount_cipher, net_amount_cipher FROM cmp_payroll_detail
+            WHERE run_id IN (""";
+
+    private static final String DETAIL_SQL_SUFFIX = ") AND tenant_id = ? AND deleted = 0";
+
+    private final JdbcTemplate jdbcTemplate;
     private final EmployeeClient employeeClient;
     private final OrgClient orgClient;
 
-    public LegalEntityCostReportService(PayrollRunMapper runMapper, PayrollDetailMapper detailMapper,
-                                        EmployeeClient employeeClient, OrgClient orgClient) {
-        this.runMapper = runMapper;
-        this.detailMapper = detailMapper;
+    public LegalEntityCostReportService(
+            @Qualifier("aggregateJdbcTemplate") JdbcTemplate jdbcTemplate,
+            EmployeeClient employeeClient, OrgClient orgClient) {
+        this.jdbcTemplate = jdbcTemplate;
         this.employeeClient = employeeClient;
         this.orgClient = orgClient;
+    }
+
+    /** 明细聚合行（脱离 MP 实体链路的轻量读取模型，包内可见供单测构造）。 */
+    record DetailRow(long runId, long empId, String amountCipher, String netAmountCipher) {
     }
 
     /**
@@ -67,27 +80,27 @@ public class LegalEntityCostReportService {
         if (periodCode == null || periodCode.isBlank()) {
             throw new BizException(ErrorCode.PARAM_INVALID, "periodCode 不能为空");
         }
-        List<PayrollRun> runs = runMapper.selectList(new LambdaQueryWrapper<PayrollRun>()
-                .eq(PayrollRun::getPeriodCode, periodCode));
-        if (runs.isEmpty()) {
+        Long tenantId = TraceContext.getTenantId();
+        List<Long> runIds = jdbcTemplate.query(RUN_IDS_SQL,
+                (rs, i) -> rs.getLong("id"), periodCode, tenantId);
+        if (runIds.isEmpty()) {
             return List.of();
         }
-        List<PayrollDetail> details = detailMapper.selectList(new LambdaQueryWrapper<PayrollDetail>()
-                .in(PayrollDetail::getRunId, runs.stream().map(PayrollRun::getId).toList()));
+        List<DetailRow> details = queryDetails(runIds, tenantId);
         if (details.isEmpty()) {
             return List.of();
         }
 
         // empId -> 法人（现行雇佣关系；emp 简报不可用时降级为空映射，全部归入法人未知的聚合行）
         Map<Long, Long> empEntity = employmentEntityMap(
-                details.stream().map(PayrollDetail::getEmpId).distinct().toList());
+                details.stream().map(DetailRow::empId).distinct().toList());
 
         Map<Long, Agg> byEntity = new HashMap<>();
-        for (PayrollDetail d : details) {
-            Agg agg = byEntity.computeIfAbsent(empEntity.get(d.getEmpId()), k -> new Agg());
-            agg.empIds.add(d.getEmpId());
-            BigDecimal gross = parseAmount(d.getAmountCipher());
-            BigDecimal net = parseAmount(d.getNetAmountCipher());
+        for (DetailRow d : details) {
+            Agg agg = byEntity.computeIfAbsent(empEntity.get(d.empId()), k -> new Agg());
+            agg.empIds.add(d.empId());
+            BigDecimal gross = parseAmount(d.amountCipher());
+            BigDecimal net = parseAmount(d.netAmountCipher());
             if (gross != null) {
                 agg.gross = agg.gross.add(gross);
             }
@@ -108,6 +121,17 @@ public class LegalEntityCostReportService {
                 x.legalEntityId() == null ? Long.MIN_VALUE : x.legalEntityId(),
                 y.legalEntityId() == null ? Long.MIN_VALUE : y.legalEntityId()));
         return rows;
+    }
+
+    /** 明细批量读取：run_id IN 动态占位 + 显式租户/逻辑删除过滤（聚合查询走聚合数据源）。 */
+    private List<DetailRow> queryDetails(List<Long> runIds, Long tenantId) {
+        String placeholders = String.join(",", java.util.Collections.nCopies(runIds.size(), "?"));
+        List<Object> args = new ArrayList<>(runIds);
+        args.add(tenantId);
+        return jdbcTemplate.query(DETAIL_SQL_PREFIX + placeholders + DETAIL_SQL_SUFFIX,
+                (rs, i) -> new DetailRow(rs.getLong("run_id"), rs.getLong("emp_id"),
+                        rs.getString("amount_cipher"), rs.getString("net_amount_cipher")),
+                args.toArray());
     }
 
     /** 批量取员工现行法人映射；emp 简报不可用降级为空 Map（fail-open，报表仍返回法人未知行）。 */

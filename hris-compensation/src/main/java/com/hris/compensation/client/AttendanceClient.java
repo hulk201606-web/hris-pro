@@ -1,6 +1,7 @@
 package com.hris.compensation.client;
 
 import com.hris.common.api.R;
+import com.hris.compensation.dto.AttendanceContractDtos.AttendanceBriefRow;
 import com.hris.compensation.dto.AttendanceContractDtos.ClosingDetailResponse;
 import com.hris.compensation.dto.AttendanceContractDtos.DailyAttendanceResponse;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -28,4 +29,13 @@ public interface AttendanceClient {
     R<List<DailyAttendanceResponse>> daily(@RequestParam("empId") Long empId,
                                           @RequestParam("from") LocalDate from,
                                           @RequestParam("to") LocalDate to);
+
+    /**
+     * 考勤简报（F-010 契约端点，签名锁定）：按员工批量取周期内迟到次数/缺勤天数，
+     * 供算薪 lateCount/absentDays 变量注入。empIds 逗号分隔（如 1,2）。
+     */
+    @GetMapping("/attendance-brief")
+    R<List<AttendanceBriefRow>> attendanceBrief(@RequestParam("empIds") String empIds,
+                                                @RequestParam("periodStart") LocalDate periodStart,
+                                                @RequestParam("periodEnd") LocalDate periodEnd);
 }

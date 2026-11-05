@@ -19,6 +19,10 @@ public final class AttendanceContractDtos {
                                           BigDecimal overtimeHours, LocalDateTime updatedAt) {
     }
 
+    /** 考勤简报行（F-010 契约：GET /internal/att/attendance-brief?empIds=1,2&periodStart=&periodEnd=）。 */
+    public record AttendanceBriefRow(Long empId, long lateCount, long absentDays) {
+    }
+
     /** 月结结果集响应（考勤域 ClosingDetailResponse 本地契约，供算薪取汇总）。 */
     public record ClosingDetailResponse(String periodCode, String status, LocalDate startDate,
                                         LocalDate endDate, long employeeCount, long normalDays,
