@@ -76,9 +76,12 @@ public class InstanceService {
             vars.putAll(req.variables());
         }
         String assignee = assigneeResolver.resolve(req.assignee(), req.variables(), req.payload(), req.initiator());
-        if (assignee != null) {
-            vars.put("assignee", assignee);
-        }
+        // 待指派语义：四级解析全部落空时也必须提供 assignee 变量（空串 → 任务无主创建）。
+        // 若缺席该变量，模板里 flowable:assignee="${assignee}" 会在首个节点创建时抛
+        // "Unknown property used in expression"，flow 发起 500，业务侧 fail-open 后
+        // 单据永远停在 PROCESSING——待指派"不阻断不丢单"被实现打败（docs/19 §8.7-1）。
+        // 无主任务不经认领不会出现在任何人的 todo，重新指派/认领能力另行登记。
+        vars.put("assignee", assignee != null ? assignee : "");
         // 3. 记录发起人（Flowable startedBy），供「我发起的」查询
         String initiator = String.valueOf(resolveInitiator(req));
         ProcessInstance pi;

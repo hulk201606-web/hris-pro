@@ -36,6 +36,20 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
+        <!-- AOP：hris-common 的 PermAspect/@AuditLog 审计切面需 aspectjweaver 才能织入
+             （common 里该 starter 是 optional 不传递，各服务须自行声明，同 hris-org）。
+             缺失时切面被静默忽略：登录审计不落库、@RequirePerm 不拦截。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+        <!-- OpenFeign 5.x 的 lb:// 服务名解析必须显式引入 loadbalancer（缺失时
+             Feign Client 创建抛 "No Feign Client for loadBalancing defined"），
+             auth 因审计落库接入 PlatformAuditClient 才新增 Feign 基建。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
