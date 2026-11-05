@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: hris-auth
+  # Redis：refresh 轮换与登出黑名单存储（多实例部署必需，docs/19 §10）
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   cloud:
     nacos:
       discovery:
@@ -36,6 +42,11 @@ auth:
     # access 15min / refresh 7d（docs/08 §1）
     access-ttl-seconds: 900
     refresh-ttl-seconds: 604800
+
+hris:
+  auth:
+    # 令牌存储实现：redis（多实例部署，缺省 memory 单机兜底）
+    token-store: redis
 
 logging:
   level:

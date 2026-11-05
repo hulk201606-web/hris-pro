@@ -2,6 +2,7 @@ package com.hris.auth.service;
 
 import com.hris.auth.config.AuthProperties;
 import com.hris.auth.model.LoginUser;
+import com.hris.auth.store.InMemoryTokenStore;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
@@ -45,7 +46,7 @@ class TokenServiceTest {
         AuthProperties props = new AuthProperties();
         props.setSecret(SECRET);
         props.setIssuer(ISSUER);
-        service = new TokenService(props);
+        service = new TokenService(props, new InMemoryTokenStore());
     }
 
     private LoginUser stubUser() {

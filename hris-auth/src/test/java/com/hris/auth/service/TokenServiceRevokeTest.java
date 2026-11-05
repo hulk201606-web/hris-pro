@@ -2,6 +2,7 @@ package com.hris.auth.service;
 
 import com.hris.auth.config.AuthProperties;
 import com.hris.auth.model.LoginUser;
+import com.hris.auth.store.InMemoryTokenStore;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.common.security.JwtSecretGuard;
@@ -36,7 +37,7 @@ class TokenServiceRevokeTest {
         AuthProperties props = new AuthProperties();
         props.setSecret(SECRET);
         props.setIssuer(ISSUER);
-        service = new TokenService(props);
+        service = new TokenService(props, new InMemoryTokenStore());
     }
 
     private LoginUser stubUser() {
@@ -118,7 +119,7 @@ class TokenServiceRevokeTest {
             AuthProperties weak = new AuthProperties();
             weak.setSecret("too-short");
 
-            assertThrows(IllegalStateException.class, () -> new TokenService(weak));
+            assertThrows(IllegalStateException.class, () -> new TokenService(weak, new InMemoryTokenStore()));
         }
 
         @Test
@@ -127,7 +128,7 @@ class TokenServiceRevokeTest {
             AuthProperties weak = new AuthProperties();
             weak.setSecret(JwtSecretGuard.KNOWN_DEFAULT);
 
-            assertThrows(IllegalStateException.class, () -> new TokenService(weak));
+            assertThrows(IllegalStateException.class, () -> new TokenService(weak, new InMemoryTokenStore()));
         }
 
         @Test
@@ -135,7 +136,7 @@ class TokenServiceRevokeTest {
         void rejectsMissingSecret() {
             AuthProperties none = new AuthProperties();
 
-            assertThrows(IllegalStateException.class, () -> new TokenService(none));
+            assertThrows(IllegalStateException.class, () -> new TokenService(none, new InMemoryTokenStore()));
         }
 
         @Test

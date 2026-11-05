@@ -2,6 +2,7 @@ package com.hris.auth.service;
 
 import com.hris.auth.config.AuthProperties;
 import com.hris.auth.model.LoginUser;
+import com.hris.auth.store.TokenStore;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.common.security.JwtSecretGuard;
@@ -15,15 +16,14 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * JWT 签发 / 校验 / 撤销（HS256）。
  *
- * <p>MVP 简化：refresh 令牌轮换与登出黑名单用进程内内存实现，单实例可运行；
- * 多实例部署需替换为 Redis（键前缀 t{tenantId}:，见 docs/08 §3），仅替换存储实现即可。</p>
+ * <p>refresh 轮换与登出黑名单的持久化由 {@link TokenStore} 承担：
+ * 缺省内存实现（单测/单机），多实例部署经 hris.auth.token-store=redis 切 Redis，
+ * 多实例刷新/登出即时全局生效（docs/19 §10 生产化收尾）。</p>
  */
 @Service
 public class TokenService {
@@ -41,18 +41,16 @@ public class TokenService {
     private final long accessTtlSeconds;
     private final long refreshTtlSeconds;
 
-    /** refresh jti → 过期时间（轮换 + 重用检测） */
-    private final Map<String, Long> refreshStore = new ConcurrentHashMap<>();
+    /** refresh 登记/轮换/黑名单的统一存储抽象 */
+    private final TokenStore tokenStore;
 
-    /** 撤销 jti → 过期时间（登出/禁用即时失效） */
-    private final Map<String, Long> blacklist = new ConcurrentHashMap<>();
-
-    public TokenService(AuthProperties props) {
+    public TokenService(AuthProperties props, TokenStore tokenStore) {
         this.key = Keys.hmacShaKeyFor(
                 JwtSecretGuard.requireStrongSecret(props.getSecret()).getBytes(StandardCharsets.UTF_8));
         this.issuer = props.getIssuer();
         this.accessTtlSeconds = props.getAccessTtlSeconds();
         this.refreshTtlSeconds = props.getRefreshTtlSeconds();
+        this.tokenStore = tokenStore;
     }
 
     /**
@@ -82,13 +80,13 @@ public class TokenService {
 
     /**
      * 签发 refresh 令牌（HS256，默认 7 天）：claims 仅含 sub/userId、tenant_id、typ=refresh、jti。
-     * jti 同时写入进程内 refreshStore（ConcurrentHashMap），用于轮换与重用检测。
+     * jti 同时写入 TokenStore（Redis/内存），用于轮换与重用检测。
      */
     public String issueRefresh(Long userId, Long tenantId) {
         Date now = new Date();
         long exp = now.getTime() + refreshTtlSeconds * 1000;
         String jti = UUID.randomUUID().toString();
-        refreshStore.put(jti, exp);
+        tokenStore.putRefresh(jti, exp);
         return Jwts.builder()
                 .issuer(issuer)
                 .subject(String.valueOf(userId))
@@ -111,7 +109,7 @@ public class TokenService {
             throw new BizException(ErrorCode.UNAUTHORIZED, "令牌类型错误");
         }
         String jti = c.getId();
-        if (jti != null && blacklist.containsKey(jti)) {
+        if (jti != null && tokenStore.isBlacklisted(jti)) {
             throw new BizException(ErrorCode.UNAUTHORIZED, "令牌已失效");
         }
         return toLoginUser(c);
@@ -126,7 +124,7 @@ public class TokenService {
             throw new BizException(ErrorCode.UNAUTHORIZED, "令牌类型错误");
         }
         String jti = c.getId();
-        if (jti == null || !refreshStore.containsKey(jti) || blacklist.containsKey(jti)) {
+        if (jti == null || !tokenStore.existsRefresh(jti) || tokenStore.isBlacklisted(jti)) {
             throw new BizException(ErrorCode.UNAUTHORIZED, "刷新令牌已失效或已被重用");
         }
         Long userId = Long.parseLong(c.getSubject());
@@ -136,17 +134,21 @@ public class TokenService {
 
     /** 轮换时消费旧 refresh（使其不可再次使用）。 */
     public void consumeRefresh(String jti) {
-        refreshStore.remove(jti);
+        tokenStore.removeRefresh(jti);
     }
 
-    /** 撤销：access（黑名单）+ refresh（移除并黑名单）。 */
+    /**
+     * 撤销：access（黑名单）+ refresh（移除并黑名单）。
+     * 黑名单 TTL 取令牌剩余有效期毫秒，已过期令牌无需登记。
+     */
     public void revoke(String accessToken, String refreshToken) {
         if (accessToken != null && !accessToken.isBlank()) {
             try {
                 Claims c = parse(accessToken);
                 String jti = c.getId();
-                if (jti != null) {
-                    blacklist.put(jti, c.getExpiration().getTime());
+                long ttlMs = c.getExpiration().getTime() - System.currentTimeMillis();
+                if (jti != null && ttlMs > 0) {
+                    tokenStore.blacklist(jti, ttlMs);
                 }
             } catch (BizException ignore) {
                 // 已过期或无效，忽略
@@ -156,9 +158,12 @@ public class TokenService {
             try {
                 Claims c = parse(refreshToken);
                 String jti = c.getId();
+                long ttlMs = c.getExpiration().getTime() - System.currentTimeMillis();
                 if (jti != null) {
-                    refreshStore.remove(jti);
-                    blacklist.put(jti, c.getExpiration().getTime());
+                    tokenStore.removeRefresh(jti);
+                    if (ttlMs > 0) {
+                        tokenStore.blacklist(jti, ttlMs);
+                    }
                 }
             } catch (BizException ignore) {
                 // 已过期或无效，忽略
