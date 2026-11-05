@@ -18,6 +18,7 @@ import {
   FormOutlined,
   HomeOutlined,
   IdcardOutlined,
+  MessageOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -38,6 +39,7 @@ const menuItems: MenuItem[] = [
   { key: '/self/approvals', label: '我的审批', icon: AuditOutlined },
   { key: '/self/payroll', label: '我的薪酬', icon: DollarOutlined },
   { key: '/self/leave', label: '我的假期', icon: CalendarOutlined },
+  { key: '/self/interviews', label: '我的面谈', icon: MessageOutlined },
 ];
 
 const route = useRoute();

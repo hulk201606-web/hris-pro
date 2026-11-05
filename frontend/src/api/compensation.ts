@@ -8,6 +8,7 @@ import { isMockEnabled } from './mock';
 import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { EmployeePay, PayrollPreviewLine, PayrollRun } from '../types/admin';
+import type { PeriodLock } from '../types/api-batch2';
 
 /* ---------------------------- 薪酬核算批次 ---------------------------- */
 
@@ -67,5 +68,32 @@ export function deleteEmployeePay(id: number): Promise<void> {
 export function previewPayroll(periodCode: string, empIds: number[]): Promise<PayrollPreviewLine[]> {
   if (isMockEnabled()) return adminMock.payrollPreview(periodCode, empIds);
   return post<PayrollPreviewLine[]>('/cmp/payroll-preview', { periodCode, empIds });
+}
+
+/* ---------------------------- 期间关账（二期批 2） ---------------------------- */
+
+/** 关账记录查询条件（均可选）：active=true 仅看锁定中，periodCode 精确匹配 */
+export interface PeriodLockQuery {
+  active?: boolean;
+  periodCode?: string;
+}
+
+/** 分页查询期间关账记录（GET /cmp/period-locks?active=&periodCode=） */
+export function listPeriodLocks(
+  query: PeriodLockQuery,
+  page: number,
+  size: number,
+): Promise<PageResult<PeriodLock>> {
+  return get<PageResult<PeriodLock>>('/cmp/period-locks', { ...query, page, size });
+}
+
+/** 期间关账（POST /cmp/period-locks/{periodCode}/lock）：锁定后该期间 run 的 submit/update 被拒 */
+export function lockPeriod(periodCode: string): Promise<PeriodLock> {
+  return post<PeriodLock>(`/cmp/period-locks/${encodeURIComponent(periodCode)}/lock`);
+}
+
+/** 期间解锁（POST /cmp/period-locks/{periodCode}/unlock）：reason 必填，落审计 */
+export function unlockPeriod(periodCode: string, reason: string): Promise<PeriodLock> {
+  return post<PeriodLock>(`/cmp/period-locks/${encodeURIComponent(periodCode)}/unlock`, { reason });
 }
 

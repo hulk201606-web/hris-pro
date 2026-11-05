@@ -74,6 +74,8 @@ const MODULES: ModuleMeta[] = [
       { resource: 'payroll-run', route: '/admin/compensation/payroll-runs', title: '薪酬核算' },
       { resource: 'payroll', route: '/admin/compensation/preview', title: '算薪预览' },
       { resource: 'employee-pay', route: '/admin/compensation/employee-pays', title: '员工薪酬' },
+      // 期间关账权限复用 payroll-run 读写码（后端不设独立资源），故挂 payroll-run 资源键
+      { resource: 'payroll-run', route: '/admin/compensation/period-locks', title: '期间关账' },
     ],
   },
   {
@@ -84,6 +86,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'cycle', route: '/admin/performance/cycles', title: '考核周期' },
       { resource: 'goal', route: '/admin/performance/goals', title: '目标管理' },
       { resource: 'review', route: '/admin/performance/context', title: '评估上下文' },
+      { resource: 'interview', route: '/admin/performance/interviews', title: '面谈记录' },
     ],
   },
   {

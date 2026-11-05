@@ -1,4 +1,4 @@
-import { get, post, put } from './http';
+import { del, get, post, put } from './http';
 import { isMockEnabled, mockApi } from './mock';
 import type { PageResult } from '../types/api';
 import type {
@@ -8,6 +8,7 @@ import type {
   EmployeeProfileResponse,
   RehireCheckResponse,
 } from '../types/api';
+import type { ContractTerm } from '../types/api-batch2';
 
 /**
  * 员工域 API 封装（后端 hris-employee 模块）。
@@ -86,6 +87,35 @@ export function renewContract(id: number, newEndDate: string): Promise<ContractR
 /** 合同到期预警（GET /emp/contracts/expiring）：未来 N 天内到期（EMP-F-015） */
 export function listExpiringContracts(days = 60): Promise<ContractExpiringItem[]> {
   return get<ContractExpiringItem[]>('/emp/contracts/expiring', { days });
+}
+
+/* ---------------------------- 合同条款（二期批 2） ---------------------------- */
+
+/** 合同条款列表（GET /emp/contracts/{id}/terms） */
+export function listContractTerms(contractId: number): Promise<ContractTerm[]> {
+  return get<ContractTerm[]>(`/emp/contracts/${contractId}/terms`);
+}
+
+/** 新增条款（POST /emp/contracts/{id}/terms）：termType 见 ContractTermType */
+export function createContractTerm(
+  contractId: number,
+  data: Record<string, unknown>,
+): Promise<ContractTerm> {
+  return post<ContractTerm>(`/emp/contracts/${contractId}/terms`, data);
+}
+
+/** 更新条款（PUT /emp/contracts/{id}/terms/{termId}） */
+export function updateContractTerm(
+  contractId: number,
+  termId: number,
+  data: Record<string, unknown>,
+): Promise<ContractTerm> {
+  return put<ContractTerm>(`/emp/contracts/${contractId}/terms/${termId}`, data);
+}
+
+/** 删除条款（DELETE /emp/contracts/{id}/terms/{termId}） */
+export function deleteContractTerm(contractId: number, termId: number): Promise<void> {
+  return del<void>(`/emp/contracts/${contractId}/terms/${termId}`);
 }
 
 /* ---------------------------- 员工异动（生命周期办理） ---------------------------- */

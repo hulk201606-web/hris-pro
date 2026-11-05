@@ -9,6 +9,7 @@ import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { CandidateDedupResponse } from '../types/api';
 import type { Candidate, Offer, Requisition } from '../types/admin';
+import type { ResumeParseResult } from '../types/api-batch2';
 
 /* ---------------------------- 职位需求 ---------------------------- */
 
@@ -124,6 +125,29 @@ export function deleteOffer(id: number): Promise<void> {
 export function onboardOffer(id: number): Promise<number> {
   if (isMockEnabled()) return adminMock.onboardOffer(id);
   return post<number>(`/rcu/offers/${id}/onboard`);
+}
+
+/* ---------------------------- 简历解析（二期批 2） ---------------------------- */
+
+/**
+ * 查询简历解析结果（GET /rcu/resumes/{id}/parse）。
+ * parseStatus 为 RULE_LIMITED 时结果仅供参考，需人工核对。
+ */
+export function getResumeParse(resumeId: number): Promise<ResumeParseResult> {
+  return get<ResumeParseResult>(`/rcu/resumes/${resumeId}/parse`);
+}
+
+/** 触发规则解析（POST /rcu/resumes/{id}/parse）：幂等重跑，返回最新解析结果 */
+export function parseResume(resumeId: number): Promise<ResumeParseResult> {
+  return post<ResumeParseResult>(`/rcu/resumes/${resumeId}/parse`);
+}
+
+/** 人工修正解析结果（PUT /rcu/resumes/{id}/parse）：覆盖 parsed 三字段与教育/工作经历 */
+export function updateResumeParse(
+  resumeId: number,
+  data: Record<string, unknown>,
+): Promise<ResumeParseResult> {
+  return put<ResumeParseResult>(`/rcu/resumes/${resumeId}/parse`, data);
 }
 
 /* ---------------------------- 候选人查重（RCS-F-009） ---------------------------- */

@@ -8,6 +8,7 @@ import { isMockEnabled } from './mock';
 import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { Cycle, EmployeeProfileBrief, Goal } from '../types/admin';
+import type { InterviewRecord, PipStatus } from '../types/api-batch2';
 
 /* ---------------------------- 考核周期 ---------------------------- */
 
@@ -59,6 +60,46 @@ export function updateGoal(id: number, data: Record<string, unknown>): Promise<G
 export function deleteGoal(id: number): Promise<void> {
   if (isMockEnabled()) return adminMock.removeGoal(id);
   return del<void>(`/prf/goals/${id}`);
+}
+
+/* ---------------------------- 面谈记录（二期批 2） ---------------------------- */
+
+/** 面谈记录查询条件（均可选） */
+export interface InterviewQuery {
+  cycleId?: number;
+  empId?: number;
+}
+
+/** 分页查询面谈记录（GET /prf/interviews?cycleId=&empId=） */
+export function listInterviews(
+  query: InterviewQuery,
+  page: number,
+  size: number,
+): Promise<PageResult<InterviewRecord>> {
+  return get<PageResult<InterviewRecord>>('/prf/interviews', { ...query, page, size });
+}
+
+/** 新建面谈记录（POST /prf/interviews）；conclusion 为 PIP 时 pip 起止日期必填（服务端校验） */
+export function createInterview(data: Record<string, unknown>): Promise<InterviewRecord> {
+  return post<InterviewRecord>('/prf/interviews', data);
+}
+
+/** 更新面谈记录（PUT /prf/interviews/{id}） */
+export function updateInterview(
+  id: number,
+  data: Record<string, unknown>,
+): Promise<InterviewRecord> {
+  return put<InterviewRecord>(`/prf/interviews/${id}`, data);
+}
+
+/** 登记 PIP 结果（POST /prf/interviews/{id}/pip-result）：仅 conclusion 为 PIP 的记录 */
+export function submitPipResult(id: number, pipStatus: PipStatus): Promise<InterviewRecord> {
+  return post<InterviewRecord>(`/prf/interviews/${id}/pip-result`, { pipStatus });
+}
+
+/** 我的面谈记录（GET /prf/interviews/me）：后端按当前登录员工过滤，返回分页 */
+export function listMyInterviews(page = 1, size = 50): Promise<PageResult<InterviewRecord>> {
+  return get<PageResult<InterviewRecord>>('/prf/interviews/me', { page, size });
 }
 
 /* ---------------------------- 评估上下文（跨域） ---------------------------- */

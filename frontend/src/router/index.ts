@@ -100,6 +100,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/self/MyLeaveView.vue'),
         meta: { title: '我的假期' },
       },
+      {
+        path: 'self/interviews',
+        name: 'MyInterviews',
+        component: () => import('../views/self/MyInterviewsView.vue'),
+        meta: { title: '我的面谈' },
+      },
     ],
   },
   {

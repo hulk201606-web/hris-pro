@@ -109,6 +109,12 @@ export const adminChildren: RouteRecordRaw[] = [
     meta: { title: '员工薪酬' },
   },
   {
+    path: 'compensation/period-locks',
+    name: 'AdminPeriodLocks',
+    component: () => import('../views/admin/compensation/PeriodLockView.vue'),
+    meta: { title: '期间关账' },
+  },
+  {
     path: 'performance/cycles',
     name: 'AdminCycles',
     component: () => import('../views/admin/performance/CycleListView.vue'),
@@ -125,6 +131,12 @@ export const adminChildren: RouteRecordRaw[] = [
     name: 'AdminReviewContext',
     component: () => import('../views/admin/performance/ReviewContextView.vue'),
     meta: { title: '评估上下文' },
+  },
+  {
+    path: 'performance/interviews',
+    name: 'AdminInterviews',
+    component: () => import('../views/admin/performance/InterviewListView.vue'),
+    meta: { title: '面谈记录' },
   },
   {
     path: 'knowledge/spaces',

@@ -3,15 +3,26 @@
 /**
  * 管理端-候选人列表：CRUD（姓名 / 脱敏手机号 / 邮箱 / 阶段），
  * 走 EntityCrudPage 组件 + /rcu/candidates 接口。
+ * 行操作「解析结果」：打开简历解析抽屉（GET/POST/PUT /rcu/resumes/{id}/parse）。
  */
+import { computed, ref } from 'vue';
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
+import ResumeParseDrawer from '../../../components/admin/recruit/ResumeParseDrawer.vue';
 import {
   createCandidate,
   deleteCandidate,
   listCandidates,
   updateCandidate,
 } from '../../../api/recruit';
+import { useUserStore } from '../../../stores/user';
 import type { CrudApi, CrudColumn, CrudField } from '../../../types/admin';
+
+const userStore = useUserStore();
+// 解析查看走 rcu:resume:read（随页面读权限开放），重新解析/人工修正需 rcu:resume:write
+const canWrite = computed(() => userStore.hasPerm('rcu:resume:write'));
+
+// 候选人行不携带 rcu_resume.id，抽屉内输入简历 ID 定位（后端候选人与简历暂无联动查询）
+const parseDrawerOpen = ref(false);
 
 const columns: CrudColumn[] = [
   { key: 'name', title: '姓名', width: 140 },
@@ -57,5 +68,17 @@ const api: CrudApi = {
     :columns="columns"
     :fields="fields"
     :api="api"
+  >
+    <template #rowActions>
+      <a-button type="link" size="small" @click="parseDrawerOpen = true">
+        解析结果
+      </a-button>
+    </template>
+  </EntityCrudPage>
+
+  <ResumeParseDrawer
+    v-if="parseDrawerOpen"
+    :can-write="canWrite"
+    @close="parseDrawerOpen = false"
   />
 </template>

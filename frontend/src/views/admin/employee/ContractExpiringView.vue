@@ -5,8 +5,12 @@
  * 服务端按剩余天数分级：≤7 天 LEVEL_7、≤30 天 LEVEL_30、其余 LEVEL_60；
  * daysToExpire <= 0 表示已过期。未建续签单的合同会在预警窗口内持续出现，
  * 由 HR 在合同台账中处理续签。
+ *
+ * 行操作「条款明细」：打开合同条款抽屉（GET/POST/PUT/DELETE /emp/contracts/{id}/terms）。
  */
+import { ref } from 'vue';
 import SimpleCrudPage from '../../../components/admin/SimpleCrudPage.vue';
+import ContractTermsDrawer from '../../../components/admin/employee/ContractTermsDrawer.vue';
 import { listExpiringContracts } from '../../../api/employee';
 import type { CrudColumn, CrudField, SimpleCrudApi } from '../../../types/admin';
 
@@ -31,6 +35,10 @@ const fields: CrudField[] = [];
 const api: SimpleCrudApi = {
   list: () => listExpiringContracts(60),
 };
+
+// 条款抽屉：以合同 id（预警项 id）+ 工号-姓名 上下文打开
+const termsContractId = ref<number | null>(null);
+const termsContext = ref('');
 </script>
 
 <template>
@@ -41,5 +49,22 @@ const api: SimpleCrudApi = {
     :columns="columns"
     :fields="fields"
     :api="api"
+  >
+    <template #rowActions="{ record }">
+      <a-button
+        type="link"
+        size="small"
+        @click="termsContractId = Number(record.id); termsContext = `${record.empNo} ${record.name}`"
+      >
+        条款明细
+      </a-button>
+    </template>
+  </SimpleCrudPage>
+
+  <ContractTermsDrawer
+    v-if="termsContractId !== null"
+    :contract-id="termsContractId"
+    :context="termsContext"
+    @close="termsContractId = null"
   />
 </template>
