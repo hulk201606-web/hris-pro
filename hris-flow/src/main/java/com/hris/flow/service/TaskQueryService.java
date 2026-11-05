@@ -66,25 +66,24 @@ public class TaskQueryService {
                 .taskCandidateOrAssigned(uid);
         long total = q.count();
         List<Task> tasks = q.orderByTaskCreateTime().desc().listPage(offset(page, size), safeSize(size));
-        Map<String, BizRelation> relMap = bizByInstIds(tasks.stream()
-                .map(Task::getProcessInstanceId).filter(java.util.Objects::nonNull).distinct().toList());
-        // 死代码最小激活（docs/19 §8.7-6）：form_schema_json 随待办返回 + 超期 overdue 标记
-        Map<String, String> schemaMap = formSchemaByKeys(tasks.stream()
-                .map(t -> procKeyOf(t, relMap.get(t.getProcessInstanceId()))).collect(Collectors.toSet()));
-        Map<String, TimeoutCfg> cfgMap = timeoutCfgByProcDefIds(tasks.stream()
-                .map(Task::getProcessDefinitionId).filter(java.util.Objects::nonNull).distinct().toList());
-        List<TaskView> views = new ArrayList<>();
-        for (Task t : tasks) {
-            BizRelation rel = relMap.get(t.getProcessInstanceId());
-            String procKey = procKeyOf(t, rel);
-            TimeoutCfg cfg = t.getProcessDefinitionId() == null ? null
-                    : cfgMap.get(t.getProcessDefinitionId() + "#" + t.getTaskDefinitionKey());
-            views.add(new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
-                    bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
-                    "TODO", fmt(t.getCreateTime()), fmt(t.getCreateTime()), null, 0L,
-                    schemaMap.get(procKey), isOverdue(t, cfg)));
+        return new PageResult<>(buildViews(tasks), page, size, total);
+    }
+
+    /**
+     * 待指派任务（docs/19 §9-1）：本租户运行时无主任务，供管理员认领/指派。
+     * Flowable taskUnassigned() 只匹配 ASSIGNEE_ IS NULL，而待指派降级创建的任务
+     * assignee 为空串，故用 or 块同时覆盖两种情况。
+     */
+    public PageResult<TaskView> unassigned(long page, long size, String procDefKey) {
+        String tenantId = requireTenant();
+        TaskQuery q = taskService.createTaskQuery().taskTenantId(tenantId);
+        if (procDefKey != null && !procDefKey.isBlank()) {
+            q.processDefinitionKey(procDefKey);
         }
-        return new PageResult<>(views, page, size, total);
+        q.or().taskUnassigned().taskAssignee("").endOr();
+        long total = q.count();
+        List<Task> tasks = q.orderByTaskCreateTime().desc().listPage(offset(page, size), safeSize(size));
+        return new PageResult<>(buildViews(tasks), page, size, total);
     }
 
     /** 我的已办。 */
@@ -142,6 +141,29 @@ public class TaskQueryService {
                     p.getDurationInMillis() == null ? 0L : p.getDurationInMillis(), null, false));
         }
         return new PageResult<>(views, page, size, total);
+    }
+
+    /** 运行时任务视图组装（待办/待指派共用）：业务映射 + form_schema_json + 超期标记。 */
+    private List<TaskView> buildViews(List<Task> tasks) {
+        Map<String, BizRelation> relMap = bizByInstIds(tasks.stream()
+                .map(Task::getProcessInstanceId).filter(java.util.Objects::nonNull).distinct().toList());
+        // 死代码最小激活（docs/19 §8.7-6）：form_schema_json 随待办返回 + 超期 overdue 标记
+        Map<String, String> schemaMap = formSchemaByKeys(tasks.stream()
+                .map(t -> procKeyOf(t, relMap.get(t.getProcessInstanceId()))).collect(Collectors.toSet()));
+        Map<String, TimeoutCfg> cfgMap = timeoutCfgByProcDefIds(tasks.stream()
+                .map(Task::getProcessDefinitionId).filter(java.util.Objects::nonNull).distinct().toList());
+        List<TaskView> views = new ArrayList<>();
+        for (Task t : tasks) {
+            BizRelation rel = relMap.get(t.getProcessInstanceId());
+            String procKey = procKeyOf(t, rel);
+            TimeoutCfg cfg = t.getProcessDefinitionId() == null ? null
+                    : cfgMap.get(t.getProcessDefinitionId() + "#" + t.getTaskDefinitionKey());
+            views.add(new TaskView(t.getId(), t.getProcessInstanceId(), bizTypeOf(rel),
+                    bizTypeOf(rel), bizKeyOf(rel), t.getName(), t.getAssignee(),
+                    "TODO", fmt(t.getCreateTime()), fmt(t.getCreateTime()), null, 0L,
+                    schemaMap.get(procKey), isOverdue(t, cfg)));
+        }
+        return views;
     }
 
     private Map<String, BizRelation> bizByInstIds(List<String> procInstIds) {

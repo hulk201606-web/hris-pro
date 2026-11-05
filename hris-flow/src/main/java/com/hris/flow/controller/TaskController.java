@@ -58,6 +58,30 @@ public class TaskController {
         return R.ok(taskQueryService.started(page, size));
     }
 
+    /** 待指派任务（本租户无主任务，assignee 空串/NULL），procDefKey 可选过滤。 */
+    @RequirePerm("flow:task:read")
+    @GetMapping("/unassigned")
+    public R<PageResult<TaskView>> unassigned(@RequestParam(defaultValue = "1") long page,
+                                              @RequestParam(defaultValue = "20") long size,
+                                              @RequestParam(required = false) String procDefKey) {
+        return R.ok(taskQueryService.unassigned(page, size, procDefKey));
+    }
+
+    /** 认领无主任务：assignee 置为操作者；重复认领自己幂等返回 false。 */
+    @RequirePerm("flow:task:write")
+    @PostMapping("/{id}/claim")
+    public R<Boolean> claim(@PathVariable("id") String id, @RequestBody(required = false) TaskActionRequest req) {
+        return R.ok(taskActionService.claim(id, req));
+    }
+
+    /** 指派（管理动作）：强制把任务指给 targetUserId，无需是当前 assignee。 */
+    @RequirePerm("flow:task:write")
+    @PostMapping("/{id}/assign")
+    public R<Void> assign(@PathVariable("id") String id, @RequestBody TaskActionRequest req) {
+        taskActionService.assign(id, req);
+        return R.ok();
+    }
+
     @RequirePerm("flow:task:write")
     @PostMapping("/{id}/approve")
     public R<Void> approve(@PathVariable("id") String id, @RequestBody(required = false) TaskActionRequest req) {

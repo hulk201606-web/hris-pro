@@ -11,6 +11,10 @@ public enum TaskActionType {
     REJECT,
     /** 转办（任务所有权转移，留痕） */
     TRANSFER,
+    /** 认领无主任务（操作者自领，留痕） */
+    CLAIM,
+    /** 指派（管理动作：强制指给目标用户，留痕） */
+    ASSIGN,
     /** 加签（MVP：追加候选人并行加签） */
     ADD_SIGN,
     /** 撤回（发起人撤回，仅无已处理节点时允许） */

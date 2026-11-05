@@ -95,6 +95,37 @@ public class TaskActionService {
         taskService.setAssignee(taskId, String.valueOf(target));
     }
 
+    /**
+     * 认领无主任务（docs/19 §9-1）：四级解析落空产生的 assignee 为空串/NULL 的任务，操作者自领。
+     * 幂等：重复认领自己返回 false；已被他人认领（assignee 非空且非本人）拒绝。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean claim(String taskId, TaskActionRequest req) {
+        Task task = requireTask(taskId);
+        Long operator = requireOperator();
+        String uid = String.valueOf(operator);
+        if (uid.equals(task.getAssignee())) {
+            return false;
+        }
+        if (task.getAssignee() != null && !task.getAssignee().isBlank()) {
+            throw new BizException(ErrorCode.FLOW_NO_PERMISSION, "任务已被他人认领，无权操作");
+        }
+        record(taskId, TaskActionType.CLAIM, operator, req, null);
+        taskService.setAssignee(taskId, uid);
+        return true;
+    }
+
+    /** 指派（管理动作，docs/19 §9-1）：管理员强制把任务指给 targetUserId，无需是当前 assignee。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void assign(String taskId, TaskActionRequest req) {
+        Task task = requireTask(taskId);
+        Long target = requireTarget(req);
+        Long operator = requireOperator();
+        String from = task.getAssignee();
+        record(taskId, TaskActionType.ASSIGN, operator, req, from == null ? null : parseLong(from));
+        taskService.setAssignee(taskId, String.valueOf(target));
+    }
+
     /** 加签（MVP：追加候选人并行加签，完整前/后/并行加签链属后续增量）。 */
     @Transactional(rollbackFor = Exception.class)
     public void addSign(String taskId, TaskActionRequest req) {
@@ -178,6 +209,14 @@ public class TaskActionService {
             // 无映射时跳过
             return null;
         }
+    }
+
+    private Long requireOperator() {
+        Long userId = TraceContext.getUserId();
+        if (userId == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED, "缺少用户身份");
+        }
+        return userId;
     }
 
     private Long requireTarget(TaskActionRequest req) {
