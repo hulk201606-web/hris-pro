@@ -5,6 +5,7 @@ import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.org.dto.CatalogRequest;
 import com.hris.org.dto.CatalogResponse;
+import com.hris.org.dto.ReportDtos;
 import com.hris.org.entity.OrgLegalEntity;
 import com.hris.org.mapper.OrgLegalEntityMapper;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,19 @@ public class LegalEntityService {
     /** 查询全部法人主体（组织主数据的法定实体层，组织树/雇佣关系均挂在法人主体下）。 */
     public List<CatalogResponse> list() {
         return mapper.selectList(null).stream().map(this::toResponse).toList();
+    }
+
+    /**
+     * 法人简报批量查询（CMP-F-017 内部契约：按 id 集合返回 {id, name}，供薪酬域报表名称富化）。
+     * 不存在的 id 静默跳过。
+     */
+    public List<ReportDtos.LegalEntityBriefItem> brief(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return mapper.selectByIds(ids).stream()
+                .map(e -> new ReportDtos.LegalEntityBriefItem(e.getId(), e.getName()))
+                .toList();
     }
 
     /** 新建法人主体：USCC 转大写，默认币种 CNY、状态有效。 */

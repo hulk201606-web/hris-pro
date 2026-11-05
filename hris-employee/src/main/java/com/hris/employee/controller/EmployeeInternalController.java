@@ -7,6 +7,8 @@ import com.hris.employee.dto.BlacklistCheckDtos.BlacklistCheckResponse;
 import com.hris.employee.dto.EmployeeDtos.ProbationReminderItem;
 import com.hris.employee.dto.PreCreateRequest;
 import com.hris.employee.dto.PreHireLinkResponse;
+import com.hris.employee.dto.ReportDtos.HeadcountStructureBriefRequest;
+import com.hris.employee.dto.ReportDtos.HeadcountStructureBriefRow;
 import com.hris.employee.service.BlacklistCheckService;
 import com.hris.employee.service.EmployeeService;
 import com.hris.employee.service.LifecycleCaseService;
@@ -40,13 +42,15 @@ public class EmployeeInternalController {
     private final ProbationReminderService probationReminderService;
     private final com.hris.employee.service.EmploymentService employmentService;
     private final BlacklistCheckService blacklistCheckService;
+    private final com.hris.employee.service.HeadcountStructureBriefService headcountStructureBriefService;
 
     public EmployeeInternalController(EmployeeService employeeService, PreHireService preHireService,
                                       LifecycleCaseService lifecycleCaseService,
                                       PendingTransactionService pendingTransactionService,
                                       ProbationReminderService probationReminderService,
                                       com.hris.employee.service.EmploymentService employmentService,
-                                      BlacklistCheckService blacklistCheckService) {
+                                      BlacklistCheckService blacklistCheckService,
+                                      com.hris.employee.service.HeadcountStructureBriefService headcountStructureBriefService) {
         this.employeeService = employeeService;
         this.preHireService = preHireService;
         this.lifecycleCaseService = lifecycleCaseService;
@@ -54,6 +58,7 @@ public class EmployeeInternalController {
         this.probationReminderService = probationReminderService;
         this.employmentService = employmentService;
         this.blacklistCheckService = blacklistCheckService;
+        this.headcountStructureBriefService = headcountStructureBriefService;
     }
 
     /** 员工档案简报（内部端点）：供 org 汇报线解析等跨域调用，返回姓名/工号/状态/部门/岗位/直属上级。 */
@@ -117,6 +122,16 @@ public class EmployeeInternalController {
     @GetMapping("/count-active-by-dept")
     public R<Long> countActiveByDept(@RequestParam Long deptId) {
         return R.ok(employmentService.countActiveByDept(deptId));
+    }
+
+    /**
+     * 人力结构简报批量落库（内部端点，P1 人力结构分析报表 / CMP-F-017 法人映射数据源）：
+     * 返回员工×雇佣关系组织维度简报行（法人/部门/雇佣类型/在职状态码），无敏感字段。
+     */
+    @PostMapping("/headcount-structure-brief")
+    public R<List<HeadcountStructureBriefRow>> headcountStructureBrief(
+            @RequestBody HeadcountStructureBriefRequest req) {
+        return R.ok(headcountStructureBriefService.rows(req == null ? null : req.asOf()));
     }
 
     /**

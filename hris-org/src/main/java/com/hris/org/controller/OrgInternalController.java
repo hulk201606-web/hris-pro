@@ -6,8 +6,11 @@ import com.hris.org.dto.ApprovalDtos.ApprovalCallbackRequest;
 import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.org.dto.HcCheckResponse;
 import com.hris.org.dto.OccupancyRequest;
+import com.hris.org.dto.ReportDtos.LegalEntityBriefItem;
+import com.hris.org.dto.ReportDtos.LegalEntityBriefRequest;
 import com.hris.org.service.DeptService;
 import com.hris.org.service.HeadcountService;
+import com.hris.org.service.LegalEntityService;
 import com.hris.org.service.ReportLineService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,12 +33,14 @@ public class OrgInternalController {
     private final HeadcountService headcountService;
     private final ReportLineService reportLineService;
     private final DeptService deptService;
+    private final LegalEntityService legalEntityService;
 
     public OrgInternalController(HeadcountService headcountService, ReportLineService reportLineService,
-                                 DeptService deptService) {
+                                 DeptService deptService, LegalEntityService legalEntityService) {
         this.headcountService = headcountService;
         this.reportLineService = reportLineService;
         this.deptService = deptService;
+        this.legalEntityService = legalEntityService;
     }
 
     /**
@@ -63,6 +68,15 @@ public class OrgInternalController {
     @GetMapping("/reportline/{empId}")
     public R<List<Long>> reportline(@PathVariable Long empId) {
         return R.ok(reportLineService.resolve(empId));
+    }
+
+    /**
+     * 法人简报批量查询（内部端点，CMP-F-017 多法人成本合并报表名称富化）：
+     * 按 id 集合返回 {id, name}，不存在的 id 静默跳过。
+     */
+    @PostMapping("/legal-entities/brief")
+    public R<List<LegalEntityBriefItem>> legalEntityBrief(@Valid @RequestBody LegalEntityBriefRequest req) {
+        return R.ok(legalEntityService.brief(req.ids()));
     }
 
     /**
