@@ -51,6 +51,7 @@ public class LeaveQuotaService {
     /** 额度发放（正增负减），落流水。 */
     @Transactional(rollbackFor = Exception.class)
     public LeaveQuotaResponse grant(QuotaGrantRequest req) {
+        requireYearPeriod(req.period());
         LeaveType type = leaveTypeService.require(req.leaveTypeId());
         LeaveQuota quota = locate(req.empId(), req.leaveTypeId(), req.period());
         boolean isNew = quota == null;
@@ -78,6 +79,8 @@ public class LeaveQuotaService {
      */
     @Transactional(rollbackFor = Exception.class)
     public LeaveQuotaResponse transfer(QuotaTransferRequest req) {
+        requireYearPeriod(req.fromPeriod());
+        requireYearPeriod(req.toPeriod());
         LeaveType type = leaveTypeService.require(req.leaveTypeId());
         BigDecimal amount = TimeAmountUtil.amount(req.amount());
         if (amount.signum() <= 0) {
@@ -198,6 +201,15 @@ public class LeaveQuotaService {
         quota.setUsedQuota(used.signum() < 0 ? BigDecimal.ZERO : used);
         save(quota, false);
         writeLedger(empId, leaveTypeId, TimeAmountUtil.amount(days), "LEAVE_REFUND:" + bizKey);
+    }
+
+    /** 额度行按年度口径统一（docs/19 §9-2）：请假侧按 String.valueOf(year) 取额度，授予/结转的 period 必须是 4 位年份。 */
+    private static final java.util.regex.Pattern YEAR_PERIOD = java.util.regex.Pattern.compile("^\\d{4}$");
+
+    private void requireYearPeriod(String period) {
+        if (period == null || !YEAR_PERIOD.matcher(period.trim()).matches()) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "额度按年度授予，period 须为 4 位年份");
+        }
     }
 
     /** 定位额度行，不存在返回 null。 */
