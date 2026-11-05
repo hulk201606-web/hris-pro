@@ -18,9 +18,18 @@ import java.util.List;
 
 /**
  * PayrollRun 服务（CRUD）。
+ *
+ * <p>状态机守卫（§8.5-3）：批次进入 LOCK/PAID 后即为锁账终态，禁止 update/delete，
+ * 「锁后仅调整通道」由此强制。状态取值见 cmp_payroll_run.status：
+ * INIT/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK。</p>
  */
 @Service
 public class PayrollRunService {
+
+    /** 状态：已锁定（锁账终态） */
+    public static final String STATUS_LOCK = "LOCK";
+    /** 状态：已支付（锁账终态） */
+    public static final String STATUS_PAID = "PAID";
 
     private final PayrollRunMapper mapper;
 
@@ -64,6 +73,8 @@ public class PayrollRunService {
         if (e == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "PayrollRun 不存在");
         }
+        // 当前已处于 LOCK/PAID：任何字段更新（含把状态改走）都被拒绝
+        ensureMutable(e);
         e.setPeriodCode(req.periodCode());
         e.setPayGroupId(req.payGroupId());
         e.setStatus(req.status());
@@ -74,12 +85,25 @@ public class PayrollRunService {
         }
         return toResponse(e);
     }
-    /** 按主键删除记录，不存在抛 NOT_FOUND。 */
+    /** 按主键删除记录，不存在抛 NOT_FOUND；LOCK/PAID 终态拒绝删除。 */
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        PayrollRun e = mapper.selectById(id);
+        if (e == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "PayrollRun 不存在");
+        }
+        ensureMutable(e);
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "PayrollRun 不存在");
+        }
+    }
+
+    /** 锁账守卫：批次处于 LOCK/PAID 时禁止修改与删除，差异走薪酬调整通道。 */
+    private void ensureMutable(PayrollRun e) {
+        if (STATUS_LOCK.equals(e.getStatus()) || STATUS_PAID.equals(e.getStatus())) {
+            throw new BizException(ErrorCode.CMP_ERROR,
+                    "算薪批次已锁定或已支付（" + e.getStatus() + "），禁止修改或删除，差异请走调整通道");
         }
     }
 

@@ -18,9 +18,19 @@ import java.util.List;
 
 /**
  * Cycle 服务（CRUD）。
+ *
+ * <p>状态机守卫（§8.5-4）：周期状态 DRAFT/ACTIVE/CALIBRATING/PUBLISHED/CLOSED。
+ * PUBLISHED/CLOSED 为锁定态——PUBLISHED 仅允许 PUBLISHED→CLOSED 这一个收尾迁移，
+ * CLOSED 完全封板；其余一切修改拒绝。评价数据（目标/任务/评价）的周期锁
+ * 由各子对象服务按 cycleId 查状态强制。</p>
  */
 @Service
 public class CycleService {
+
+    /** 状态：已发布（锁定，仅允许迁往 CLOSED） */
+    public static final String STATUS_PUBLISHED = "PUBLISHED";
+    /** 状态：已关闭（完全封板） */
+    public static final String STATUS_CLOSED = "CLOSED";
 
     private final CycleMapper mapper;
 
@@ -64,6 +74,7 @@ public class CycleService {
         if (e == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "Cycle 不存在");
         }
+        ensureEditable(e, req.status());
         e.setPlanId(req.planId());
         e.setPeriodCode(req.periodCode());
         e.setStartDate(req.startDate());
@@ -80,6 +91,23 @@ public class CycleService {
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "Cycle 不存在");
+        }
+    }
+
+    /**
+     * 周期锁守卫：PUBLISHED 仅允许 status 请求为 CLOSED 的收尾迁移；
+     * CLOSED 拒绝一切修改；其余状态自由编辑。
+     */
+    private void ensureEditable(Cycle e, String targetStatus) {
+        boolean published = STATUS_PUBLISHED.equals(e.getStatus());
+        boolean closed = STATUS_CLOSED.equals(e.getStatus());
+        if (published && STATUS_CLOSED.equals(targetStatus == null ? "" : targetStatus.trim())) {
+            return;
+        }
+        if (published || closed) {
+            throw new BizException(ErrorCode.PRF_ERROR, published
+                    ? "考核周期已发布，仅允许执行「发布→关闭」的收尾迁移"
+                    : "考核周期已关闭，禁止再修改");
         }
     }
 

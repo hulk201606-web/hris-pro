@@ -6,7 +6,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hris.performance.dto.EvalTaskDtos.EvalTaskCreateRequest;
 import com.hris.performance.dto.EvalTaskDtos.EvalTaskResponse;
 import com.hris.performance.dto.EvalTaskDtos.EvalTaskUpdateRequest;
+import com.hris.performance.entity.Cycle;
 import com.hris.performance.entity.EvalTask;
+import com.hris.performance.mapper.CycleMapper;
 import com.hris.performance.mapper.EvalTaskMapper;
 import com.hris.common.dto.PageResult;
 import com.hris.common.exception.BizException;
@@ -18,14 +20,24 @@ import java.util.List;
 
 /**
  * EvalTask 服务（CRUD）。
+ *
+ * <p>周期锁守卫（§8.5-4）：所属考核周期 status 为 PUBLISHED/CLOSED 时，
+ * 评价任务（create/update/delete）一律拒绝，防止结果发布后仍可篡改评价数据。</p>
  */
 @Service
 public class EvalTaskService {
 
-    private final EvalTaskMapper mapper;
+    /** 周期锁定态：已发布 */
+    private static final String CYCLE_PUBLISHED = "PUBLISHED";
+    /** 周期锁定态：已关闭 */
+    private static final String CYCLE_CLOSED = "CLOSED";
 
-    public EvalTaskService(EvalTaskMapper mapper) {
+    private final EvalTaskMapper mapper;
+    private final CycleMapper cycleMapper;
+
+    public EvalTaskService(EvalTaskMapper mapper, CycleMapper cycleMapper) {
         this.mapper = mapper;
+        this.cycleMapper = cycleMapper;
     }
 
     /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
@@ -47,6 +59,7 @@ public class EvalTaskService {
 
     @Transactional(rollbackFor = Exception.class)
     public EvalTaskResponse create(EvalTaskCreateRequest req) {
+        ensureCycleWritable(req.cycleId());
         EvalTask e = new EvalTask();
         e.setCycleId(req.cycleId());
         e.setEmpId(req.empId());
@@ -63,6 +76,11 @@ public class EvalTaskService {
         if (e == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "EvalTask 不存在");
         }
+        // 原周期与新周期都要锁定检查（防止把任务挂到已锁周期）
+        ensureCycleWritable(e.getCycleId());
+        if (req.cycleId() != null) {
+            ensureCycleWritable(req.cycleId());
+        }
         e.setCycleId(req.cycleId());
         e.setEmpId(req.empId());
         e.setEvaluatorRole(req.evaluatorRole());
@@ -76,8 +94,29 @@ public class EvalTaskService {
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        EvalTask e = mapper.selectById(id);
+        if (e == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "EvalTask 不存在");
+        }
+        ensureCycleWritable(e.getCycleId());
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "EvalTask 不存在");
+        }
+    }
+
+    /** 周期锁守卫：任务所属周期处于 PUBLISHED/CLOSED 时拒绝变更（租户条件由插件注入）。 */
+    private void ensureCycleWritable(Long cycleId) {
+        if (cycleId == null) {
+            return;
+        }
+        Cycle cycle = cycleMapper.selectById(cycleId);
+        if (cycle == null) {
+            return;
+        }
+        String status = cycle.getStatus();
+        if (CYCLE_PUBLISHED.equals(status) || CYCLE_CLOSED.equals(status)) {
+            throw new BizException(ErrorCode.PRF_ERROR,
+                    "考核周期已发布或已关闭，禁止变更评价任务");
         }
     }
 
