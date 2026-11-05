@@ -91,6 +91,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- 用 JDK HttpClient sender 替代被排除的 okhttp sender：
+             保持 OTLP 导出能力且不引入 okhttp 5.x/okio 新版（Milvus SDK 冲突源）。 -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-sender-jdk</artifactId>
+        </dependency>
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
