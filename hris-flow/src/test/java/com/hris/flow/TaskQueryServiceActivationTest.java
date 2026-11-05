@@ -50,13 +50,15 @@ class TaskQueryServiceActivationTest {
     FlowModelMapper flowModelMapper;
     @Mock
     TimeoutCfgMapper timeoutCfgMapper;
+    @Mock
+    com.hris.flow.service.CcService ccService;
 
     private TaskQueryService service;
 
     @BeforeEach
     void setUp() {
         service = new TaskQueryService(taskService, historyService, bizRelationMapper,
-                flowModelMapper, timeoutCfgMapper);
+                flowModelMapper, timeoutCfgMapper, ccService);
         TraceContext.setTenantId(100001L);
         TraceContext.setUserId(5L);
     }

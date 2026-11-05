@@ -7,7 +7,7 @@ public enum TaskActionType {
 
     /** 同意 */
     APPROVE,
-    /** 驳回（终止回发起人，MVP 简化策略） */
+    /** 驳回（缺省=退回发起人重提；terminate=true 时=终止作废） */
     REJECT,
     /** 转办（任务所有权转移，留痕） */
     TRANSFER,
@@ -18,7 +18,9 @@ public enum TaskActionType {
     /** 加签（MVP：追加候选人并行加签） */
     ADD_SIGN,
     /** 撤回（发起人撤回，仅无已处理节点时允许） */
-    WITHDRAW;
+    WITHDRAW,
+    /** 超时升级（内部端点：超期任务改派升级目标，docs/19 §10.5-C FLW-F-010） */
+    ESCALATE;
 
     public static TaskActionType from(String value) {
         for (TaskActionType t : values()) {

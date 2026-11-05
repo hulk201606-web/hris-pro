@@ -10,13 +10,17 @@ import com.hris.flow.enums.InstanceStatus;
 import com.hris.flow.enums.TaskActionType;
 import com.hris.flow.mapper.TaskActionMapper;
 import com.hris.flow.util.JsonUtil;
+import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
+import org.flowable.engine.history.HistoricActivityInstance;
+import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,6 +32,7 @@ public class TaskActionService {
 
     private final TaskService taskService;
     private final RuntimeService runtimeService;
+    private final HistoryService historyService;
     private final TaskActionMapper taskActionMapper;
     private final BizRelationService bizRelationService;
     private final EventOutboxService eventOutboxService;
@@ -35,11 +40,12 @@ public class TaskActionService {
     private final ApprovalCallbackDispatcher callbackDispatcher;
 
     public TaskActionService(TaskService taskService, RuntimeService runtimeService,
-                             TaskActionMapper taskActionMapper, BizRelationService bizRelationService,
-                             EventOutboxService eventOutboxService, InstanceService instanceService,
-                             ApprovalCallbackDispatcher callbackDispatcher) {
+                             HistoryService historyService, TaskActionMapper taskActionMapper,
+                             BizRelationService bizRelationService, EventOutboxService eventOutboxService,
+                             InstanceService instanceService, ApprovalCallbackDispatcher callbackDispatcher) {
         this.taskService = taskService;
         this.runtimeService = runtimeService;
+        this.historyService = historyService;
         this.taskActionMapper = taskActionMapper;
         this.bizRelationService = bizRelationService;
         this.eventOutboxService = eventOutboxService;
@@ -65,23 +71,117 @@ public class TaskActionService {
         }
     }
 
-    /** 驳回（MVP：终止回发起人策略，docs/04 §5 三策略之一），以 approved=false 回调业务域。 */
+    /**
+     * 驳回（FLW-F-007 一期深化，docs/03-07 §FLW-F-007）：
+     * <ul>
+     *   <li>缺省（terminate 为空/false）：退回发起人重提——流程活动移回起始用户任务并指派给发起人，
+     *       实例保持 RUNNING、业务单据保持 PROCESSING；发起人在退回任务上 approve 即续跑。
+     *       退回目标取实例历史中最早执行的 userTask（兼容 start 后经网关路由的模板，如 ATT_LEAVE）。</li>
+     *   <li>terminate=true：终止语义（等价作废），删除实例并按 REJECTED 终态回调业务域。</li>
+     * </ul>
+     */
     @Transactional(rollbackFor = Exception.class)
     public void reject(String taskId, TaskActionRequest req) {
+        if (req != null && Boolean.TRUE.equals(req.terminate())) {
+            terminate(taskId, req);
+        } else {
+            returnToInitiator(taskId, req);
+        }
+    }
+
+    /** 终止：删除实例（等价作废），以 approved=false / REJECTED 回调业务域。 */
+    private void terminate(String taskId, TaskActionRequest req) {
         Task task = requireTaskAndCheck(taskId);
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
         record(taskId, TaskActionType.REJECT, operator, req, null);
         runtimeService.deleteProcessInstance(task.getProcessInstanceId(),
-                "REJECTED:" + (req == null || req.comment() == null ? "" : req.comment()));
+                "REJECTED:TERMINATED:" + (req == null || req.comment() == null ? "" : req.comment()));
         BizRelation rel = terminateRelation(task.getProcessInstanceId());
         eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, tenantId,
                 task.getProcessInstanceId(),
-                Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(), "outcome", "REJECTED"));
+                Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(),
+                        "outcome", "REJECTED", "mode", "TERMINATE"));
         if (rel != null) {
             callbackDispatcher.dispatchOnTerminal(rel.getBizType(), rel.getBizKey(), rel.getTenantId(),
                     false, "REJECTED", req == null ? null : req.comment(), task.getProcessInstanceId());
         }
+    }
+
+    /** 退回发起人重提：活动移回起始用户任务，任务指派发起人，实例与业务单据均保持进行中。 */
+    private void returnToInitiator(String taskId, TaskActionRequest req) {
+        Task task = requireTaskAndCheck(taskId);
+        Long operator = TraceContext.getUserId();
+        String procInstId = task.getProcessInstanceId();
+        record(taskId, TaskActionType.REJECT, operator, withNote(req, "驳回退回发起人重提"), null);
+        String initiator = requireInitiator(procInstId);
+        // 当前活动 = 被驳回任务所在节点（taskDefinitionKey 即活动 ID）
+        String current = task.getTaskDefinitionKey();
+        String firstUserTask = firstUserTaskActivityId(procInstId);
+        // 当前活动即起始任务时无需移位（如单节点模板），仅改派发起人
+        if (current == null || current.isBlank()) {
+            current = currentActivityId(procInstId);
+        }
+        if (!firstUserTask.equals(current)) {
+            runtimeService.createChangeActivityStateBuilder()
+                    .processInstanceId(procInstId)
+                    .moveActivityIdTo(current, firstUserTask)
+                    .changeState();
+        }
+        for (Task t : taskService.createTaskQuery()
+                .processInstanceId(procInstId).taskDefinitionKey(firstUserTask).list()) {
+            taskService.setAssignee(t.getId(), initiator);
+        }
+    }
+
+    /** 留痕备注：在审批意见前注明动作语义。 */
+    private TaskActionRequest withNote(TaskActionRequest req, String note) {
+        String origin = req == null || req.comment() == null || req.comment().isBlank()
+                ? null : req.comment();
+        String comment = origin == null ? note : note + "：" + origin;
+        return new TaskActionRequest(comment,
+                req == null ? null : req.attachments(),
+                req == null ? null : req.targetUserId(),
+                req == null ? null : req.terminate(),
+                req == null ? null : req.formValues());
+    }
+
+    /** 当前活动节点 ID（运行中实例）。 */
+    private String currentActivityId(String procInstId) {
+        ProcessInstance pi = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(procInstId).singleResult();
+        if (pi == null || pi.getActivityId() == null) {
+            throw new BizException(ErrorCode.FLOW_STATE_CONFLICT, "流程实例不在运行中，无法退回");
+        }
+        return pi.getActivityId();
+    }
+
+    /** 起始用户任务：实例历史中最早执行的 userTask（兼容 start 后经网关/分支路由的模板）。 */
+    private String firstUserTaskActivityId(String procInstId) {
+        List<HistoricActivityInstance> acts = historyService.createHistoricActivityInstanceQuery()
+                .processInstanceId(procInstId)
+                .activityType("userTask")
+                .orderByHistoricActivityInstanceStartTime().asc()
+                .listPage(0, 1);
+        if (acts == null || acts.isEmpty()) {
+            throw new BizException(ErrorCode.FLOW_STATE_CONFLICT, "流程尚无审批节点，无法退回");
+        }
+        return acts.get(0).getActivityId();
+    }
+
+    /** 发起人：优先 Flowable startedBy（发起时 Authentication 记录），兜底 initiator 变量。 */
+    private String requireInitiator(String procInstId) {
+        ProcessInstance pi = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(procInstId).singleResult();
+        String startedBy = pi == null ? null : pi.getStartUserId();
+        if (startedBy == null || startedBy.isBlank()) {
+            Object v = runtimeService.getVariable(procInstId, "initiator");
+            startedBy = v == null ? null : String.valueOf(v);
+        }
+        if (startedBy == null || startedBy.isBlank()) {
+            throw new BizException(ErrorCode.FLOW_STATE_CONFLICT, "无法确定流程发起人，退回失败");
+        }
+        return startedBy;
     }
 
     /** 转办：任务所有权转移，原审批人留痕（docs/04 §5）。 */
@@ -179,6 +279,7 @@ public class TaskActionService {
         a.setOperator(operator == null ? 0L : operator);
         a.setComment(req == null ? null : req.comment());
         a.setAttachments(req == null || req.attachments() == null ? null : JsonUtil.toJson(req.attachments()));
+        a.setFormValues(req == null || req.formValues() == null ? null : JsonUtil.toJson(req.formValues()));
         a.setDelegateFrom(delegateFrom);
         a.setTs(LocalDateTime.now());
         taskActionMapper.insert(a);

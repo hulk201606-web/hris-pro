@@ -20,8 +20,6 @@ import org.flowable.task.api.Task;
 import org.flowable.task.api.TaskQuery;
 import org.flowable.task.api.history.HistoricTaskInstance;
 import org.flowable.task.api.history.HistoricTaskInstanceQuery;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -39,22 +37,22 @@ import java.util.stream.Collectors;
 @Service
 public class TaskQueryService {
 
-    private static final Logger log = LoggerFactory.getLogger(TaskQueryService.class);
-
     private final TaskService taskService;
     private final HistoryService historyService;
     private final BizRelationMapper bizRelationMapper;
     private final FlowModelMapper flowModelMapper;
     private final TimeoutCfgMapper timeoutCfgMapper;
+    private final CcService ccService;
 
     public TaskQueryService(TaskService taskService, HistoryService historyService,
                             BizRelationMapper bizRelationMapper, FlowModelMapper flowModelMapper,
-                            TimeoutCfgMapper timeoutCfgMapper) {
+                            TimeoutCfgMapper timeoutCfgMapper, CcService ccService) {
         this.taskService = taskService;
         this.historyService = historyService;
         this.bizRelationMapper = bizRelationMapper;
         this.flowModelMapper = flowModelMapper;
         this.timeoutCfgMapper = timeoutCfgMapper;
+        this.ccService = ccService;
     }
 
     /** 我的待办（候选人或已指派）。 */
@@ -111,14 +109,11 @@ public class TaskQueryService {
     }
 
     /**
-     * 抄送我的。Flowable 原生无抄送概念，MVP 返回空页；抄送需依赖 platform 通知（FLW-F-006）
-     * 或扩展 flow_ext 抄送表，属后续增量（见交付回传风险点）。
+     * 抄送我的（FLW-F-011 一期深化）：flow_ext_cc 真实数据分页（当前用户=emp_id），
+     * 字段对齐 TaskView；委托 {@link CcService}。
      */
     public PageResult<TaskView> cc(long page, long size) {
-        requireTenant();
-        requireUser();
-        log.debug("cc 抄送查询 MVP 未实现，返回空页");
-        return new PageResult<>(List.of(), page, size, 0L);
+        return ccService.pageMine(page, size);
     }
 
     /** 我发起的。 */

@@ -2,6 +2,7 @@ package com.hris.flow.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -22,5 +23,7 @@ public record StartInstanceRequest(
         /** 发起人用户 ID，缺省取当前登录用户 */
         Long initiator,
         /** 指定审批人（优先级最高，docs/04 §4 优先级链首位） */
-        Long assignee) {
+        Long assignee,
+        /** 抄送人用户 ID 列表（FLW-F-011，可选：实例启动时按发起节点写入抄送表） */
+        List<Long> ccEmpIds) {
 }

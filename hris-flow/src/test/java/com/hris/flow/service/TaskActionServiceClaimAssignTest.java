@@ -7,6 +7,7 @@ import com.hris.flow.dto.TaskActionRequest;
 import com.hris.flow.entity.TaskAction;
 import com.hris.flow.enums.TaskActionType;
 import com.hris.flow.mapper.TaskActionMapper;
+import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
@@ -57,9 +58,12 @@ class TaskActionServiceClaimAssignTest {
 
     private TaskActionService service;
 
+    @Mock
+    HistoryService historyService;
+
     @BeforeEach
     void setUp() {
-        service = new TaskActionService(taskService, runtimeService, taskActionMapper,
+        service = new TaskActionService(taskService, runtimeService, historyService, taskActionMapper,
                 bizRelationService, eventOutboxService, instanceService, callbackDispatcher);
         TraceContext.setTenantId(100001L);
         TraceContext.setUserId(5L);
@@ -83,7 +87,7 @@ class TaskActionServiceClaimAssignTest {
     @DisplayName("认领无主任务（assignee 空串）→ changed=true，assignee 置为操作者并留痕 CLAIM")
     void claimShouldSucceedOnUnassigned() {
         stubTask("");
-        TaskActionRequest req = new TaskActionRequest("我来处理", null, null);
+        TaskActionRequest req = new TaskActionRequest("我来处理", null, null, null);
 
         boolean changed = service.claim(TASK_ID, req);
 
@@ -122,7 +126,7 @@ class TaskActionServiceClaimAssignTest {
     @DisplayName("assign 管理动作：操作者无需是 assignee，强制指派给目标用户并留痕 ASSIGN")
     void assignShouldForceAssignToTarget() {
         stubTask("9");
-        TaskActionRequest req = new TaskActionRequest("主管缺席，强制改派", null, 7L);
+        TaskActionRequest req = new TaskActionRequest("主管缺席，强制改派", null, 7L, null);
 
         service.assign(TASK_ID, req);
 

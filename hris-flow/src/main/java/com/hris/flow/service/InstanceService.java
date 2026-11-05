@@ -13,9 +13,11 @@ import com.hris.flow.mapper.BizRelationMapper;
 import org.flowable.common.engine.impl.identity.Authentication;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricActivityInstance;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.task.api.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -45,11 +47,14 @@ public class InstanceService {
     private final AssigneeResolver assigneeResolver;
     private final EventOutboxService eventOutboxService;
     private final ApprovalCallbackDispatcher callbackDispatcher;
+    private final CcService ccService;
+    private final TaskService taskService;
 
     public InstanceService(RuntimeService runtimeService, HistoryService historyService,
                            BizRelationService bizRelationService, BizRelationMapper bizRelationMapper,
                            AssigneeResolver assigneeResolver, EventOutboxService eventOutboxService,
-                           ApprovalCallbackDispatcher callbackDispatcher) {
+                           ApprovalCallbackDispatcher callbackDispatcher, CcService ccService,
+                           TaskService taskService) {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.bizRelationService = bizRelationService;
@@ -57,6 +62,8 @@ public class InstanceService {
         this.assigneeResolver = assigneeResolver;
         this.eventOutboxService = eventOutboxService;
         this.callbackDispatcher = callbackDispatcher;
+        this.ccService = ccService;
+        this.taskService = taskService;
     }
 
     /**
@@ -114,7 +121,17 @@ public class InstanceService {
         // 5. 事件出站（事务消息兜底）
         eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_STARTED, tenantId, req.bizKey(),
                 Map.of("procInstId", pi.getId(), "bizType", req.bizType(), "bizKey", req.bizKey()));
+        // 6. 抄送写入（FLW-F-011）：按发起节点（当前活动任务）记录，重复忽略
+        if (req.ccEmpIds() != null && !req.ccEmpIds().isEmpty()) {
+            ccService.recordOnStart(pi.getId(), firstTaskKey(pi.getId()), req.ccEmpIds());
+        }
         return new StartInstanceResponse(pi.getId(), req.bizType(), req.bizKey(), InstanceStatus.RUNNING.name());
+    }
+
+    /** 发起节点 Key：实例当前活动任务的节点 Key（无任务时兜底 start）。 */
+    private String firstTaskKey(String procInstId) {
+        List<Task> tasks = taskService.createTaskQuery().processInstanceId(procInstId).list();
+        return tasks.isEmpty() ? "start" : tasks.get(0).getTaskDefinitionKey();
     }
 
     /**

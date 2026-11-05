@@ -5,6 +5,7 @@ import com.hris.flow.dto.StartInstanceRequest;
 import com.hris.flow.dto.StartInstanceResponse;
 import com.hris.flow.service.EventOutboxService;
 import com.hris.flow.service.InstanceService;
+import com.hris.flow.service.TaskMaintenanceService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,10 +27,13 @@ public class FlowInternalController {
 
     private final InstanceService instanceService;
     private final EventOutboxService eventOutboxService;
+    private final TaskMaintenanceService taskMaintenanceService;
 
-    public FlowInternalController(InstanceService instanceService, EventOutboxService eventOutboxService) {
+    public FlowInternalController(InstanceService instanceService, EventOutboxService eventOutboxService,
+                                  TaskMaintenanceService taskMaintenanceService) {
         this.instanceService = instanceService;
         this.eventOutboxService = eventOutboxService;
+        this.taskMaintenanceService = taskMaintenanceService;
     }
 
     @PostMapping("/instances")
@@ -41,7 +45,8 @@ public class FlowInternalController {
                 map(body.get("payload")),
                 map(body.get("variables")),
                 longOrNull(body.get("initiator")),
-                longOrNull(body.get("assignee")));
+                longOrNull(body.get("assignee")),
+                longList(body.get("ccEmpIds")));
         return R.ok(instanceService.start(req));
     }
 
@@ -52,6 +57,29 @@ public class FlowInternalController {
     @PostMapping("/outbox/dispatch")
     public R<Map<String, Integer>> dispatchOutbox(@RequestParam(required = false, defaultValue = "100") int limit) {
         return R.ok(eventOutboxService.dispatchPending(limit));
+    }
+
+    /**
+     * 超时升级（FLW-F-010，docs/19 §10.5-C）：扫描本租户运行中任务，按 flow_ext_timeout_cfg
+     * 的 escalateAfterH/escalate_to 执行升级改派并留痕 ESCALATE；幂等（已升级任务按
+     * task_action 判断不重复）。供 platform 定时调度触发。
+     *
+     * @return scanned/escalated/skippedIdempotent 计数
+     */
+    @PostMapping("/tasks/escalate-overdue")
+    public R<Map<String, Integer>> escalateOverdue() {
+        return R.ok(taskMaintenanceService.escalateOverdue());
+    }
+
+    /**
+     * 待办随负责人重算（docs/19 §10.5-A2）：body {oldEmpId, newEmpId}——本租户所有运行中
+     * 实例里 assignee=oldEmpId 的任务改为 newEmpId 并留痕 ASSIGN。幂等：重复调用结果一致，
+     * 无 oldEmpId 任务时 reassigned=0。org 负责人变更时由 org 侧调用。
+     */
+    @PostMapping("/tasks/reassign-manager")
+    public R<Map<String, Integer>> reassignManager(@RequestBody Map<String, Object> body) {
+        return R.ok(taskMaintenanceService.reassignManager(
+                longOrNull(body.get("oldEmpId")), longOrNull(body.get("newEmpId"))));
     }
 
     @SuppressWarnings("unchecked")
@@ -65,5 +93,15 @@ public class FlowInternalController {
 
     private Long longOrNull(Object v) {
         return v instanceof Number n ? n.longValue() : null;
+    }
+
+    private java.util.List<Long> longList(Object v) {
+        if (!(v instanceof java.util.List<?> list)) {
+            return null;
+        }
+        return list.stream()
+                .filter(x -> x instanceof Number)
+                .map(x -> ((Number) x).longValue())
+                .toList();
     }
 }

@@ -28,6 +28,8 @@ public class TaskAction extends BaseEntity {
 
     /** 附件（JSON 字符串） */
     private String attachments;
+    /** 动态表单值 JSON（键=字段名，docs/19 §10.5-C11） */
+    private String formValues;
 
     /** 委托来源用户 ID（加签/转办链） */
     private Long delegateFrom;
@@ -69,6 +71,14 @@ public class TaskAction extends BaseEntity {
 
     public String getAttachments() {
         return attachments;
+    }
+
+    public String getFormValues() {
+        return formValues;
+    }
+
+    public void setFormValues(String formValues) {
+        this.formValues = formValues;
     }
 
     public void setAttachments(String attachments) {
