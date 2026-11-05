@@ -76,4 +76,31 @@ public class Offer extends BaseEntity {
     public void setProcInstId(String procInstId) {
         this.procInstId = procInstId;
     }
+    private String receiptType;  // 候选人回执类型 ACCEPTED/DECLINED(RCS-F-018)
+
+    public String getReceiptType() {
+        return receiptType;
+    }
+
+    public void setReceiptType(String receiptType) {
+        this.receiptType = receiptType;
+    }
+    private String receiptNote;  // 回执备注
+
+    public String getReceiptNote() {
+        return receiptNote;
+    }
+
+    public void setReceiptNote(String receiptNote) {
+        this.receiptNote = receiptNote;
+    }
+    private java.time.LocalDateTime receiptAt;  // 回执登记时间(UTC)
+
+    public java.time.LocalDateTime getReceiptAt() {
+        return receiptAt;
+    }
+
+    public void setReceiptAt(java.time.LocalDateTime receiptAt) {
+        this.receiptAt = receiptAt;
+    }
 }

@@ -38,4 +38,13 @@ public class Resume extends BaseEntity {
     public void setParseResult(String parseResult) {
         this.parseResult = parseResult;
     }
+    private java.time.LocalDate retentionUntil;  // 简历保留截止日(RCS-F-022)
+
+    public java.time.LocalDate getRetentionUntil() {
+        return retentionUntil;
+    }
+
+    public void setRetentionUntil(java.time.LocalDate retentionUntil) {
+        this.retentionUntil = retentionUntil;
+    }
 }

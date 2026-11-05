@@ -56,4 +56,22 @@ public class Application extends BaseEntity {
     public void setStatus(String status) {
         this.status = status;
     }
+    private String reason;  // 淘汰原因 RCS-F-012
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
+    private String reasonNote;  // 原因补充(OTHER 必填)
+
+    public String getReasonNote() {
+        return reasonNote;
+    }
+
+    public void setReasonNote(String reasonNote) {
+        this.reasonNote = reasonNote;
+    }
 }

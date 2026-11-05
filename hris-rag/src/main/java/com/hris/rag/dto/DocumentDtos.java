@@ -2,6 +2,7 @@ package com.hris.rag.dto;
 
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Document DTO（由 DDL 自动生成）。
@@ -19,7 +20,7 @@ public final class DocumentDtos {
     public record DocumentUpdateRequest(Long spaceId, String title, String titleHash, String docType, Long fileId) {
     }
 
-    /** 响应。 */
-    public record DocumentResponse(Long id, Long spaceId, String title, String titleHash, String docType, Long fileId, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    /** 响应；warnings 为敏感词 WARN 级命中词（KBD-F-017），BLOCK 命中直接拒绝不返回。 */
+    public record DocumentResponse(Long id, Long spaceId, String title, String titleHash, String docType, Long fileId, List<String> warnings, LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 }

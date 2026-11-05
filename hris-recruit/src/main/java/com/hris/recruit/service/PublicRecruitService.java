@@ -19,9 +19,11 @@ import com.hris.recruit.mapper.RequisitionMapper;
 import com.hris.recruit.mapper.ResumeMapper;
 import com.hris.recruit.mapper.StageLogMapper;
 import com.hris.common.util.MaskUtil;
+import com.hris.recruit.config.RecruitProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,11 +63,12 @@ public class PublicRecruitService {
     private final StageLogMapper stageLogMapper;
     private final ResumeMapper resumeMapper;
     private final BlacklistGuard blacklistGuard;
+    private final RecruitProperties properties;
 
     public PublicRecruitService(RequisitionMapper requisitionMapper, JobOpeningMapper jobOpeningMapper,
                                 CandidateMapper candidateMapper, ApplicationMapper applicationMapper,
                                 StageLogMapper stageLogMapper, ResumeMapper resumeMapper,
-                                BlacklistGuard blacklistGuard) {
+                                BlacklistGuard blacklistGuard, RecruitProperties properties) {
         this.requisitionMapper = requisitionMapper;
         this.jobOpeningMapper = jobOpeningMapper;
         this.candidateMapper = candidateMapper;
@@ -73,6 +76,7 @@ public class PublicRecruitService {
         this.stageLogMapper = stageLogMapper;
         this.resumeMapper = resumeMapper;
         this.blacklistGuard = blacklistGuard;
+        this.properties = properties;
     }
 
     /** 公开职位列表：OPEN + published=1，title 富化自关联职位（无职位记录为 null）。 */
@@ -166,7 +170,14 @@ public class PublicRecruitService {
         resume.setCandidateId(candidateId);
         resume.setFileId(null);
         resume.setParseResult(toJson(parsed));
+        resume.setRetentionUntil(LocalDate.now().plusDays(retentionDays()));
         resumeMapper.insert(resume);
+    }
+
+    /** 保留天数（RCS-F-022）：配置非法时兜底 180 天。 */
+    private int retentionDays() {
+        int days = properties.getResumeRetentionDays();
+        return days > 0 ? days : 180;
     }
 
     /** 极简 JSON 序列化（值均来自服务端白名单字段，自行转义引号/反斜杠/换行）。 */

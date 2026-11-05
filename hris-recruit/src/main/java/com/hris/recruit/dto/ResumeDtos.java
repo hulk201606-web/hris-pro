@@ -1,6 +1,7 @@
 package com.hris.recruit.dto;
 
 import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -20,6 +21,10 @@ public final class ResumeDtos {
     }
 
     /** 响应。 */
-    public record ResumeResponse(Long id, Long candidateId, Long fileId, String parseResult, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public record ResumeResponse(Long id, Long candidateId, Long fileId, String parseResult, LocalDate retentionUntil, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    }
+
+    /** 过期简历清理响应（RCS-F-022）：cleaned = 本次逻辑删除条数。 */
+    public record ResumeCleanupResponse(int cleaned) {
     }
 }

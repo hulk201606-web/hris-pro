@@ -2,6 +2,7 @@ package com.hris.recruit.controller;
 
 import com.hris.recruit.dto.ApplicationDtos.ApplicationCreateRequest;
 import com.hris.recruit.dto.ApplicationDtos.ApplicationResponse;
+import com.hris.recruit.dto.ApplicationDtos.ApplicationStageRequest;
 import com.hris.recruit.dto.ApplicationDtos.ApplicationUpdateRequest;
 import com.hris.recruit.entity.Application;
 import com.hris.recruit.service.ApplicationService;
@@ -70,5 +71,16 @@ public class ApplicationController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    /**
+     * 初筛流转（RCS-F-012，写权限）：PASS 可推进阶段并打标签；REJECT 必须携带结构化 reason
+     * （OTHER 需 note）。写 rcu_stage_log 留痕。
+     */
+    @RequirePerm("rcu:application:write")
+    @PostMapping("/{id}/stage")
+    public R<ApplicationResponse> advance(@PathVariable Long id,
+                                          @Valid @RequestBody ApplicationStageRequest req) {
+        return R.ok(service.advance(id, req));
     }
 }

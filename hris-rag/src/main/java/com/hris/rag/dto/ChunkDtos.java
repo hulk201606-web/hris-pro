@@ -2,6 +2,7 @@ package com.hris.rag.dto;
 
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Chunk DTO（由 DDL 自动生成）。
@@ -19,7 +20,7 @@ public final class ChunkDtos {
     public record ChunkUpdateRequest(Long docVersionId, Long spaceId, Integer seq, String headingPath, String text, Integer tokenCnt, String milvusId, String esId, String aclTags) {
     }
 
-    /** 响应。 */
-    public record ChunkResponse(Long id, Long docVersionId, Long spaceId, Integer seq, String headingPath, String text, Integer tokenCnt, String milvusId, String esId, String aclTags, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    /** 响应；warnings 为敏感词 WARN 级命中词（KBD-F-017）。 */
+    public record ChunkResponse(Long id, Long docVersionId, Long spaceId, Integer seq, String headingPath, String text, Integer tokenCnt, String milvusId, String esId, String aclTags, List<String> warnings, LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 }

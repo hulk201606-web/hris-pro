@@ -1,6 +1,7 @@
 package com.hris.recruit.controller;
 
 import com.hris.recruit.dto.CandidateDtos.CandidateCreateRequest;
+import com.hris.recruit.dto.CandidateDtos.CandidateDeleteResponse;
 import com.hris.recruit.dto.CandidateDtos.CandidateResponse;
 import com.hris.recruit.dto.CandidateDtos.CandidateUpdateRequest;
 import com.hris.recruit.dto.ResumeDtos.ResumeResponse;
@@ -71,12 +72,11 @@ public class CandidateController {
         return R.ok(service.update(id, req));
     }
 
-    /** 删除记录（写权限）。 */
+    /** 删除记录（写权限）：同步删除名下简历并返回删除明细（RCS-F-022 删除响应）。 */
     @RequirePerm("rcu:candidate:write")
     @DeleteMapping("/{id}")
-    public R<Void> delete(@PathVariable Long id) {
-        service.delete(id);
-        return R.ok();
+    public R<CandidateDeleteResponse> delete(@PathVariable Long id) {
+        return R.ok(service.delete(id));
     }
 
     /** 候选人简历列表（读权限）：存在但无简历返回空数组；候选人不存在 NOT_FOUND。 */

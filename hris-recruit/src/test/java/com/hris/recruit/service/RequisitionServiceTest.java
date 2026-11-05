@@ -38,12 +38,14 @@ class RequisitionServiceTest {
     private RequisitionMapper mapper;
     @Mock
     private FlowIntegration flowIntegration;
+    @Mock
+    private HeadcountIntegration headcountIntegration;
 
     private RequisitionService service;
 
     @BeforeEach
     void setUp() {
-        service = new RequisitionService(mapper, flowIntegration);
+        service = new RequisitionService(mapper, flowIntegration, headcountIntegration);
     }
 
     private Requisition requisition(String status) {
@@ -122,6 +124,50 @@ class RequisitionServiceTest {
             assertEquals(ErrorCode.RCS_ERROR.getCode(), e.getCode());
             verify(mapper, never()).updateById(any(Requisition.class));
             verify(flowIntegration, never()).start(any(), any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("提交编制校验（RCS 需求审批接线）")
+    class HeadcountGuard {
+
+        @Test
+        @DisplayName("提交前按 dept+position+headcount 校验编制")
+        void checksHeadcountBeforeSubmit() {
+            when(mapper.selectById(REQ_ID)).thenReturn(requisition(RequisitionService.STATUS_DRAFT));
+            when(mapper.updateById(any(Requisition.class))).thenReturn(1);
+            when(flowIntegration.start(any(), any(), any())).thenReturn("inst-1");
+
+            service.submit(REQ_ID);
+
+            verify(headcountIntegration).check(10L, 20L, 2);
+        }
+
+        @Test
+        @DisplayName("编制不足 → EMP_HEADCOUNT_SHORT，状态不迁移、不发起流程")
+        void rejectsWhenHeadcountShort() {
+            when(mapper.selectById(REQ_ID)).thenReturn(requisition(RequisitionService.STATUS_DRAFT));
+            org.mockito.Mockito.doThrow(new BizException(ErrorCode.EMP_HEADCOUNT_SHORT, "编制不足，缺口 1 人"))
+                    .when(headcountIntegration).check(10L, 20L, 2);
+
+            BizException e = assertThrows(BizException.class, () -> service.submit(REQ_ID));
+
+            assertEquals(ErrorCode.EMP_HEADCOUNT_SHORT.getCode(), e.getCode());
+            verify(mapper, never()).updateById(any(Requisition.class));
+            verify(flowIntegration, never()).start(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("编制服务不可用 → SYSTEM_ERROR（fail-closed，不静默放行）")
+        void rejectsWhenHeadcountServiceDown() {
+            when(mapper.selectById(REQ_ID)).thenReturn(requisition(RequisitionService.STATUS_DRAFT));
+            org.mockito.Mockito.doThrow(new BizException(ErrorCode.SYSTEM_ERROR, "编制校验服务不可用"))
+                    .when(headcountIntegration).check(10L, 20L, 2);
+
+            BizException e = assertThrows(BizException.class, () -> service.submit(REQ_ID));
+
+            assertEquals(ErrorCode.SYSTEM_ERROR.getCode(), e.getCode());
+            verify(mapper, never()).updateById(any(Requisition.class));
         }
     }
 

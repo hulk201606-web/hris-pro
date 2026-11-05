@@ -1,7 +1,10 @@
 package com.hris.recruit.controller;
 
 import com.hris.recruit.dto.OfferDtos.OfferCreateRequest;
+import com.hris.recruit.dto.OfferDtos.OfferReceiptRequest;
 import com.hris.recruit.dto.OfferDtos.OfferResponse;
+import com.hris.recruit.dto.OfferDtos.OfferSendRequest;
+import com.hris.recruit.dto.OfferDtos.OfferSendResponse;
 import com.hris.recruit.dto.OfferDtos.OfferUpdateRequest;
 import com.hris.recruit.entity.Offer;
 import com.hris.recruit.service.OfferService;
@@ -70,5 +73,25 @@ public class OfferController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    /**
+     * 发送 Offer（RCS-F-018，写权限）：经 PLT 通知能力投递，成功 DRAFT→SENT；
+     * 失败返回 status=FAILED + error，Offer 保持 DRAFT（fail-closed）。
+     */
+    @RequirePerm("rcu:offer:write")
+    @PostMapping("/{id}/send")
+    public R<OfferSendResponse> send(@PathVariable Long id, @Valid @RequestBody OfferSendRequest req) {
+        return R.ok(service.send(id, req));
+    }
+
+    /**
+     * 候选人回执（RCS-F-018，写权限）：ACCEPTED→ACCEPTED / DECLINED→REJECTED；
+     * 重复回执幂等覆盖并刷新回执时间留痕。
+     */
+    @RequirePerm("rcu:offer:write")
+    @PostMapping("/{id}/receipt")
+    public R<OfferResponse> receipt(@PathVariable Long id, @Valid @RequestBody OfferReceiptRequest req) {
+        return R.ok(service.receipt(id, req));
     }
 }

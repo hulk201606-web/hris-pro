@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hris.recruit.dto.CandidateDtos.CandidateCreateRequest;
+import com.hris.recruit.dto.CandidateDtos.CandidateDeleteResponse;
 import com.hris.recruit.dto.CandidateDtos.CandidateResponse;
 import com.hris.recruit.dto.CandidateDtos.CandidateUpdateRequest;
 import com.hris.recruit.entity.Candidate;
@@ -27,10 +28,12 @@ public class CandidateService {
 
     private final CandidateMapper mapper;
     private final BlacklistGuard blacklistGuard;
+    private final ResumeService resumeService;
 
-    public CandidateService(CandidateMapper mapper, BlacklistGuard blacklistGuard) {
+    public CandidateService(CandidateMapper mapper, BlacklistGuard blacklistGuard, ResumeService resumeService) {
         this.mapper = mapper;
         this.blacklistGuard = blacklistGuard;
+        this.resumeService = resumeService;
     }
 
     /** 按 ID 查询，不存在抛 NOT_FOUND。 */
@@ -85,12 +88,20 @@ public class CandidateService {
         return toResponse(e);
     }
 
-    /** 删除记录（事务）；不存在抛 NOT_FOUND。 */
+    /**
+     * 删除记录（事务，RCS-F-022 删除响应）：先逻辑删除候选人名下全部简历（清空文件引用与
+     * 解析文本），再逻辑删除候选人，返回被删简历明细。
+     */
     @Transactional(rollbackFor = Exception.class)
-    public void delete(Long id) {
+    public CandidateDeleteResponse delete(Long id) {
+        if (mapper.selectById(id) == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "Candidate 不存在");
+        }
+        List<Long> resumeIds = resumeService.deleteByCandidate(id);
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "Candidate 不存在");
         }
+        return new CandidateDeleteResponse(resumeIds.size(), resumeIds);
     }
 
     /** 掩码影子列兜底：调用方未传时按原文在服务侧生成，掩码不依赖外部输入。 */

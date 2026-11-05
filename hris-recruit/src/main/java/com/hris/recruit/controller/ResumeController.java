@@ -1,5 +1,6 @@
 package com.hris.recruit.controller;
 
+import com.hris.recruit.dto.ResumeDtos.ResumeCleanupResponse;
 import com.hris.recruit.dto.ResumeDtos.ResumeCreateRequest;
 import com.hris.recruit.dto.ResumeDtos.ResumeResponse;
 import com.hris.recruit.dto.ResumeDtos.ResumeUpdateRequest;
@@ -70,5 +71,15 @@ public class ResumeController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    /**
+     * 清理过期简历（RCS-F-022，写权限）：逻辑删除 retention_until < today 的记录并清空引用。
+     * 由运营在 platform 调度中心注册为日任务，本模块不内置 @Scheduled。
+     */
+    @RequirePerm("rcu:resume:write")
+    @PostMapping("/cleanup")
+    public R<ResumeCleanupResponse> cleanup() {
+        return R.ok(new ResumeCleanupResponse(service.cleanupExpired()));
     }
 }

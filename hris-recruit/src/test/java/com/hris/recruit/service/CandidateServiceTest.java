@@ -3,6 +3,7 @@ package com.hris.recruit.service;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.recruit.dto.CandidateDtos.CandidateCreateRequest;
+import com.hris.recruit.dto.CandidateDtos.CandidateDeleteResponse;
 import com.hris.recruit.dto.CandidateDtos.CandidateResponse;
 import com.hris.recruit.entity.Candidate;
 import com.hris.recruit.mapper.CandidateMapper;
@@ -33,11 +34,14 @@ class CandidateServiceTest {
     @Mock
     private BlacklistGuard blacklistGuard;
 
+    @Mock
+    private ResumeService resumeService;
+
     private CandidateService service;
 
     @BeforeEach
     void setUp() {
-        service = new CandidateService(mapper, blacklistGuard);
+        service = new CandidateService(mapper, blacklistGuard, resumeService);
     }
 
     @Test
@@ -81,5 +85,32 @@ class CandidateServiceTest {
 
         BizException e = assertThrows(BizException.class, () -> service.get(404L));
         assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
+    }
+
+    @Test
+    @DisplayName("delete：同步删除名下简历并返回删除明细（RCS-F-022 删除响应）")
+    void deleteCascadesResumes() {
+        Candidate c = new Candidate();
+        c.setId(9L);
+        when(mapper.selectById(9L)).thenReturn(c);
+        when(resumeService.deleteByCandidate(9L)).thenReturn(java.util.List.of(101L, 102L));
+        when(mapper.deleteById(9L)).thenReturn(1);
+
+        CandidateDeleteResponse resp = service.delete(9L);
+
+        assertEquals(2, resp.deletedResumes());
+        assertEquals(java.util.List.of(101L, 102L), resp.resumeIds());
+        verify(resumeService).deleteByCandidate(9L);
+    }
+
+    @Test
+    @DisplayName("delete：候选人不存在抛 NOT_FOUND，不触碰简历")
+    void deleteNotFound() {
+        when(mapper.selectById(404L)).thenReturn(null);
+
+        BizException e = assertThrows(BizException.class, () -> service.delete(404L));
+
+        assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
+        verify(resumeService, org.mockito.Mockito.never()).deleteByCandidate(any());
     }
 }

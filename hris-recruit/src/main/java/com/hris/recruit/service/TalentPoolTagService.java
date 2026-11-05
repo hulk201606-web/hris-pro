@@ -11,6 +11,7 @@ import com.hris.recruit.mapper.TalentPoolTagMapper;
 import com.hris.common.dto.PageResult;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +77,35 @@ public class TalentPoolTagService {
     public void delete(Long id) {
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "TalentPoolTag 不存在");
+        }
+    }
+
+    /**
+     * 候选标签幂等新增（RCS-F-012 通过打标签）：uk(tenant,candidate,tag) 已存在返回 false，
+     * 并发冲突同样视为已存在，不重复落库。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean addIfAbsent(Long candidateId, String tag) {
+        String value = tag == null ? "" : tag.trim();
+        if (candidateId == null || value.isEmpty()) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "candidateId/tag 不能为空");
+        }
+        if (value.length() > 64) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "标签长度不能超过 64");
+        }
+        if (mapper.selectCount(new LambdaQueryWrapper<TalentPoolTag>()
+                .eq(TalentPoolTag::getCandidateId, candidateId)
+                .eq(TalentPoolTag::getTag, value)) > 0) {
+            return false;
+        }
+        TalentPoolTag e = new TalentPoolTag();
+        e.setCandidateId(candidateId);
+        e.setTag(value);
+        try {
+            mapper.insert(e);
+            return true;
+        } catch (DuplicateKeyException dup) {
+            return false;
         }
     }
 

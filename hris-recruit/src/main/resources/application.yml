@@ -22,6 +22,8 @@ spring:
 
 hris:
   recruit:
+    # 简历保留天数（RCS-F-022）：创建简历时计算 retention_until = 建档日 + N 天，缺省 180
+    resume-retention-days: ${HRIS_RECRUIT_RESUME_RETENTION_DAYS:180}
     blacklist:
       # BlacklistGuard 降级开关（批 7 #14）：true=emp 不可用时放行（现状 fail-open）；
       # false=不可用时拒绝投递/建档（fail-closed，通用文案不透露内部原因）

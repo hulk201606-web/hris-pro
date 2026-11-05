@@ -80,6 +80,6 @@ public class CandidateResumeQueryService {
 
     private ResumeResponse toResponse(Resume r) {
         return new ResumeResponse(r.getId(), r.getCandidateId(), r.getFileId(),
-                r.getParseResult(), r.getCreatedAt(), r.getUpdatedAt());
+                r.getParseResult(), r.getRetentionUntil(), r.getCreatedAt(), r.getUpdatedAt());
     }
 }

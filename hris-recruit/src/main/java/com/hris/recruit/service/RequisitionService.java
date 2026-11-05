@@ -46,10 +46,13 @@ public class RequisitionService {
 
     private final RequisitionMapper mapper;
     private final FlowIntegration flowIntegration;
+    private final HeadcountIntegration headcountIntegration;
 
-    public RequisitionService(RequisitionMapper mapper, FlowIntegration flowIntegration) {
+    public RequisitionService(RequisitionMapper mapper, FlowIntegration flowIntegration,
+                              HeadcountIntegration headcountIntegration) {
         this.mapper = mapper;
         this.flowIntegration = flowIntegration;
+        this.headcountIntegration = headcountIntegration;
     }
 
     /** 按 ID 查询，不存在抛 NOT_FOUND。 */
@@ -109,6 +112,8 @@ public class RequisitionService {
      * 提交审批（DRAFT→APPROVING）并发起 RCS_REQUISITION 流程（docs/19 §9 审批发起侧接入）。
      *
      * <p>守卫：仅 DRAFT 可提交；APPROVING（重复提交）/OPEN/CLOSED（终态）一律拒绝。
+     * 提交前经 {@link HeadcountIntegration} 校验 dept+position 可用编制（fail-closed，
+     * 不足抛 EMP_HEADCOUNT_SHORT，服务不可用抛 SYSTEM_ERROR）。
      * bizKey 约定 = 单据主键 id 十进制字符串（与 RecruitApprovalCallbackService 定位逻辑对齐）。
      * payload 仅含非敏感路由摘要（部门/岗位/编制数/理由）。</p>
      *
@@ -126,6 +131,7 @@ public class RequisitionService {
             throw new BizException(ErrorCode.RCS_ERROR,
                     "仅草稿状态可提交审批，当前状态：" + e.getStatus());
         }
+        headcountIntegration.check(e.getDeptId(), e.getPositionId(), e.getHeadcount());
         e.setStatus(STATUS_APPROVING);
         if (mapper.updateById(e) == 0) {
             throw new BizException(ErrorCode.RCS_ERROR, "数据已被其他操作变更，请刷新后重试");

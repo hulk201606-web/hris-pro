@@ -2,6 +2,7 @@ package com.hris.recruit.service;
 
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
+import com.hris.recruit.config.RecruitProperties;
 import com.hris.recruit.dto.PublicRecruitDtos.PublicApplyRequest;
 import com.hris.recruit.dto.PublicRecruitDtos.PublicApplyResponse;
 import com.hris.recruit.entity.Application;
@@ -66,7 +67,7 @@ class PublicRecruitServiceTest {
     @BeforeEach
     void setUp() {
         service = new PublicRecruitService(requisitionMapper, jobOpeningMapper, candidateMapper,
-                applicationMapper, stageLogMapper, resumeMapper, blacklistGuard);
+                applicationMapper, stageLogMapper, resumeMapper, blacklistGuard, new RecruitProperties());
     }
 
     private PublicApplyRequest applyBody() {
@@ -246,6 +247,21 @@ class PublicRecruitServiceTest {
             service.apply(REQ_ID, new PublicApplyRequest("张三", "13812348888", "z@x.com", null));
 
             verify(resumeMapper, never()).insert(any(com.hris.recruit.entity.Resume.class));
+        }
+
+        @Test
+        @DisplayName("selfIntro 落简历时按 180 天缺省保留期计算 retentionUntil（RCS-F-022）")
+        void setsResumeRetention() {
+            when(requisitionMapper.selectById(REQ_ID)).thenReturn(openRequisition());
+            when(candidateMapper.selectList(any())).thenReturn(List.of());
+            mockInsertAssignIds();
+
+            service.apply(REQ_ID, applyBody());
+
+            ArgumentCaptor<com.hris.recruit.entity.Resume> cap =
+                    ArgumentCaptor.forClass(com.hris.recruit.entity.Resume.class);
+            verify(resumeMapper).insert(cap.capture());
+            assertEquals(java.time.LocalDate.now().plusDays(180), cap.getValue().getRetentionUntil());
         }
     }
 

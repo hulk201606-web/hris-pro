@@ -15,6 +15,17 @@ public class RecruitProperties {
     private final Blacklist blacklist = new Blacklist();
     private final Ai ai = new Ai();
 
+    /** 简历保留天数（RCS-F-022，hris.recruit.resume-retention-days，缺省 180 天）。 */
+    private int resumeRetentionDays = 180;
+
+    public int getResumeRetentionDays() {
+        return resumeRetentionDays;
+    }
+
+    public void setResumeRetentionDays(int resumeRetentionDays) {
+        this.resumeRetentionDays = resumeRetentionDays;
+    }
+
     public Blacklist getBlacklist() {
         return blacklist;
     }
