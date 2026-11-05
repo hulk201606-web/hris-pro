@@ -80,6 +80,7 @@ public class RequisitionService {
         e.setHeadcount(req.headcount());
         e.setReason(req.reason());
         e.setStatus(STATUS_DRAFT);
+        e.setPublished(0);
         mapper.insert(e);
         return toResponse(e);
     }
@@ -144,6 +145,43 @@ public class RequisitionService {
         }
     }
 
+    /**
+     * 发布到官网（RCS-F-004 配套，事务）：仅 OPEN 状态可发布（DRAFT/APPROVING 未获批，
+     * CLOSED 已关闭），published=1 后经 /api/v1/public/rcu/jobs 对外可见。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public RequisitionResponse publish(Long id) {
+        Requisition e = requireExists(id);
+        if (!STATUS_OPEN.equals(e.getStatus())) {
+            throw new BizException(ErrorCode.RCS_ERROR,
+                    "仅 OPEN 状态可发布到官网，当前状态：" + e.getStatus());
+        }
+        e.setPublished(1);
+        if (mapper.updateById(e) == 0) {
+            throw new BizException(ErrorCode.RCS_ERROR, "数据已被其他操作变更，请刷新后重试");
+        }
+        return toResponse(e);
+    }
+
+    /** 从官网下架（事务）：任意状态可下架，published=0。 */
+    @Transactional(rollbackFor = Exception.class)
+    public RequisitionResponse unpublish(Long id) {
+        Requisition e = requireExists(id);
+        e.setPublished(0);
+        if (mapper.updateById(e) == 0) {
+            throw new BizException(ErrorCode.RCS_ERROR, "数据已被其他操作变更，请刷新后重试");
+        }
+        return toResponse(e);
+    }
+
+    private Requisition requireExists(Long id) {
+        Requisition e = mapper.selectById(id);
+        if (e == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "Requisition 不存在");
+        }
+        return e;
+    }
+
     /** 审批路由摘要（非敏感字段，flow 仅用于审批人解析，不落库）。 */
     private Map<String, Object> buildPayload(Requisition e) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -156,6 +194,6 @@ public class RequisitionService {
     }
 
     private RequisitionResponse toResponse(Requisition e) {
-        return new RequisitionResponse(e.getId(), e.getReqNo(), e.getDeptId(), e.getPositionId(), e.getHeadcount(), e.getReason(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt());
+        return new RequisitionResponse(e.getId(), e.getReqNo(), e.getDeptId(), e.getPositionId(), e.getHeadcount(), e.getReason(), e.getStatus(), e.getPublished(), e.getCreatedAt(), e.getUpdatedAt());
     }
 }

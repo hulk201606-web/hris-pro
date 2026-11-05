@@ -23,7 +23,7 @@ public final class RequisitionDtos {
     public record RequisitionUpdateRequest(String reqNo, Long deptId, Long positionId, Integer headcount, String reason) {
     }
 
-    /** 响应。 */
-    public record RequisitionResponse(Long id, String reqNo, Long deptId, Long positionId, Integer headcount, String reason, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    /** 响应。published：官网发布标记 0/1（RCS-F-004）。 */
+    public record RequisitionResponse(Long id, String reqNo, Long deptId, Long positionId, Integer headcount, String reason, String status, Integer published, LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 }

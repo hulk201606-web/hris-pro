@@ -65,4 +65,13 @@ public class Requisition extends BaseEntity {
     public void setStatus(String status) {
         this.status = status;
     }
+    private Integer published;  // 官网发布 0=否 1=是（RCS-F-004，仅 OPEN 可发布）
+
+    public Integer getPublished() {
+        return published;
+    }
+
+    public void setPublished(Integer published) {
+        this.published = published;
+    }
 }

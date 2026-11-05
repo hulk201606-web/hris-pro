@@ -49,6 +49,13 @@ spring:
               uri: lb://hris-recruit
               predicates:
                 - Path=/api/v1/rcu/**
+            # 官网免登录公开端点（RCS-F-004）：/api/v1/public/** 统一路由到 hris-recruit。
+            # 注意与下方白名单配套使用：仅放行 JWT 校验，InternalBanWebFilter 的 /internal/ 封禁不受影响。
+            # 当前仅招聘域暴露公开端点；其他域后续需要时在此拆分路由，避免把整个 /public 前缀绑死到单服务。
+            - id: hris-recruit-public
+              uri: lb://hris-recruit
+              predicates:
+                - Path=/api/v1/public/**
             - id: hris-compensation
               uri: lb://hris-compensation
               predicates:
@@ -114,6 +121,9 @@ hris:
       - /api/v1/auth/login
       - /api/v1/auth/refresh
       - /public/**
+      # 官网免登录投递公开端点（RCS-F-004，二期批 1）：匿名可访问，跳过 JWT 校验。
+      # 仅放行 /api/v1/public/** 显式公开前缀；/internal/** 仍由 InternalBanWebFilter 封禁。
+      - /api/v1/public/**
       # 仅放行探针与健康检查，不放行整个 /actuator/**。
       # 安全原因：/actuator/** 一旦放行，info/env/metrics/prometheus 等端点会
       # 免 JWT 校验经网关对外可达。指标端点一旦按 docs/18 §3 暴露 prometheus，

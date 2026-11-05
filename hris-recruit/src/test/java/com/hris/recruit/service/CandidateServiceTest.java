@@ -30,11 +30,14 @@ class CandidateServiceTest {
     @Mock
     private CandidateMapper mapper;
 
+    @Mock
+    private BlacklistGuard blacklistGuard;
+
     private CandidateService service;
 
     @BeforeEach
     void setUp() {
-        service = new CandidateService(mapper);
+        service = new CandidateService(mapper, blacklistGuard);
     }
 
     @Test

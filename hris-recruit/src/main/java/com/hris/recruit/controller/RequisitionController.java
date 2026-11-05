@@ -71,6 +71,20 @@ public class RequisitionController {
         return R.ok(service.submit(id));
     }
 
+    /** 发布到官网（仅 OPEN 可发布；发布后 /api/v1/public/rcu/jobs 可见，复用写权限）。 */
+    @RequirePerm("rcu:requisition:write")
+    @PostMapping("/{id}/publish")
+    public R<RequisitionResponse> publish(@PathVariable Long id) {
+        return R.ok(service.publish(id));
+    }
+
+    /** 从官网下架（任意状态，复用写权限）。 */
+    @RequirePerm("rcu:requisition:write")
+    @PostMapping("/{id}/unpublish")
+    public R<RequisitionResponse> unpublish(@PathVariable Long id) {
+        return R.ok(service.unpublish(id));
+    }
+
     /** 删除记录（写权限）。 */
     @RequirePerm("rcu:requisition:write")
     @DeleteMapping("/{id}")

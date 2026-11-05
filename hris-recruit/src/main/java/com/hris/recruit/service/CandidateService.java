@@ -26,9 +26,11 @@ import java.util.List;
 public class CandidateService {
 
     private final CandidateMapper mapper;
+    private final BlacklistGuard blacklistGuard;
 
-    public CandidateService(CandidateMapper mapper) {
+    public CandidateService(CandidateMapper mapper, BlacklistGuard blacklistGuard) {
         this.mapper = mapper;
+        this.blacklistGuard = blacklistGuard;
     }
 
     /** 按 ID 查询，不存在抛 NOT_FOUND。 */
@@ -47,9 +49,14 @@ public class CandidateService {
         return new PageResult<>(records, page, size, pg.getTotal());
     }
 
-    /** 新建记录（事务）。 */
+    /**
+     * 新建记录（事务）。入库前先做员工黑名单校验（RCS-F-011）：命中抛 PARAM_INVALID
+     * 「候选人命中员工黑名单，禁止入库」；emp 不可用时 fail-open 放行（见 BlacklistGuard）。
+     * mobileCipher 语义与现有一致（明文落列，掩码影子列兜底）。
+     */
     @Transactional(rollbackFor = Exception.class)
     public CandidateResponse create(CandidateCreateRequest req) {
+        blacklistGuard.checkOrThrow(null, req.mobileCipher());
         Candidate e = new Candidate();
         e.setName(req.name());
         e.setMobileCipher(req.mobileCipher());

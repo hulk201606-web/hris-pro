@@ -156,4 +156,59 @@ class RequisitionServiceTest {
                             "headcount", 2, "reason", "扩编")));
         }
     }
+
+    @Nested
+    @DisplayName("publish/unpublish 官网发布守卫（RCS-F-004 配套）")
+    class PublishGuard {
+
+        @Test
+        @DisplayName("OPEN → publish 成功，published=1")
+        void publishesOpenRequisition() {
+            Requisition e = requisition(RequisitionService.STATUS_OPEN);
+            when(mapper.selectById(REQ_ID)).thenReturn(e);
+            when(mapper.updateById(any(Requisition.class))).thenReturn(1);
+
+            var resp = service.publish(REQ_ID);
+
+            assertEquals(1, e.getPublished());
+            assertEquals(RequisitionService.STATUS_OPEN, resp.status());
+        }
+
+        @Test
+        @DisplayName("DRAFT/APPROVING/CLOSED 拒绝 publish → RCS_ERROR")
+        void rejectsPublishWhenNotOpen() {
+            for (String status : new String[]{
+                    RequisitionService.STATUS_DRAFT, RequisitionService.STATUS_APPROVING,
+                    RequisitionService.STATUS_CLOSED}) {
+                when(mapper.selectById(REQ_ID)).thenReturn(requisition(status));
+
+                BizException ex = assertThrows(BizException.class, () -> service.publish(REQ_ID));
+
+                assertEquals(ErrorCode.RCS_ERROR.getCode(), ex.getCode());
+            }
+        }
+
+        @Test
+        @DisplayName("unpublish 任意状态可下架，published=0")
+        void unpublishResetsFlag() {
+            Requisition e = requisition(RequisitionService.STATUS_OPEN);
+            e.setPublished(1);
+            when(mapper.selectById(REQ_ID)).thenReturn(e);
+            when(mapper.updateById(any(Requisition.class))).thenReturn(1);
+
+            service.unpublish(REQ_ID);
+
+            assertEquals(0, e.getPublished());
+        }
+
+        @Test
+        @DisplayName("publish 不存在的需求 → NOT_FOUND")
+        void publishNotFound() {
+            when(mapper.selectById(REQ_ID)).thenReturn(null);
+
+            BizException ex = assertThrows(BizException.class, () -> service.publish(REQ_ID));
+
+            assertEquals(ErrorCode.NOT_FOUND.getCode(), ex.getCode());
+        }
+    }
 }
