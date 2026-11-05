@@ -1,5 +1,7 @@
 package com.hris.gateway.filter;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hris.common.exception.ErrorCode;
 import com.hris.gateway.auth.PermQueryService;
 import com.hris.gateway.common.GatewayConstants;
@@ -35,6 +37,10 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
     /** 登出/禁用黑名单键（与 auth RedisTokenStore 约定一致：auth:bl:{jti}）。 */
     private static final String BLACKLIST_KEY_PREFIX = "auth:bl:";
+
+    /** X-User-Perms 头序列化（docs/21 批 7 #15 / D-11）：JSON 数组替代逗号串，
+     *  消除权限码含分隔符的解析歧义；下游 AuthContextFilter 兼容双格式。 */
+    private static final ObjectMapper PERMS_JSON = new ObjectMapper();
 
     private final ReactiveStringRedisTemplate blacklistRedis;
 
@@ -106,6 +112,16 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         // 验签通过后实时查权限，再丢弃伪造头、以 token/查询结果为准重写身份与权限头
         return permQueryService.permsOf(principal.userId(), principal.tenantId())
                 .flatMap(perms -> {
+                    String permsHeader;
+                    try {
+                        // JSON 数组透传（排序保证确定性）；perms 为简单权限码，序列化不会失败
+                        permsHeader = PERMS_JSON.writeValueAsString(
+                                perms.stream().sorted().toList());
+                    } catch (JsonProcessingException e) {
+                        log.warn("perms serialize failed, transmit empty: {}", e.getMessage());
+                        permsHeader = "[]";
+                    }
+                    final String headerValue = permsHeader;
                     ServerHttpRequest mutated = exchange.getRequest().mutate()
                             .headers(headers -> {
                                 headers.remove(GatewayConstants.HEADER_TENANT_ID);
@@ -114,7 +130,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
                                 headers.remove(GatewayConstants.HEADER_PERMS);
                                 headers.set(GatewayConstants.HEADER_TENANT_ID, String.valueOf(principal.tenantId()));
                                 headers.set(GatewayConstants.HEADER_USER_ID, String.valueOf(principal.userId()));
-                                headers.set(GatewayConstants.HEADER_PERMS, String.join(",", perms));
+                                headers.set(GatewayConstants.HEADER_PERMS, headerValue);
                             })
                             .build();
 
