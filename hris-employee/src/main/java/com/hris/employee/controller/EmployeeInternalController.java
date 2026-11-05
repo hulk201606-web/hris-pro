@@ -1,10 +1,14 @@
 package com.hris.employee.controller;
 
 import com.hris.common.api.R;
+import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackRequest;
+import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.employee.dto.PreCreateRequest;
 import com.hris.employee.dto.PreHireLinkResponse;
 import com.hris.employee.service.EmployeeService;
+import com.hris.employee.service.LifecycleCaseService;
 import com.hris.employee.service.PreHireService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,10 +28,13 @@ public class EmployeeInternalController {
 
     private final EmployeeService employeeService;
     private final PreHireService preHireService;
+    private final LifecycleCaseService lifecycleCaseService;
 
-    public EmployeeInternalController(EmployeeService employeeService, PreHireService preHireService) {
+    public EmployeeInternalController(EmployeeService employeeService, PreHireService preHireService,
+                                      LifecycleCaseService lifecycleCaseService) {
         this.employeeService = employeeService;
         this.preHireService = preHireService;
+        this.lifecycleCaseService = lifecycleCaseService;
     }
 
     /** 员工档案简报（内部端点）：供 org 汇报线解析等跨域调用，返回姓名/工号/状态/部门/岗位/直属上级。 */
@@ -49,5 +56,17 @@ public class EmployeeInternalController {
     @PostMapping("/pre-create")
     public R<Long> preCreate(@RequestBody PreCreateRequest req) {
         return R.ok(employeeService.preCreate(req));
+    }
+
+    /**
+     * 生命周期单审批结果回调（flow → emp，docs/19 §8.7-1）。
+     * 幂等：单据已处终态时返回 changed=false 不重复落账。
+     * 内部调用无 JWT，LifecycleCaseService.handleCallback 显式还原租户上下文并 finally 清理。
+     */
+    @PostMapping("/approval-callback")
+    public R<ApprovalCallbackResponse> approvalCallback(
+            @Valid @RequestBody ApprovalCallbackRequest req) {
+        return R.ok(lifecycleCaseService.handleCallback(
+                req.tenantId(), req.bizKey(), Boolean.TRUE.equals(req.approved()), req.comment()));
     }
 }

@@ -1,11 +1,18 @@
 package com.hris.org.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.trace.TraceContext;
+import com.hris.org.dto.ApprovalDtos.ApprovalCallbackRequest;
+import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.org.dto.HcCheckResponse;
+import com.hris.org.service.DeptService;
 import com.hris.org.service.HeadcountService;
 import com.hris.org.service.ReportLineService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,10 +28,13 @@ public class OrgInternalController {
 
     private final HeadcountService headcountService;
     private final ReportLineService reportLineService;
+    private final DeptService deptService;
 
-    public OrgInternalController(HeadcountService headcountService, ReportLineService reportLineService) {
+    public OrgInternalController(HeadcountService headcountService, ReportLineService reportLineService,
+                                 DeptService deptService) {
         this.headcountService = headcountService;
         this.reportLineService = reportLineService;
+        this.deptService = deptService;
     }
 
     /**
@@ -42,5 +52,22 @@ public class OrgInternalController {
     @GetMapping("/reportline/{empId}")
     public R<List<Long>> reportline(@PathVariable Long empId) {
         return R.ok(reportLineService.resolve(empId));
+    }
+
+    /**
+     * 审批结果回调（flow → org，docs/19 §8.7-1）：幂等更新 ORG_ADJUST 申请单状态，
+     * 审批通过且 payload 含结构化变更动作时应用变更。
+     * 内部调用无 JWT，须显式还原租户上下文（org_dept_history 受租户插件拦截），finally 清理。
+     */
+    @PostMapping("/approval-callback")
+    public R<ApprovalCallbackResponse> approvalCallback(@Valid @RequestBody ApprovalCallbackRequest req) {
+        Long tenantId = req.tenantId() != null ? req.tenantId() : TraceContext.getTenantId();
+        TraceContext.setTenantId(tenantId);
+        try {
+            return R.ok(deptService.handleAdjustCallback(
+                    req.bizKey(), Boolean.TRUE.equals(req.approved()), req.comment()));
+        } finally {
+            TraceContext.setTenantId(null);
+        }
     }
 }

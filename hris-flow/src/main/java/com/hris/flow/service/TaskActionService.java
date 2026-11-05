@@ -32,19 +32,22 @@ public class TaskActionService {
     private final BizRelationService bizRelationService;
     private final EventOutboxService eventOutboxService;
     private final InstanceService instanceService;
+    private final ApprovalCallbackDispatcher callbackDispatcher;
 
     public TaskActionService(TaskService taskService, RuntimeService runtimeService,
                              TaskActionMapper taskActionMapper, BizRelationService bizRelationService,
-                             EventOutboxService eventOutboxService, InstanceService instanceService) {
+                             EventOutboxService eventOutboxService, InstanceService instanceService,
+                             ApprovalCallbackDispatcher callbackDispatcher) {
         this.taskService = taskService;
         this.runtimeService = runtimeService;
         this.taskActionMapper = taskActionMapper;
         this.bizRelationService = bizRelationService;
         this.eventOutboxService = eventOutboxService;
         this.instanceService = instanceService;
+        this.callbackDispatcher = callbackDispatcher;
     }
 
-    /** 同意：完成任务，若为末节点则结束实例。 */
+    /** 同意：完成任务，若为末节点则结束实例并回调业务域。 */
     @Transactional(rollbackFor = Exception.class)
     public void approve(String taskId, TaskActionRequest req) {
         Task task = requireTaskAndCheck(taskId);
@@ -57,11 +60,12 @@ public class TaskActionService {
                 Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(), "outcome", "APPROVED"));
         if (runtimeService.createProcessInstanceQuery()
                 .processInstanceId(task.getProcessInstanceId()).singleResult() == null) {
-            finishInstance(task.getProcessInstanceId(), "APPROVED");
+            finishInstance(task.getProcessInstanceId(), "APPROVED", true,
+                    req == null ? null : req.comment());
         }
     }
 
-    /** 驳回（MVP：终止回发起人策略，docs/04 §5 三策略之一）。 */
+    /** 驳回（MVP：终止回发起人策略，docs/04 §5 三策略之一），以 approved=false 回调业务域。 */
     @Transactional(rollbackFor = Exception.class)
     public void reject(String taskId, TaskActionRequest req) {
         Task task = requireTaskAndCheck(taskId);
@@ -70,10 +74,14 @@ public class TaskActionService {
         record(taskId, TaskActionType.REJECT, operator, req, null);
         runtimeService.deleteProcessInstance(task.getProcessInstanceId(),
                 "REJECTED:" + (req == null || req.comment() == null ? "" : req.comment()));
-        terminateRelation(task.getProcessInstanceId());
+        BizRelation rel = terminateRelation(task.getProcessInstanceId());
         eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, tenantId,
                 task.getProcessInstanceId(),
                 Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(), "outcome", "REJECTED"));
+        if (rel != null) {
+            callbackDispatcher.dispatchOnTerminal(rel.getBizType(), rel.getBizKey(), rel.getTenantId(),
+                    false, "REJECTED", req == null ? null : req.comment(), task.getProcessInstanceId());
+        }
     }
 
     /** 转办：任务所有权转移，原审批人留痕（docs/04 §5）。 */
@@ -97,7 +105,7 @@ public class TaskActionService {
         taskService.addCandidateUser(taskId, String.valueOf(target));
     }
 
-    /** 撤回（发起人撤回，仅当无已处理节点时允许）。 */
+    /** 撤回（发起人撤回，仅当无已处理节点时允许），以 approved=false / WITHDRAWN 语义通知业务域。 */
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(String taskId) {
         Task task = requireTask(taskId);
@@ -145,24 +153,30 @@ public class TaskActionService {
         taskActionMapper.insert(a);
     }
 
-    private void finishInstance(String procInstId, String outcome) {
+    /** 实例结束：回写映射状态 + 发布终态事件 + 按终态结论回调业务域（回调失败不影响审批）。 */
+    private void finishInstance(String procInstId, String outcome, boolean approved, String comment) {
         try {
             BizRelation rel = bizRelationService.requireByProcInstId(procInstId);
             bizRelationService.updateStatus(rel, InstanceStatus.FINISHED);
             eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, rel.getTenantId(), rel.getBizKey(),
                     Map.of("procInstId", procInstId, "bizType", rel.getBizType(), "bizKey", rel.getBizKey(),
                             "outcome", outcome));
+            callbackDispatcher.dispatchOnTerminal(rel.getBizType(), rel.getBizKey(), rel.getTenantId(),
+                    approved, outcome, comment, procInstId);
         } catch (BizException ignored) {
-            // 无映射（如手工测试流程）时跳过状态回写，仅记录
+            // 无映射（如手工测试流程）时跳过状态回写与回调，仅记录
         }
     }
 
-    private void terminateRelation(String procInstId) {
+    /** 终止映射；返回映射（无映射时返回 null），供驳回分支以 bizType 路由回调。 */
+    private BizRelation terminateRelation(String procInstId) {
         try {
             BizRelation rel = bizRelationService.requireByProcInstId(procInstId);
             bizRelationService.updateStatus(rel, InstanceStatus.TERMINATED);
+            return rel;
         } catch (BizException ignored) {
             // 无映射时跳过
+            return null;
         }
     }
 

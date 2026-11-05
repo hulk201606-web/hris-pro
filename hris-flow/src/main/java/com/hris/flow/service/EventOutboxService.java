@@ -17,10 +17,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 事件出站服务（FLW-F-012）。本地事务内写 flow_ext_event_outbox，异步发 RocketMQ。
+ * 事件出站服务（FLW-F-012）。本地事务内写 flow_ext_event_outbox。
  *
- * <p>MVP：先落表 + 预留发送入口 {@link #dispatchPending(int)}。RocketMQ 未就绪，发送端暂空转
- * （返回待发记录供后续接入 producer，不误标 SENT 避免丢事件）。消息信封遵循 docs/07 §4。</p>
+ * <p>两类事件：① MQ 事件（INSTANCE_STARTED/TASK_COMPLETED/INSTANCE_FINISHED），RocketMQ
+ * producer 未接入，保持 PENDING 不误标；② 审批回调事件（{@link ApprovalCallbackDispatcher}
+ * Feign 失败落表），由 {@link #dispatchPending(int)} 走同一 dispatcher 重试，成功置 SENT。</p>
  */
 @Service
 public class EventOutboxService {
@@ -33,9 +34,11 @@ public class EventOutboxService {
     public static final String TOPIC_INSTANCE_FINISHED = "hris-flow-instance-finished";
 
     private final EventOutboxMapper mapper;
+    private final ApprovalCallbackDispatcher callbackDispatcher;
 
-    public EventOutboxService(EventOutboxMapper mapper) {
+    public EventOutboxService(EventOutboxMapper mapper, ApprovalCallbackDispatcher callbackDispatcher) {
         this.mapper = mapper;
+        this.callbackDispatcher = callbackDispatcher;
     }
 
     /**
@@ -62,17 +65,70 @@ public class EventOutboxService {
     }
 
     /**
-     * 预留发送入口：读取待发事件，接入 RocketMQ producer 后在此逐条发送并标 SENT。
-     * MVP 阶段仅返回待发记录并告警提示（不发送、不误标），避免事件静默丢失。
+     * 重试待发事件（docs/19 §8.7-1）：遍历 PENDING 事件，审批回调事件按 bizType 前缀走
+     * {@link ApprovalCallbackDispatcher#deliver} 重试，成功置 SENT、失败 retryCnt+1 保留 PENDING；
+     * MQ 事件（其它 topic）RocketMQ 未接入，跳过不动。
+     *
+     * @return 统计：total 扫描数 / sent 成功数 / failed 失败数 / skipped 跳过数
      */
-    public List<EventOutbox> dispatchPending(int limit) {
+    public Map<String, Integer> dispatchPending(int limit) {
         List<EventOutbox> pending = mapper.selectList(new LambdaQueryWrapper<EventOutbox>()
                 .eq(EventOutbox::getState, OutboxState.PENDING.name())
                 .orderByAsc(EventOutbox::getId)
                 .last("limit " + Math.max(1, limit)));
-        if (!pending.isEmpty()) {
-            log.warn("事件出站已落 {} 条，RocketMQ producer 未接入，暂不发送", pending.size());
+        int sent = 0;
+        int failed = 0;
+        int skipped = 0;
+        for (EventOutbox row : pending) {
+            if (!ApprovalCallbackDispatcher.TOPIC_APPROVAL_CALLBACK.equals(row.getTopic())) {
+                skipped++;
+                continue;
+            }
+            if (deliverCallback(row)) {
+                row.setState(OutboxState.SENT.name());
+                mapper.updateById(row);
+                sent++;
+            } else {
+                row.setRetryCnt(row.getRetryCnt() == null ? 1 : row.getRetryCnt() + 1);
+                mapper.updateById(row);
+                failed++;
+            }
         }
-        return pending;
+        if (!pending.isEmpty()) {
+            log.info("outbox 重试完成: total={}, sent={}, failed={}, skipped={}",
+                    pending.size(), sent, failed, skipped);
+        }
+        return Map.of("total", pending.size(), "sent", sent, "failed", failed, "skipped", skipped);
+    }
+
+    /** 解析回调事件信封并投递；解析异常视为投递失败（保留 PENDING 供人工排查）。 */
+    private boolean deliverCallback(EventOutbox row) {
+        try {
+            Map<String, Object> envelope = JsonUtil.toMap(row.getPayload());
+            Object payloadObj = envelope.get("payload");
+            if (!(payloadObj instanceof Map<?, ?> payload)) {
+                log.error("审批回调事件 payload 结构异常，eventId={}", row.getEventId());
+                return false;
+            }
+            return callbackDispatcher.deliver(
+                    str(payload.get("bizType")),
+                    str(payload.get("bizKey")),
+                    longOrNull(envelope.get("tenantId")),
+                    Boolean.TRUE.equals(payload.get("approved")),
+                    str(payload.get("outcome")),
+                    str(payload.get("comment")),
+                    str(payload.get("procInstId")));
+        } catch (Exception e) {
+            log.error("审批回调重试失败，eventId={}", row.getEventId(), e);
+            return false;
+        }
+    }
+
+    private String str(Object v) {
+        return v == null ? null : String.valueOf(v);
+    }
+
+    private Long longOrNull(Object v) {
+        return v instanceof Number n ? n.longValue() : null;
     }
 }

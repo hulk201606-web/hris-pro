@@ -3,10 +3,12 @@ package com.hris.flow.controller;
 import com.hris.common.api.R;
 import com.hris.flow.dto.StartInstanceRequest;
 import com.hris.flow.dto.StartInstanceResponse;
+import com.hris.flow.service.EventOutboxService;
 import com.hris.flow.service.InstanceService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -23,9 +25,11 @@ import java.util.Map;
 public class FlowInternalController {
 
     private final InstanceService instanceService;
+    private final EventOutboxService eventOutboxService;
 
-    public FlowInternalController(InstanceService instanceService) {
+    public FlowInternalController(InstanceService instanceService, EventOutboxService eventOutboxService) {
         this.instanceService = instanceService;
+        this.eventOutboxService = eventOutboxService;
     }
 
     @PostMapping("/instances")
@@ -39,6 +43,15 @@ public class FlowInternalController {
                 longOrNull(body.get("initiator")),
                 longOrNull(body.get("assignee")));
         return R.ok(instanceService.start(req));
+    }
+
+    /**
+     * outbox 重试入口（docs/19 §8.7-1）：遍历 PENDING 审批回调事件按 bizType 路由重试，
+     * 成功置 SENT、失败保留 PENDING。供手动/外部调度触发，不做定时器。
+     */
+    @PostMapping("/outbox/dispatch")
+    public R<Map<String, Integer>> dispatchOutbox(@RequestParam(required = false, defaultValue = "100") int limit) {
+        return R.ok(eventOutboxService.dispatchPending(limit));
     }
 
     @SuppressWarnings("unchecked")

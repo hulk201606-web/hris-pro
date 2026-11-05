@@ -6,6 +6,7 @@ import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.org.dto.AdjustRequestCreate;
 import com.hris.org.dto.AdjustRequestResponse;
+import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.org.dto.DeptNode;
 import com.hris.org.dto.DeptRequest;
 import com.hris.org.entity.OrgDept;
@@ -155,8 +156,7 @@ public class DeptService {
         return snap;
     }
 
-    /** 组织调整申请：落单 + 预留 flow 调用（MVP 降级不阻断）。 */
-    @Transactional(rollbackFor = Exception.class)
+    /** 组织调整申请：落单 + 预留 flow 调用（MVP 降级不阻断）。 */    @Transactional(rollbackFor = Exception.class)
     public AdjustRequestResponse adjust(AdjustRequestCreate req) {
         String bizKey = "ORG_ADJUST:" + IdWorker.getId();
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -195,6 +195,97 @@ public class DeptService {
         String flowInstanceId = flowIntegration.startOrgAdjust(flowReq);
 
         return new AdjustRequestResponse(bizKey, "PENDING", flowInstanceId);
+    }
+
+    /**
+     * 审批结果回调（flow → org，docs/19 §8.7-1）：幂等更新 ORG_ADJUST 申请单状态。
+     * 申请单以 org_dept_history 快照承载（kind=ORG_ADJUST_REQUEST），非 PENDING 视为重复回调
+     * 直接返回 changed=false；审批通过且 payload 含结构化变更动作（CREATE/UPDATE + name）时
+     * 应用变更后一并落快照。回调调用方须先在 TraceContext 还原租户（内部端点负责）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ApprovalCallbackResponse handleAdjustCallback(String bizKey, boolean approved, String comment) {
+        OrgDeptHistory record = deptHistoryMapper.selectOne(new LambdaQueryWrapper<OrgDeptHistory>()
+                .like(OrgDeptHistory::getSnapshot, "\"bizKey\":\"" + bizKey + "\"")
+                .orderByDesc(OrgDeptHistory::getId)
+                .last("LIMIT 1"));
+        if (record == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
+        }
+        Map<String, Object> snap = JsonUtil.toMap(record.getSnapshot());
+        if (!"ORG_ADJUST_REQUEST".equals(snap.get("kind"))) {
+            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
+        }
+        String status = String.valueOf(snap.get("status"));
+        if (!"PENDING".equals(status)) {
+            // 幂等：申请单已处终态，重复回调直接返回成功，不重复应用变更
+            return new ApprovalCallbackResponse(false, status);
+        }
+        if (approved) {
+            applyAdjustAction(snap);
+        }
+        String newStatus = approved ? "APPROVED" : "REJECTED";
+        snap.put("status", newStatus);
+        if (comment != null && !comment.isBlank()) {
+            snap.put("approvalComment", comment);
+        }
+        record.setSnapshot(JsonUtil.toJson(snap));
+        deptHistoryMapper.updateById(record);
+        return new ApprovalCallbackResponse(true, newStatus);
+    }
+
+    /**
+     * 应用结构化调整动作：action=CREATE 建部门、action=UPDATE 改部门（以申请单 deptId 定位）；
+     * payload 缺 name（自由文本）或未知 action 时仅更新状态，不应用变更。
+     */
+    private void applyAdjustAction(Map<String, Object> snap) {
+        String action = snap.get("action") == null ? ""
+                : String.valueOf(snap.get("action")).trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"CREATE".equals(action) && !"UPDATE".equals(action)) {
+            return;
+        }
+        Map<String, Object> p = snap.get("payload") instanceof Map<?, ?> m
+                ? new LinkedHashMap<String, Object>() {{
+                    m.forEach((k, v) -> put(String.valueOf(k), v));
+                }}
+                : Map.of();
+        String name = str(p.get("name"));
+        if (name == null || name.isBlank()) {
+            return;
+        }
+        LocalDate effectiveFrom = dateOrNull(p.get("effectiveFrom"));
+        DeptRequest req = new DeptRequest(name, str(p.get("code")), longOrNull(p.get("parentId")),
+                longOrNull(p.get("managerEmpId")),
+                effectiveFrom == null ? LocalDate.now() : effectiveFrom,
+                dateOrNull(p.get("effectiveTo")), null);
+        if ("CREATE".equals(action)) {
+            create(req);
+            return;
+        }
+        Long deptId = longOrNull(snap.get("deptId"));
+        if (deptId == null) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "调整申请缺少 deptId，无法应用变更");
+        }
+        update(deptId, req);
+    }
+
+    private String str(Object v) {
+        return v == null ? null : String.valueOf(v);
+    }
+
+    private Long longOrNull(Object v) {
+        return v instanceof Number n ? n.longValue() : null;
+    }
+
+    private LocalDate dateOrNull(Object v) {
+        if (v == null) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(String.valueOf(v));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private OrgDept loadParent(long parentId) {

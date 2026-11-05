@@ -1,0 +1,227 @@
+package com.hris.org.service;
+
+import com.hris.common.exception.BizException;
+import com.hris.common.exception.ErrorCode;
+import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
+import com.hris.org.entity.OrgDept;
+import com.hris.org.entity.OrgDeptHistory;
+import com.hris.org.mapper.OrgDeptHistoryMapper;
+import com.hris.org.mapper.OrgDeptMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * DeptService.handleAdjustCallback 单元测试（docs/19 §8.7-1 审批回调闭环）：
+ * ORG_ADJUST 申请单状态更新幂等 + 结构化变更动作应用。
+ */
+@ExtendWith(MockitoExtension.class)
+class DeptServiceAdjustCallbackTest {
+
+    @Mock
+    private OrgDeptMapper deptMapper;
+    @Mock
+    private OrgDeptHistoryMapper deptHistoryMapper;
+    @Mock
+    private FlowIntegration flowIntegration;
+
+    private DeptService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration);
+    }
+
+    private Map<String, Object> adjustSnapshot(String action, boolean withDeptId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("name", "研发三部");
+        payload.put("code", "d_rd3");
+        payload.put("parentId", 2L);
+        payload.put("managerEmpId", 88L);
+        payload.put("effectiveFrom", "2026-11-01");
+        payload.put("effectiveTo", null);
+
+        Map<String, Object> snap = new LinkedHashMap<>();
+        snap.put("kind", "ORG_ADJUST_REQUEST");
+        snap.put("bizKey", "ORG_ADJUST:123");
+        snap.put("action", action);
+        snap.put("deptId", withDeptId ? 456L : null);
+        snap.put("payload", payload);
+        snap.put("reason", "组织架构调整");
+        snap.put("status", "PENDING");
+        return snap;
+    }
+
+    private OrgDeptHistory recordFor(Map<String, Object> snap) {
+        OrgDeptHistory record = new OrgDeptHistory();
+        record.setId(9L);
+        record.setDeptId(456L);
+        record.setSnapshotDate(java.time.LocalDate.parse("2026-11-01"));
+        record.setSnapshot(com.hris.org.util.JsonUtil.toJson(snap));
+        return record;
+    }
+
+    @Nested
+    @DisplayName("幂等：非 PENDING 重复回调直接返回成功")
+    class Idempotency {
+
+        @Test
+        @DisplayName("申请单已 APPROVED → changed=false，不重复应用变更")
+        void skipsTerminalState() {
+            Map<String, Object> snap = adjustSnapshot("UPDATE", true);
+            snap.put("status", "APPROVED");
+            when(deptHistoryMapper.selectOne(any())).thenReturn(recordFor(snap));
+
+            ApprovalCallbackResponse resp = service.handleAdjustCallback("ORG_ADJUST:123", true, null);
+
+            assertFalse(resp.changed());
+            assertEquals("APPROVED", resp.status());
+            verify(deptMapper, never()).insert(any(OrgDept.class));
+            verify(deptHistoryMapper, never()).updateById(any(OrgDeptHistory.class));
+        }
+
+        @Test
+        @DisplayName("驳回后再回调同样幂等（REJECTED 终态）")
+        void skipsRejectedState() {
+            Map<String, Object> snap = adjustSnapshot("UPDATE", true);
+            snap.put("status", "REJECTED");
+            when(deptHistoryMapper.selectOne(any())).thenReturn(recordFor(snap));
+
+            ApprovalCallbackResponse resp = service.handleAdjustCallback("ORG_ADJUST:123", true, null);
+
+            assertFalse(resp.changed());
+            assertEquals("REJECTED", resp.status());
+        }
+    }
+
+    @Nested
+    @DisplayName("状态更新与变更应用")
+    class Apply {
+
+        @Test
+        @DisplayName("审批通过 + CREATE 动作 → 创建部门并置 APPROVED")
+        void appliesCreateAction() {
+            when(deptHistoryMapper.selectOne(any())).thenReturn(recordFor(adjustSnapshot("CREATE", false)));
+            when(deptMapper.selectById(2L)).thenReturn(parent());
+            when(deptMapper.selectCount(any())).thenReturn(0L);
+
+            ApprovalCallbackResponse resp = service.handleAdjustCallback("ORG_ADJUST:123", true, null);
+
+            assertTrue(resp.changed());
+            assertEquals("APPROVED", resp.status());
+            ArgumentCaptor<OrgDept> captor = ArgumentCaptor.forClass(OrgDept.class);
+            verify(deptMapper).insert(captor.capture());
+            assertEquals("研发三部", captor.getValue().getName());
+            verify(deptHistoryMapper).updateById(any(OrgDeptHistory.class));
+        }
+
+        private OrgDept parent() {
+            OrgDept p = new OrgDept();
+            p.setId(2L);
+            p.setPath("1.2");
+            return p;
+        }
+
+        @Test
+        @DisplayName("审批通过 + UPDATE 动作 → 更新部门字段")
+        void appliesUpdateAction() {
+            when(deptHistoryMapper.selectOne(any())).thenReturn(recordFor(adjustSnapshot("UPDATE", true)));
+            OrgDept dept = new OrgDept();
+            dept.setId(456L);
+            dept.setParentId(1L);
+            dept.setName("研发二部");
+            when(deptMapper.selectById(456L)).thenReturn(dept);
+            when(deptMapper.selectById(2L)).thenReturn(parent());
+
+            service.handleAdjustCallback("ORG_ADJUST:123", true, null);
+
+            assertEquals("研发三部", dept.getName());
+            verify(deptMapper).updateById(dept);
+        }
+
+        @Test
+        @DisplayName("审批通过 + 未知动作（自由文本）→ 仅更新状态不应用变更")
+        void updatesStatusOnlyForFreeTextAction() {
+            when(deptHistoryMapper.selectOne(any()))
+                    .thenReturn(recordFor(adjustSnapshot("合并大区", true)));
+
+            ApprovalCallbackResponse resp = service.handleAdjustCallback("ORG_ADJUST:123", true, null);
+
+            assertTrue(resp.changed());
+            assertEquals("APPROVED", resp.status());
+            verify(deptMapper, never()).insert(any(OrgDept.class));
+            verify(deptMapper, never()).updateById(any(OrgDept.class));
+        }
+
+        @Test
+        @DisplayName("驳回 → 置 REJECTED，不应用变更")
+        void rejectsWithoutApply() {
+            when(deptHistoryMapper.selectOne(any())).thenReturn(recordFor(adjustSnapshot("CREATE", false)));
+
+            ApprovalCallbackResponse resp = service.handleAdjustCallback("ORG_ADJUST:123", false, "编制不足");
+
+            assertTrue(resp.changed());
+            assertEquals("REJECTED", resp.status());
+            verify(deptMapper, never()).insert(any(OrgDept.class));
+        }
+
+        @Test
+        @DisplayName("审批意见写入快照 approvalComment")
+        void writesApprovalComment() {
+            when(deptHistoryMapper.selectOne(any())).thenReturn(recordFor(adjustSnapshot("CREATE", false)));
+
+            service.handleAdjustCallback("ORG_ADJUST:123", false, "编制不足");
+
+            ArgumentCaptor<OrgDeptHistory> captor = ArgumentCaptor.forClass(OrgDeptHistory.class);
+            verify(deptHistoryMapper).updateById(captor.capture());
+            assertTrue(captor.getValue().getSnapshot().contains("编制不足"));
+        }
+    }
+
+    @Nested
+    @DisplayName("守卫")
+    class Guards {
+
+        @Test
+        @DisplayName("申请单不存在 → NOT_FOUND")
+        void notFound() {
+            when(deptHistoryMapper.selectOne(any())).thenReturn(null);
+
+            BizException e = assertThrows(BizException.class,
+                    () -> service.handleAdjustCallback("ORG_ADJUST:404", true, null));
+
+            assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
+        }
+
+        @Test
+        @DisplayName("UPDATE 缺 deptId → PARAM_INVALID（保持 PENDING 由 flow 重试）")
+        void updateWithoutDeptId() {
+            when(deptHistoryMapper.selectOne(any()))
+                    .thenReturn(recordFor(adjustSnapshot("UPDATE", false)));
+
+            BizException e = assertThrows(BizException.class,
+                    () -> service.handleAdjustCallback("ORG_ADJUST:123", true, null));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+            verify(deptHistoryMapper, never()).updateById(any(OrgDeptHistory.class));
+        }
+    }
+}

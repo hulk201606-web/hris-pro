@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.common.trace.TraceContext;
+import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.employee.dto.LifecycleCaseResponse;
 import com.hris.employee.entity.Employee;
 import com.hris.employee.entity.LifecycleCase;
@@ -30,6 +31,7 @@ public class LifecycleCaseService {
 
     private static final String STATE_PROCESSING = "PROCESSING";
     private static final String STATE_DONE = "DONE";
+    private static final String STATE_REJECTED = "REJECTED";
 
     private final LifecycleCaseMapper caseMapper;
     private final EmployeeMapper employeeMapper;
@@ -75,41 +77,88 @@ public class LifecycleCaseService {
         return c;
     }
 
-    /** 审批通过回调：生成待生效事务，effect_date 已到则立即落账。 */
+    /**
+     * 审批通过回调：生成待生效事务，effect_date 已到则立即落账。
+     * 保留原守卫语义（非 PROCESSING 抛错），供直接调用方使用；flow 回调请走 {@link #handleCallback}。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void approve(Long tenantId, String bizKey) {
         TraceContext.setTenantId(tenantId);
         TraceContext.setUserId(0L);
         try {
-            LifecycleCase c = caseMapper.selectOne(new LambdaQueryWrapper<LifecycleCase>()
-                    .eq(LifecycleCase::getBizKey, bizKey));
-            if (c == null) {
-                throw new BizException(ErrorCode.NOT_FOUND, "生命周期单不存在");
-            }
+            LifecycleCase c = requireCase(bizKey);
             if (!STATE_PROCESSING.equals(c.getState())) {
                 throw new BizException(ErrorCode.EMP_ERROR, "单据状态不可审批: " + c.getState());
             }
-            LifecycleType type = LifecycleType.fromCode(c.getType());
-            if (type == LifecycleType.RESIGN) {
-                Employee emp = employeeMapper.selectById(c.getEmpId());
-                if (emp == null) {
-                    throw new BizException(ErrorCode.NOT_FOUND, "员工不存在");
-                }
-                stateMachine.transition(emp, EmployeeStatus.RESIGNING, "离职流程通过");
-            }
-            if (pendingService.hasPending(c.getEmpId())) {
-                throw new BizException(ErrorCode.EMP_ERROR, "存在未生效事务，审批通过失败");
-            }
-            Map<String, Object> payload = JsonUtil.toMap(c.getPayload());
-            var tx = pendingService.create(c.getEmpId(), toTransType(type), c.getEffectDate(), payload);
-            c.setState(STATE_DONE);
-            caseMapper.updateById(c);
-            if (c.getEffectDate() != null && !c.getEffectDate().isAfter(LocalDate.now())) {
-                pendingService.applySingle(tenantId, tx.getTransNo());
-            }
+            approveInternal(tenantId, c);
         } finally {
             TraceContext.setTenantId(null);
             TraceContext.setUserId(null);
+        }
+    }
+
+    /**
+     * 审批结果回调（flow → emp，docs/19 §8.7-1）：幂等入口。
+     * case 已是终态（DONE/REJECTED）时重复回调直接返回 changed=false，不重复落账；
+     * approved=true 走 {@link #approveInternal} 生成待生效事务，approved=false 置 REJECTED 终态。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ApprovalCallbackResponse handleCallback(Long tenantId, String bizKey,
+                                                        boolean approved, String comment) {
+        Long tid = tenantId != null ? tenantId : TraceContext.getTenantId();
+        if (tid == null || tid == 0L) {
+            throw new BizException(ErrorCode.TENANT_INVALID);
+        }
+        TraceContext.setTenantId(tid);
+        TraceContext.setUserId(0L);
+        try {
+            LifecycleCase c = requireCase(bizKey);
+            if (!STATE_PROCESSING.equals(c.getState())) {
+                // 幂等：终态重复回调直接返回成功，不重复落账
+                return new ApprovalCallbackResponse(false, c.getState());
+            }
+            if (approved) {
+                approveInternal(tid, c);
+                return new ApprovalCallbackResponse(true, STATE_DONE);
+            }
+            c.setState(STATE_REJECTED);
+            caseMapper.updateById(c);
+            return new ApprovalCallbackResponse(true, STATE_REJECTED);
+        } finally {
+            TraceContext.setTenantId(null);
+            TraceContext.setUserId(null);
+        }
+    }
+
+    private LifecycleCase requireCase(String bizKey) {
+        LifecycleCase c = caseMapper.selectOne(new LambdaQueryWrapper<LifecycleCase>()
+                .eq(LifecycleCase::getBizKey, bizKey)
+                .last("limit 1"));
+        if (c == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "生命周期单不存在");
+        }
+        return c;
+    }
+
+    /** 审批通过落地：离职先推进状态机，再生成待生效事务（生效日已到则立即落账）。 */
+    private void approveInternal(Long tenantId, LifecycleCase c) {
+        LifecycleType type = LifecycleType.fromCode(c.getType());
+        if (type == LifecycleType.RESIGN) {
+            Employee emp = employeeMapper.selectById(c.getEmpId());
+            if (emp == null) {
+                throw new BizException(ErrorCode.NOT_FOUND, "员工不存在");
+            }
+            stateMachine.transition(emp, EmployeeStatus.RESIGNING, "离职流程通过");
+        }
+        if (pendingService.hasPending(c.getEmpId())) {
+            throw new BizException(ErrorCode.EMP_ERROR, "存在未生效事务，审批通过失败");
+        }
+        Map<String, Object> payload = JsonUtil.toMap(c.getPayload());
+        var tx = pendingService.create(c.getEmpId(), toTransType(type), c.getEffectDate(), payload);
+        c.setState(STATE_DONE);
+        caseMapper.updateById(c);
+        if (c.getEffectDate() != null && !c.getEffectDate().isAfter(LocalDate.now())) {
+            pendingService.applySingle(tenantId, tx.getTransNo());
         }
     }
 

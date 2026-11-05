@@ -44,16 +44,19 @@ public class InstanceService {
     private final BizRelationMapper bizRelationMapper;
     private final AssigneeResolver assigneeResolver;
     private final EventOutboxService eventOutboxService;
+    private final ApprovalCallbackDispatcher callbackDispatcher;
 
     public InstanceService(RuntimeService runtimeService, HistoryService historyService,
                            BizRelationService bizRelationService, BizRelationMapper bizRelationMapper,
-                           AssigneeResolver assigneeResolver, EventOutboxService eventOutboxService) {
+                           AssigneeResolver assigneeResolver, EventOutboxService eventOutboxService,
+                           ApprovalCallbackDispatcher callbackDispatcher) {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.bizRelationService = bizRelationService;
         this.bizRelationMapper = bizRelationMapper;
         this.assigneeResolver = assigneeResolver;
         this.eventOutboxService = eventOutboxService;
+        this.callbackDispatcher = callbackDispatcher;
     }
 
     /**
@@ -104,7 +107,7 @@ public class InstanceService {
     }
 
     /**
-     * 撤回流程实例（仅当无已处理节点时允许，docs/04 §5）。
+     * 撤回流程实例（仅当无已处理节点时允许，docs/04 §5），以 WITHDRAWN 语义通知业务域。
      */
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(String instanceId, String reason) {
@@ -121,6 +124,8 @@ public class InstanceService {
         eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, rel.getTenantId(), rel.getBizKey(),
                 Map.of("procInstId", instanceId, "bizType", rel.getBizType(), "bizKey", rel.getBizKey(),
                         "outcome", "WITHDRAWN"));
+        callbackDispatcher.dispatchOnTerminal(rel.getBizType(), rel.getBizKey(), rel.getTenantId(),
+                false, "WITHDRAWN", null, instanceId);
     }
 
     /**
