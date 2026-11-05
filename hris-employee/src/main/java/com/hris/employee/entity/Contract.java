@@ -19,7 +19,7 @@ public class Contract extends BaseEntity {
     /** 合同编号（租户内唯一） */
     private String contractNo;
 
-    /** 合同类型 FIXED/OPEN_ENDED/INTERN */
+    /** 合同类型 FIXED/OPEN_ENDED/LABOR/INTERN（LABOR=劳务合同） */
     private String type;
 
     /** 合同开始日 */
@@ -30,6 +30,9 @@ public class Contract extends BaseEntity {
 
     /** 试用期结束日 */
     private LocalDate probationEnd;
+
+    /** 签订法人 ID（逻辑外键 org_legal_entity.id，多法人合同维度，NULL=未指定） */
+    private Long legalEntityId;
 
     /** 续签次数 */
     private Integer renewCnt;
@@ -86,6 +89,14 @@ public class Contract extends BaseEntity {
 
     public void setProbationEnd(LocalDate probationEnd) {
         this.probationEnd = probationEnd;
+    }
+
+    public Long getLegalEntityId() {
+        return legalEntityId;
+    }
+
+    public void setLegalEntityId(Long legalEntityId) {
+        this.legalEntityId = legalEntityId;
     }
 
     public Integer getRenewCnt() {

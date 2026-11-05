@@ -5,10 +5,13 @@ import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.common.trace.TraceContext;
 import com.hris.employee.entity.Employee;
+import com.hris.employee.entity.Employment;
 import com.hris.employee.entity.PendingTransaction;
 import com.hris.employee.enums.EmployeeStatus;
 import com.hris.employee.enums.PendingTransType;
+import com.hris.employee.dto.HcOccupancyRequest;
 import com.hris.employee.integration.AccountIntegration;
+import com.hris.employee.integration.HeadcountIntegration;
 import com.hris.employee.mapper.EmployeeMapper;
 import com.hris.employee.mapper.PendingTransactionMapper;
 import com.hris.employee.util.CodeUtil;
@@ -40,15 +43,17 @@ public class PendingTransactionService {
     private final EmployeeStateMachine stateMachine;
     private final EmploymentService employmentService;
     private final AccountIntegration accountIntegration;
+    private final HeadcountIntegration headcountIntegration;
 
     public PendingTransactionService(PendingTransactionMapper pendingMapper, EmployeeMapper employeeMapper,
                                      EmployeeStateMachine stateMachine, EmploymentService employmentService,
-                                     AccountIntegration accountIntegration) {
+                                     AccountIntegration accountIntegration, HeadcountIntegration headcountIntegration) {
         this.pendingMapper = pendingMapper;
         this.employeeMapper = employeeMapper;
         this.stateMachine = stateMachine;
         this.employmentService = employmentService;
         this.accountIntegration = accountIntegration;
+        this.headcountIntegration = headcountIntegration;
     }
 
     /** 生成待生效事务（审批通过调用）。payload 为事务载荷（日期字段请以字符串存入）。 */
@@ -141,6 +146,8 @@ public class PendingTransactionService {
                 asLong(p, "supervisorEmpId"), tx.getEffectDate());
         accountIntegration.createAccount(TraceContext.getTenantId(), emp.getId(),
                 asStr(p, "username"), asStr(p, "password"), stringList(p, "roleCodes"));
+        writebackOccupancy(emp.getId(), asLong(p, "deptId"), asLong(p, "positionId"),
+                1, tx.getTransNo());
     }
 
     private void applyRegular(PendingTransaction tx) {
@@ -153,17 +160,43 @@ public class PendingTransactionService {
         var current = employmentService.current(emp.getId());
         Long legalEntityId = current == null ? null : current.getLegalEntityId();
         String hireType = current == null ? null : current.getHireType();
+        // 旧部门/岗位释放占用（fail-open，须在 closeCurrent 前取现行雇佣关系）
+        writebackOccupancy(emp.getId(),
+                current == null ? null : current.getDeptId(),
+                current == null ? null : current.getPositionId(),
+                -1, tx.getTransNo() + ":OUT");
         employmentService.closeCurrent(emp.getId(), tx.getEffectDate());
         employmentService.open(emp.getId(), legalEntityId, asLong(p, "targetDeptId"),
                 asLong(p, "targetPositionId"), asLong(p, "targetGradeId"), hireType,
                 asLong(p, "targetSupervisorEmpId"), tx.getEffectDate());
+        writebackOccupancy(emp.getId(), asLong(p, "targetDeptId"), asLong(p, "targetPositionId"),
+                1, tx.getTransNo() + ":IN");
     }
 
     private void applyResign(PendingTransaction tx) {
         Employee emp = require(tx.getEmpId());
+        var current = employmentService.current(emp.getId());
         stateMachine.transition(emp, EmployeeStatus.RESIGNED, "离职生效");
+        // 须在 closeCurrent 前取现行雇佣关系定位旧部门/岗位
+        writebackOccupancy(emp.getId(),
+                current == null ? null : current.getDeptId(),
+                current == null ? null : current.getPositionId(),
+                -1, tx.getTransNo());
         employmentService.closeCurrent(emp.getId(), tx.getEffectDate());
         accountIntegration.disable(TraceContext.getTenantId(), emp.getId());
+    }
+
+    /**
+     * 编制占用回写（§10.5-B8）：dept/position 不全时跳过（历史数据缺雇佣关系）；
+     * org 不可用时 fail-open（HeadcountIntegration.writeback 内 log.warn），不阻断落账。
+     * 幂等键：单腿事务用 transNo 原值，调动双腿用 transNo:OUT/:IN 后缀。
+     */
+    private void writebackOccupancy(Long empId, Long deptId, Long positionId,
+                                    int delta, String transNo) {
+        if (empId == null || deptId == null || positionId == null) {
+            return;
+        }
+        headcountIntegration.writeback(new HcOccupancyRequest(empId, deptId, positionId, null, delta, transNo));
     }
 
     private Employee require(Long empId) {

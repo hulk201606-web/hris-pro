@@ -8,6 +8,7 @@ import com.hris.employee.dto.ContractDtos.ContractExpiringItem;
 import com.hris.employee.dto.ContractDtos.ContractResponse;
 import com.hris.employee.entity.Contract;
 import com.hris.employee.entity.Employee;
+import com.hris.employee.enums.ContractType;
 import com.hris.employee.mapper.ContractMapper;
 import com.hris.employee.mapper.EmployeeMapper;
 import com.hris.employee.util.CodeUtil;
@@ -35,17 +36,24 @@ public class ContractService {
         this.employeeMapper = employeeMapper;
     }
 
-    public List<ContractResponse> list(Long empId) {
-        return contractMapper.selectList(new LambdaQueryWrapper<Contract>()
-                        .eq(Contract::getEmpId, empId)
-                        .orderByDesc(Contract::getId))
-                .stream().map(this::toResponse).toList();
+    /** 台账查询：按员工（必填）+ 签订法人（可选）过滤，按 ID 倒序。 */
+    public List<ContractResponse> list(Long empId, Long legalEntityId) {
+        LambdaQueryWrapper<Contract> qw = new LambdaQueryWrapper<Contract>()
+                .eq(Contract::getEmpId, empId);
+        if (legalEntityId != null) {
+            qw.eq(Contract::getLegalEntityId, legalEntityId);
+        }
+        qw.orderByDesc(Contract::getId);
+        return contractMapper.selectList(qw).stream().map(this::toResponse).toList();
     }
 
     @Transactional(rollbackFor = Exception.class)
     public ContractResponse create(ContractCreateRequest req) {
         if (employeeMapper.selectById(req.empId()) == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "员工不存在");
+        }
+        if (req.type() != null && ContractType.fromCode(req.type()) == null) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "未知合同类型: " + req.type());
         }
         Contract c = new Contract();
         c.setEmpId(req.empId());
@@ -55,6 +63,7 @@ public class ContractService {
         c.setStartDate(req.startDate());
         c.setEndDate(req.endDate());
         c.setProbationEnd(req.probationEnd());
+        c.setLegalEntityId(req.legalEntityId());
         c.setRenewCnt(0);
         c.setFileId(req.fileId());
         c.setStatus(1);
@@ -122,7 +131,7 @@ public class ContractService {
 
     private ContractResponse toResponse(Contract c) {
         return new ContractResponse(c.getId(), c.getEmpId(), c.getContractNo(), c.getType(),
-                c.getStartDate(), c.getEndDate(), c.getProbationEnd(), c.getRenewCnt(),
-                c.getFileId(), c.getStatus());
+                c.getStartDate(), c.getEndDate(), c.getProbationEnd(), c.getLegalEntityId(),
+                c.getRenewCnt(), c.getFileId(), c.getStatus());
     }
 }

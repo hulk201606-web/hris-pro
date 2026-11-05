@@ -4,6 +4,7 @@ import com.hris.common.api.R;
 import com.hris.common.security.RequirePerm;
 import com.hris.org.dto.CatalogRequest;
 import com.hris.org.dto.CatalogResponse;
+import com.hris.org.dto.PositionDeptRequest;
 import com.hris.org.service.PositionService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -56,6 +57,31 @@ public class PositionController {
     @DeleteMapping("/positions/{id}")
     public R<Void> delete(@PathVariable Long id) {
         positionService.delete(id);
+        return R.ok();
+    }
+
+    /**
+     * 岗位×部门挂靠整体替换（ORG-F-006 深化）：deptIds 空列表即清空；重复提交幂等。
+     */
+    @RequirePerm("org:position:write")
+    @PostMapping("/positions/{id}/depts")
+    public R<List<Long>> replaceDepts(@PathVariable Long id,
+                                      @RequestBody PositionDeptRequest req) {
+        return R.ok(positionService.replaceDepts(id, req));
+    }
+
+    /** 查询岗位挂靠的部门 ID 列表。 */
+    @RequirePerm("org:position:read")
+    @GetMapping("/positions/{id}/depts")
+    public R<List<Long>> listDepts(@PathVariable Long id) {
+        return R.ok(positionService.listDepts(id));
+    }
+
+    /** 清空岗位挂靠。 */
+    @RequirePerm("org:position:write")
+    @DeleteMapping("/positions/{id}/depts")
+    public R<Void> clearDepts(@PathVariable Long id) {
+        positionService.clearDepts(id);
         return R.ok();
     }
 }

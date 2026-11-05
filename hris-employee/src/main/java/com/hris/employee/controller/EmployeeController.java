@@ -8,6 +8,10 @@ import com.hris.employee.dto.EmployeeDtos.EmployeeProfileResponse;
 import com.hris.employee.dto.EmployeeDtos.RehireCheckResponse;
 import com.hris.employee.dto.EmployeeDtos.EmployeeUpdateRequest;
 import com.hris.employee.dto.PageResult;
+import com.hris.employee.dto.ProfileDtos.ProfileEducationDto;
+import com.hris.employee.dto.ProfileDtos.ProfileEmergencyDto;
+import com.hris.employee.dto.ProfileDtos.ProfileFamilyDto;
+import com.hris.employee.dto.ProfileDtos.ProfileWorkDto;
 import com.hris.employee.service.EmployeeService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 员工档案端点（花名册 / 建档 / 档案 / 黑名单）。
@@ -82,6 +88,38 @@ public class EmployeeController {
     @GetMapping("/rehire-check")
     public R<RehireCheckResponse> rehireCheck(@RequestParam String certNo) {
         return R.ok(employeeService.rehireCheck(certNo));
+    }
+
+    /** 教育经历分签独立整体替换（EMP-F-001）：请求体为教育经历数组，整体覆盖该子表。 */
+    @RequirePerm("emp:employee:write")
+    @PutMapping("/employees/{id}/profile/educations")
+    public R<EmployeeProfileResponse> updateEducations(@PathVariable Long id,
+                                                       @RequestBody List<ProfileEducationDto> educations) {
+        return R.ok(employeeService.updateEducations(id, educations));
+    }
+
+    /** 工作经历分签独立整体替换：请求体为工作经历数组，整体覆盖该子表。 */
+    @RequirePerm("emp:employee:write")
+    @PutMapping("/employees/{id}/profile/works")
+    public R<EmployeeProfileResponse> updateWorks(@PathVariable Long id,
+                                                  @RequestBody List<ProfileWorkDto> works) {
+        return R.ok(employeeService.updateWorks(id, works));
+    }
+
+    /** 家庭成员分签独立整体替换：请求体为家庭成员数组，整体覆盖该子表。 */
+    @RequirePerm("emp:employee:write")
+    @PutMapping("/employees/{id}/profile/families")
+    public R<EmployeeProfileResponse> updateFamilies(@PathVariable Long id,
+                                                     @RequestBody List<ProfileFamilyDto> families) {
+        return R.ok(employeeService.updateFamilies(id, families));
+    }
+
+    /** 紧急联系人分签独立整体替换：请求体为紧急联系人数组，整体覆盖该子表。 */
+    @RequirePerm("emp:employee:write")
+    @PutMapping("/employees/{id}/profile/emergencies")
+    public R<EmployeeProfileResponse> updateEmergencies(@PathVariable Long id,
+                                                        @RequestBody List<ProfileEmergencyDto> emergencies) {
+        return R.ok(employeeService.updateEmergencies(id, emergencies));
     }
 
     /** 加入黑名单（EMP-F-016）：终态标记，经状态机流转并落状态流水，后续招聘侧以此过滤。 */

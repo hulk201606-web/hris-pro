@@ -4,11 +4,13 @@ import com.hris.common.api.R;
 import com.hris.common.security.RequirePerm;
 import com.hris.org.dto.AdjustRequestCreate;
 import com.hris.org.dto.AdjustRequestResponse;
+import com.hris.org.dto.DeptMoveRequest;
 import com.hris.org.dto.DeptNode;
 import com.hris.org.dto.DeptRequest;
 import com.hris.org.service.DeptService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -73,5 +75,26 @@ public class DeptController {
     @PostMapping("/depts/adjust-requests")
     public R<AdjustRequestResponse> adjust(@Valid @RequestBody AdjustRequestCreate req) {
         return R.ok(deptService.adjust(req));
+    }
+
+    /**
+     * 删除部门（ORG-F-018 级联校验，逻辑删除）：有子部门/在职员工/编制占用流水任一命中即拒绝；
+     * 守卫通过后一并逻辑删除其编制计划行。
+     */
+    @RequirePerm("org:dept:write")
+    @DeleteMapping("/depts/{id}")
+    public R<Void> delete(@PathVariable Long id) {
+        deptService.delete(id);
+        return R.ok();
+    }
+
+    /**
+     * 部门移动 + 兄弟排序（ORG-F-002 深化拖拽排序）：校验非自祖循环与树深度 ≤8，
+     * 更新父部门并重算物化路径，兄弟序列按 sortOrder 连续重排。
+     */
+    @RequirePerm("org:dept:write")
+    @PostMapping("/depts/{id}/move")
+    public R<DeptNode> move(@PathVariable Long id, @RequestBody DeptMoveRequest req) {
+        return R.ok(deptService.move(id, req));
     }
 }

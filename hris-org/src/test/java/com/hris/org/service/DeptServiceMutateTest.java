@@ -50,7 +50,7 @@ class DeptServiceMutateTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration);
+        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration, null, null, null);
     }
 
     private OrgDept parent(long id, int depth) {

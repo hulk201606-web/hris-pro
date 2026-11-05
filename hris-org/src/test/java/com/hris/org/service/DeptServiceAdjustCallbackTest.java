@@ -47,7 +47,7 @@ class DeptServiceAdjustCallbackTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration);
+        service = new DeptService(deptMapper, deptHistoryMapper, flowIntegration, null, null, null);
     }
 
     private Map<String, Object> adjustSnapshot(String action, boolean withDeptId) {

@@ -28,6 +28,18 @@ public class EmploymentService {
                 .isNull(Employment::getEffectiveTo));
     }
 
+    /**
+     * 按部门统计在职员工数（ORG-F-018 级联校验用：有在职员工的部门不可删除）。
+     * 在职 = 现行雇佣关系（status=1 且 effective_to IS NULL）。
+     */
+    public long countActiveByDept(Long deptId) {
+        Long cnt = employmentMapper.selectCount(new LambdaQueryWrapper<Employment>()
+                .eq(Employment::getDeptId, deptId)
+                .eq(Employment::getStatus, 1)
+                .isNull(Employment::getEffectiveTo));
+        return cnt == null ? 0 : cnt;
+    }
+
     /** 关闭现行雇佣关系（effective_to = 结束日，status=0）。 */
     public void closeCurrent(Long empId, LocalDate effectiveTo) {
         Employment cur = current(empId);

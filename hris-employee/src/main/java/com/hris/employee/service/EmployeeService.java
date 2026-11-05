@@ -13,6 +13,10 @@ import com.hris.employee.dto.EmployeeDtos.EmploymentInfo;
 import com.hris.employee.dto.EmployeeDtos.RehireCheckResponse;
 import com.hris.employee.dto.EmployeeDtos.RehireHistoryItem;
 import com.hris.employee.dto.PageResult;
+import com.hris.employee.dto.ProfileDtos.ProfileEducationDto;
+import com.hris.employee.dto.ProfileDtos.ProfileEmergencyDto;
+import com.hris.employee.dto.ProfileDtos.ProfileFamilyDto;
+import com.hris.employee.dto.ProfileDtos.ProfileWorkDto;
 import com.hris.employee.entity.ChangeAudit;
 import com.hris.employee.entity.Employee;
 import com.hris.employee.entity.Employment;
@@ -21,6 +25,7 @@ import com.hris.employee.mapper.ChangeAuditMapper;
 import com.hris.employee.mapper.EmployeeMapper;
 import com.hris.employee.mapper.EmploymentMapper;
 import com.hris.employee.util.MaskUtil;
+import com.hris.common.security.AuthContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +42,15 @@ import java.util.stream.Collectors;
 /** 员工档案（EMP-F-001 建档/详情/更新、EMP-F-016 黑名单、EMP-F-022 花名册、内部档案简报）。 */
 @Service
 public class EmployeeService {
+
+    /**
+     * 字段组读取权限码（EMP-F-001 分签维护：无对应权限码时该分组脱敏返回空集合）。
+     * 常量命名须符合 scripts/seed_rbac_from_source.py 的 PERM 常量扫描规则，授予 admin。
+     */
+    public static final String PERM_PROFILE_READ_EDUCATION = "emp:profile:read-education";
+    public static final String PERM_PROFILE_READ_WORK = "emp:profile:read-work";
+    public static final String PERM_PROFILE_READ_FAMILY = "emp:profile:read-family";
+    public static final String PERM_PROFILE_READ_EMERGENCY = "emp:profile:read-emergency";
 
     private final EmployeeMapper employeeMapper;
     private final EmploymentMapper employmentMapper;
@@ -140,6 +154,38 @@ public class EmployeeService {
         }
         employeeMapper.updateById(e);
         profileService.replace(id, req.educations(), req.works(), req.families(), req.emergencies());
+        return get(id);
+    }
+
+    /** 教育经历分签独立整体替换（EMP-F-001：null 保留旧数据，空列表清空该域）。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EmployeeProfileResponse updateEducations(Long id, List<ProfileEducationDto> educations) {
+        require(id);
+        profileService.replaceEducations(id, educations);
+        return get(id);
+    }
+
+    /** 工作经历分签独立整体替换。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EmployeeProfileResponse updateWorks(Long id, List<ProfileWorkDto> works) {
+        require(id);
+        profileService.replaceWorks(id, works);
+        return get(id);
+    }
+
+    /** 家庭成员分签独立整体替换。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EmployeeProfileResponse updateFamilies(Long id, List<ProfileFamilyDto> families) {
+        require(id);
+        profileService.replaceFamilies(id, families);
+        return get(id);
+    }
+
+    /** 紧急联系人分签独立整体替换。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EmployeeProfileResponse updateEmergencies(Long id, List<ProfileEmergencyDto> emergencies) {
+        require(id);
+        profileService.replaceEmergencies(id, emergencies);
         return get(id);
     }
 
@@ -311,7 +357,23 @@ public class EmployeeService {
                 emp == null ? null : new EmploymentInfo(emp.getLegalEntityId(), emp.getDeptId(),
                         emp.getPositionId(), emp.getGradeId(), emp.getHireType(),
                         emp.getSupervisorEmpId(), emp.getEffectiveFrom()),
-                ps.educations(), ps.works(), ps.families(), ps.emergencies());
+                visibleGroup(ps.educations(), PERM_PROFILE_READ_EDUCATION),
+                visibleGroup(ps.works(), PERM_PROFILE_READ_WORK),
+                visibleGroup(ps.families(), PERM_PROFILE_READ_FAMILY),
+                visibleGroup(ps.emergencies(), PERM_PROFILE_READ_EMERGENCY));
+    }
+
+    /**
+     * 字段组权限过滤（EMP-F-001 字段分组权限）：当前用户无该组权限码时整组返回空集合（脱敏兜底）。
+     * 权限上下文缺失（内部调度/系统调用）同样视为无权限，宁可不发不可多发。
+     */
+    private <T> List<T> visibleGroup(List<T> list, String perm) {
+        return hasPerm(perm) ? list : List.of();
+    }
+
+    private boolean hasPerm(String perm) {
+        java.util.Set<String> perms = AuthContextHolder.getPerms();
+        return perms != null && perms.contains(perm);
     }
 
     private String statusLabel(Integer code) {

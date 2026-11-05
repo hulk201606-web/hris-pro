@@ -45,13 +45,15 @@ class PendingTransactionTraceContextTest {
     private EmploymentService employmentService;
     @Mock
     private AccountIntegration accountIntegration;
+    @Mock
+    private com.hris.employee.integration.HeadcountIntegration headcountIntegration;
 
     private PendingTransactionService service;
 
     @BeforeEach
     void setUp() {
         service = new PendingTransactionService(pendingMapper, employeeMapper, stateMachine,
-                employmentService, accountIntegration);
+                employmentService, accountIntegration, headcountIntegration);
     }
 
     @AfterEach

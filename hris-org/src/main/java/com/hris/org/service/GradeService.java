@@ -80,6 +80,6 @@ public class GradeService {
     }
 
     private CatalogResponse toResponse(OrgGrade e) {
-        return new CatalogResponse(e.getId(), e.getName(), e.getCode(), e.getStatus(), e.getGradeBandId());
+        return new CatalogResponse(e.getId(), e.getName(), e.getCode(), e.getStatus(), e.getGradeBandId(), null);
     }
 }

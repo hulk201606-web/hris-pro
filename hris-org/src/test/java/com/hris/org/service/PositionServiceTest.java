@@ -34,12 +34,14 @@ class PositionServiceTest {
 
     @Mock
     private OrgPositionMapper mapper;
+    @Mock
+    private com.hris.org.mapper.OrgPositionDeptMapper positionDeptMapper;
 
     private PositionService service;
 
     @BeforeEach
     void setUp() {
-        service = new PositionService(mapper);
+        service = new PositionService(mapper, positionDeptMapper);
     }
 
     private OrgPosition existing() {

@@ -73,6 +73,6 @@ public class GradeBandService {
     }
 
     private CatalogResponse toResponse(OrgGradeBand e) {
-        return new CatalogResponse(e.getId(), e.getName(), e.getCode(), null, null);
+        return new CatalogResponse(e.getId(), e.getName(), e.getCode(), null, null, null);
     }
 }

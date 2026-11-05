@@ -32,11 +32,12 @@ public class ContractController {
         this.contractService = contractService;
     }
 
-    /** 查询某员工的全部合同台账（按签订日期倒序）。 */
+    /** 查询某员工的合同台账（按签订法人可选过滤，legalEntityId 为 EMP-F-014 多法人维度），按 ID 倒序。 */
     @RequirePerm("emp:contract:read")
     @GetMapping
-    public R<List<ContractResponse>> list(@RequestParam Long empId) {
-        return R.ok(contractService.list(empId));
+    public R<List<ContractResponse>> list(@RequestParam Long empId,
+                                          @RequestParam(required = false) Long legalEntityId) {
+        return R.ok(contractService.list(empId, legalEntityId));
     }
 
     /** 新签合同：登记合同类型、起止日期、签订方，写入合同台账。 */

@@ -38,6 +38,17 @@ public class OrgDept extends BaseEntity {
     /** 状态 1=有效 0=失效 */
     private Integer status;
 
+    /** 兄弟排序号（ORG-F-002 深化拖拽排序，0..n-1 连续重排） */
+    private Integer sortOrder;
+
+    public Integer getSortOrder() {
+        return sortOrder;
+    }
+
+    public void setSortOrder(Integer sortOrder) {
+        this.sortOrder = sortOrder;
+    }
+
     public Long getParentId() {
         return parentId;
     }

@@ -3,12 +3,14 @@ package com.hris.employee.controller;
 import com.hris.common.api.R;
 import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackRequest;
 import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackResponse;
+import com.hris.employee.dto.EmployeeDtos.ProbationReminderItem;
 import com.hris.employee.dto.PreCreateRequest;
 import com.hris.employee.dto.PreHireLinkResponse;
 import com.hris.employee.service.EmployeeService;
 import com.hris.employee.service.LifecycleCaseService;
 import com.hris.employee.service.PendingTransactionService;
 import com.hris.employee.service.PreHireService;
+import com.hris.employee.service.ProbationReminderService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,14 +35,20 @@ public class EmployeeInternalController {
     private final PreHireService preHireService;
     private final LifecycleCaseService lifecycleCaseService;
     private final PendingTransactionService pendingTransactionService;
+    private final ProbationReminderService probationReminderService;
+    private final com.hris.employee.service.EmploymentService employmentService;
 
     public EmployeeInternalController(EmployeeService employeeService, PreHireService preHireService,
                                       LifecycleCaseService lifecycleCaseService,
-                                      PendingTransactionService pendingTransactionService) {
+                                      PendingTransactionService pendingTransactionService,
+                                      ProbationReminderService probationReminderService,
+                                      com.hris.employee.service.EmploymentService employmentService) {
         this.employeeService = employeeService;
         this.preHireService = preHireService;
         this.lifecycleCaseService = lifecycleCaseService;
         this.pendingTransactionService = pendingTransactionService;
+        this.probationReminderService = probationReminderService;
+        this.employmentService = employmentService;
     }
 
     /** 员工档案简报（内部端点）：供 org 汇报线解析等跨域调用，返回姓名/工号/状态/部门/岗位/直属上级。 */
@@ -85,5 +94,23 @@ public class EmployeeInternalController {
             @RequestParam(required = false) LocalDate effectDate) {
         return R.ok(pendingTransactionService.applyDue(tenantId,
                 effectDate != null ? effectDate : LocalDate.now()));
+    }
+
+    /**
+     * 试用期到期提醒（EMP-F-007 深化，platform 调度任务 PROBATION_REMINDER 经 Feign 拉取）。
+     * 返回 probation_end 落在 [今天, 今天+windowDays] 的有效合同与员工摘要（缺省窗口 15 天）。
+     */
+    @GetMapping("/probation-reminders")
+    public R<List<ProbationReminderItem>> probationReminders(
+            @RequestParam(defaultValue = "15") int windowDays) {
+        return R.ok(probationReminderService.reminders(windowDays));
+    }
+
+    /**
+     * 按部门统计在职员工数（ORG-F-018 级联校验，org 删除部门前调用）：在职=现行雇佣关系。
+     */
+    @GetMapping("/count-active-by-dept")
+    public R<Long> countActiveByDept(@RequestParam Long deptId) {
+        return R.ok(employmentService.countActiveByDept(deptId));
     }
 }

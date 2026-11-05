@@ -76,6 +76,6 @@ public class JobService {
     }
 
     private CatalogResponse toResponse(OrgJob e) {
-        return new CatalogResponse(e.getId(), e.getName(), e.getCode(), e.getStatus(), null);
+        return new CatalogResponse(e.getId(), e.getName(), e.getCode(), e.getStatus(), null, null);
     }
 }

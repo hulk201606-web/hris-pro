@@ -59,7 +59,11 @@ public class ProfileService {
         replaceEmergencies(employeeId, emergencies);
     }
 
-    private void replaceEducations(Long employeeId, List<ProfileEducationDto> list) {
+    /**
+     * 教育经历整体替换（EMP-F-001 分签独立维护）。null 不动（保留旧数据），空列表清空该域。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void replaceEducations(Long employeeId, List<ProfileEducationDto> list) {
         if (list == null) {
             return;
         }
@@ -76,7 +80,9 @@ public class ProfileService {
         }
     }
 
-    private void replaceWorks(Long employeeId, List<ProfileWorkDto> list) {
+    /** 工作经历整体替换。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void replaceWorks(Long employeeId, List<ProfileWorkDto> list) {
         if (list == null) {
             return;
         }
@@ -93,7 +99,9 @@ public class ProfileService {
         }
     }
 
-    private void replaceFamilies(Long employeeId, List<ProfileFamilyDto> list) {
+    /** 家庭成员整体替换。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void replaceFamilies(Long employeeId, List<ProfileFamilyDto> list) {
         if (list == null) {
             return;
         }
@@ -109,7 +117,9 @@ public class ProfileService {
         }
     }
 
-    private void replaceEmergencies(Long employeeId, List<ProfileEmergencyDto> list) {
+    /** 紧急联系人整体替换。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void replaceEmergencies(Long employeeId, List<ProfileEmergencyDto> list) {
         if (list == null) {
             return;
         }

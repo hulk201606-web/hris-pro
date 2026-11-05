@@ -79,4 +79,13 @@ public final class EmployeeDtos {
     public record RehireHistoryItem(Long empId, String empNo, String name,
                                     Integer status, String statusLabel, Integer blacklisted) {
     }
+
+    /**
+     * 试用期到期提醒项（EMP-F-007 深化，platform PROBATION_REMINDER 调度用）。
+     * level 取 D15/D7/D3（剩余天数命中 15/7/3 档），按 daysRemaining 归档。
+     */
+    public record ProbationReminderItem(
+            Long contractId, Long empId, String empNo, String name, Long deptId,
+            LocalDate probationEnd, long daysRemaining, String level) {
+    }
 }

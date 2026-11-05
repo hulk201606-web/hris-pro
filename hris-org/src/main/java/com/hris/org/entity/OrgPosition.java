@@ -20,6 +20,17 @@ public class OrgPosition extends BaseEntity {
     /** 状态 1=有效 0=失效 */
     private Integer status;
 
+    /** 岗位序列（ORG-F-006 深化，如 TECH/SALES/FUNC，NULL=未分类） */
+    private String jobFamily;
+
+    public String getJobFamily() {
+        return jobFamily;
+    }
+
+    public void setJobFamily(String jobFamily) {
+        this.jobFamily = jobFamily;
+    }
+
     public String getName() {
         return name;
     }

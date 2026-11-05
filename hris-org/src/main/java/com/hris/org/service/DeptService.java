@@ -2,17 +2,24 @@ package com.hris.org.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.hris.common.api.R;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
+import com.hris.org.client.EmployeeClient;
 import com.hris.org.dto.AdjustRequestCreate;
 import com.hris.org.dto.AdjustRequestResponse;
 import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
+import com.hris.org.dto.DeptMoveRequest;
 import com.hris.org.dto.DeptNode;
 import com.hris.org.dto.DeptRequest;
 import com.hris.org.entity.OrgDept;
 import com.hris.org.entity.OrgDeptHistory;
+import com.hris.org.entity.OrgHeadcount;
+import com.hris.org.entity.OrgHcOccupancy;
 import com.hris.org.mapper.OrgDeptHistoryMapper;
 import com.hris.org.mapper.OrgDeptMapper;
+import com.hris.org.mapper.OrgHeadcountMapper;
+import com.hris.org.mapper.OrgHcOccupancyMapper;
 import com.hris.org.util.CodeUtil;
 import com.hris.org.util.JsonUtil;
 import org.springframework.stereotype.Service;
@@ -20,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,12 +44,19 @@ public class DeptService {
     private final OrgDeptMapper deptMapper;
     private final OrgDeptHistoryMapper deptHistoryMapper;
     private final FlowIntegration flowIntegration;
+    private final EmployeeClient employeeClient;
+    private final OrgHeadcountMapper headcountMapper;
+    private final OrgHcOccupancyMapper occupancyMapper;
 
     public DeptService(OrgDeptMapper deptMapper, OrgDeptHistoryMapper deptHistoryMapper,
-                       FlowIntegration flowIntegration) {
+                       FlowIntegration flowIntegration, EmployeeClient employeeClient,
+                       OrgHeadcountMapper headcountMapper, OrgHcOccupancyMapper occupancyMapper) {
         this.deptMapper = deptMapper;
         this.deptHistoryMapper = deptHistoryMapper;
         this.flowIntegration = flowIntegration;
+        this.employeeClient = employeeClient;
+        this.headcountMapper = headcountMapper;
+        this.occupancyMapper = occupancyMapper;
     }
 
     /** 部门树/列表查询（tree=true 返回嵌套树，否则返回扁平当前生效部门）。 */
@@ -132,12 +147,13 @@ public class DeptService {
         return toNode(dept);
     }
 
-    /** 历史快照查询（at 为空取最新）。 */
+    /** 历史快照查询（at 为空取最新）。仅取真实部门快照，排除 kind=ORG_ADJUST_REQUEST 的申请单行（§10.5-B7 污染修复）。 */
     public Map<String, Object> snapshot(Long id, LocalDate at) {
         LocalDate date = at == null ? LocalDate.now() : at;
         OrgDeptHistory history = deptHistoryMapper.selectOne(new LambdaQueryWrapper<OrgDeptHistory>()
                 .eq(OrgDeptHistory::getDeptId, id)
                 .le(OrgDeptHistory::getSnapshotDate, date)
+                .notLike(OrgDeptHistory::getSnapshot, "ORG_ADJUST_REQUEST")
                 .orderByDesc(OrgDeptHistory::getSnapshotDate)
                 .last("LIMIT 1"));
         if (history != null) {
@@ -285,6 +301,98 @@ public class DeptService {
             return LocalDate.parse(String.valueOf(v));
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * 删除部门（ORG-F-018 级联校验，逻辑删除）。守卫链：
+     * <ol>
+     *   <li>存在子部门 → 拒绝；</li>
+     *   <li>存在在职员工（emp 内部端点计数，fail-closed：员工服务不可用即拒绝）→ 拒绝；</li>
+     *   <li>存在编制占用流水（org_hc_occupancy）→ 拒绝；</li>
+     * </ol>
+     * 守卫通过后删除部门并一并逻辑删除其编制计划行（org_headcount）；
+     * 删除前落历史快照，保留审计轨迹。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        OrgDept dept = deptMapper.selectById(id);
+        if (dept == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "部门不存在");
+        }
+        Long children = deptMapper.selectCount(new LambdaQueryWrapper<OrgDept>()
+                .eq(OrgDept::getParentId, id));
+        if (children != null && children > 0) {
+            throw new BizException(ErrorCode.ORG_ERROR, "存在子部门，不可删除");
+        }
+        R<Long> activeResp;
+        try {
+            activeResp = employeeClient.countActiveByDept(id);
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.ORG_ERROR, "员工服务不可用，无法校验在职员工，拒绝删除");
+        }
+        if (activeResp == null || !activeResp.isSuccess() || activeResp.getData() == null) {
+            throw new BizException(ErrorCode.ORG_ERROR, "员工服务返回异常，拒绝删除");
+        }
+        if (activeResp.getData() > 0) {
+            throw new BizException(ErrorCode.ORG_ERROR, "存在在职员工，不可删除");
+        }
+        Long occupancy = occupancyMapper.selectCount(new LambdaQueryWrapper<OrgHcOccupancy>()
+                .eq(OrgHcOccupancy::getDeptId, id));
+        if (occupancy != null && occupancy > 0) {
+            throw new BizException(ErrorCode.ORG_ERROR, "存在编制占用流水，不可删除");
+        }
+        writeSnapshot(dept);
+        headcountMapper.delete(new LambdaQueryWrapper<OrgHeadcount>()
+                .eq(OrgHeadcount::getDeptId, id));
+        deptMapper.deleteById(id);
+    }
+
+    /**
+     * 部门移动 + 兄弟排序（ORG-F-002 深化：拖拽排序）。
+     *
+     * <p>校验：目标父部门存在、不能移到自身或自身子孙（自祖循环）、树深度 ≤8；
+     * 更新 parent_id 并重算物化路径，然后按 sortOrder 在新兄弟序列中就位并重排。</p>
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public DeptNode move(Long id, DeptMoveRequest req) {
+        OrgDept dept = deptMapper.selectById(id);
+        if (dept == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "部门不存在");
+        }
+        long newParentId = req.newParentId() == null ? 0L : req.newParentId();
+        OrgDept parent = loadParent(newParentId);
+        if (parent != null) {
+            if (parent.getId().equals(dept.getId())
+                    || parent.getPath().equals(dept.getPath())
+                    || parent.getPath().startsWith(dept.getPath() + ".")) {
+                throw new BizException(ErrorCode.PARAM_INVALID, "不能移动到自身或自身子孙部门");
+            }
+            validateDepth(parent);
+            dept.setPath(parent.getPath() + "." + dept.getId());
+        } else {
+            dept.setPath(String.valueOf(dept.getId()));
+        }
+        dept.setParentId(newParentId);
+        dept.setSortOrder(req.sortOrder() == null ? 0 : req.sortOrder());
+        deptMapper.updateById(dept);
+        reorderSiblings(dept);
+        return toNode(dept);
+    }
+
+    /** 兄弟序列重排：取新父下全部子部门，按（sortOrder, id）排序后写入连续序号（0..n-1）。 */
+    private void reorderSiblings(OrgDept moved) {
+        List<OrgDept> siblings = new ArrayList<>(deptMapper.selectList(new LambdaQueryWrapper<OrgDept>()
+                .eq(OrgDept::getParentId, moved.getParentId())));
+        siblings.sort(Comparator.comparingInt((OrgDept d) -> d.getSortOrder() == null ? Integer.MAX_VALUE : d.getSortOrder())
+                .thenComparing(OrgDept::getId));
+        int order = 0;
+        for (OrgDept s : siblings) {
+            int target = order++;
+            if (s.getSortOrder() == null || s.getSortOrder() != target) {
+                s.setSortOrder(target);
+                deptMapper.updateById(s);
+            }
         }
     }
 

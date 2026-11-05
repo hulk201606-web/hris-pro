@@ -5,6 +5,7 @@ import com.hris.common.trace.TraceContext;
 import com.hris.org.dto.ApprovalDtos.ApprovalCallbackRequest;
 import com.hris.org.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.org.dto.HcCheckResponse;
+import com.hris.org.dto.OccupancyRequest;
 import com.hris.org.service.DeptService;
 import com.hris.org.service.HeadcountService;
 import com.hris.org.service.ReportLineService;
@@ -46,6 +47,16 @@ public class OrgInternalController {
                                     @RequestParam("position") Long position,
                                     @RequestParam("count") Integer count) {
         return R.ok(headcountService.check(dept, position, count));
+    }
+
+    /**
+     * 编制占用回写（§10.5-B8，emp 入转调离落账经 Feign 调用）：按 transNo 幂等，
+     * delta=+1 占用 / -1 释放，period 为空按当前季度。
+     */
+    @PostMapping("/headcounts/occupancy")
+    public R<Void> occupancy(@Valid @RequestBody OccupancyRequest req) {
+        headcountService.occupancy(req);
+        return R.ok();
     }
 
     /** 汇报链解析（内部端点）：返回某员工自上级起逐级向上的员工 ID 链，供 rag/权限数据范围使用。 */

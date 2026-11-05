@@ -26,6 +26,9 @@ public class OrgHcOccupancy extends BaseEntity {
     /** 岗位 ID（逻辑外键 org_position.id） */
     private Long positionId;
 
+    /** 事务幂等键（emp_pending_transaction.trans_no；调动双腿为 transNo:OUT/:IN 后缀） */
+    private String transNo;
+
     public Long getEmpId() {
         return empId;
     }
@@ -64,5 +67,13 @@ public class OrgHcOccupancy extends BaseEntity {
 
     public void setPositionId(Long positionId) {
         this.positionId = positionId;
+    }
+
+    public String getTransNo() {
+        return transNo;
+    }
+
+    public void setTransNo(String transNo) {
+        this.transNo = transNo;
     }
 }

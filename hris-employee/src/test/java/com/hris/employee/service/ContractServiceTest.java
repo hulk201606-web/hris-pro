@@ -200,7 +200,7 @@ class ContractServiceTest {
 
             BizException e = assertThrows(BizException.class, () -> service.create(
                     new ContractCreateRequest(100L, "FIXED", LocalDate.now(),
-                            LocalDate.now().plusYears(1), null, null, null)));
+                            LocalDate.now().plusYears(1), null, null, null, null)));
 
             assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
             verify(contractMapper, never()).insert(any(Contract.class));
@@ -212,7 +212,7 @@ class ContractServiceTest {
             when(employeeMapper.selectById(100L)).thenReturn(employee());
 
             service.create(new ContractCreateRequest(100L, "FIXED", LocalDate.now(),
-                    LocalDate.now().plusYears(1), null, null, null));
+                    LocalDate.now().plusYears(1), null, null, null, null));
 
             ArgumentCaptor<Contract> captor = ArgumentCaptor.forClass(Contract.class);
             verify(contractMapper).insert(captor.capture());
@@ -228,11 +228,60 @@ class ContractServiceTest {
             when(employeeMapper.selectById(100L)).thenReturn(employee());
 
             service.create(new ContractCreateRequest(100L, "OPEN_ENDED", LocalDate.now(),
-                    null, null, null, "CTR-CUSTOM"));
+                    null, null, null, "CTR-CUSTOM", null));
 
             ArgumentCaptor<Contract> captor = ArgumentCaptor.forClass(Contract.class);
             verify(contractMapper).insert(captor.capture());
             assertEquals("CTR-CUSTOM", captor.getValue().getContractNo());
+        }
+
+        @Test
+        @DisplayName("LABOR 劳务合同可建单（EMP-F-014 深化），legalEntityId 落库")
+        void createsLaborContractWithLegalEntity() {
+            when(employeeMapper.selectById(100L)).thenReturn(employee());
+
+            ContractResponse resp = service.create(new ContractCreateRequest(100L, "LABOR",
+                    LocalDate.now(), LocalDate.now().plusYears(1), null, null, null, 88L));
+
+            assertEquals("LABOR", resp.type());
+            assertEquals(88L, resp.legalEntityId());
+        }
+
+        @Test
+        @DisplayName("未知类型（如 FIXEDXX）→ PARAM_INVALID 拒绝落库")
+        void rejectsUnknownType() {
+            when(employeeMapper.selectById(100L)).thenReturn(employee());
+
+            BizException e = assertThrows(BizException.class, () -> service.create(
+                    new ContractCreateRequest(100L, "FIXEDXX", LocalDate.now(),
+                            null, null, null, null, null)));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+            verify(contractMapper, never()).insert(any(Contract.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("list：法人维度过滤（EMP-F-014 深化）")
+    class ListFilter {
+
+        @Test
+        @DisplayName("legalEntityId 为空 → 不加法人条件，返回全部合同")
+        void noLegalEntityFilter() {
+            when(contractMapper.selectList(any())).thenReturn(List.of(contract(1, 0, LocalDate.now())));
+
+            service.list(100L, null);
+
+            verify(contractMapper).selectList(any());
+        }
+
+        @Test
+        @DisplayName("legalEntityId 非空 → 查询仍走 mapper（条件在 wrapper 中生效）")
+        void filtersByLegalEntity() {
+            when(contractMapper.selectList(any())).thenReturn(List.of());
+
+            assertTrue(service.list(100L, 88L).isEmpty());
+            verify(contractMapper).selectList(any());
         }
     }
 }

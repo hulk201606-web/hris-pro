@@ -232,6 +232,7 @@ CREATE TABLE org_dept (
   effective_from   DATE         NOT NULL,                         -- 生效开始日
   effective_to     DATE,                                          -- 生效结束日(NULL=现行)
   status           SMALLINT     NOT NULL DEFAULT 1,               -- 状态 1=有效 0=失效
+  sort_order       INTEGER      NOT NULL DEFAULT 0,               -- 兄弟排序号(ORG-F-002 深化拖拽排序)
   created_by       BIGINT       NOT NULL DEFAULT 0,               -- 创建人ID,0=系统
   updated_by       BIGINT       NOT NULL DEFAULT 0,               -- 更新人ID
   created_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
@@ -251,6 +252,7 @@ CREATE TABLE org_position (
   name          VARCHAR(64)  NOT NULL,                            -- 岗位名称
   code          VARCHAR(64)  NOT NULL,                            -- 岗位编码
   status        SMALLINT     NOT NULL DEFAULT 1,                  -- 状态 1=有效 0=失效
+  job_family    VARCHAR(32),                                      -- 岗位序列(ORG-F-006 深化, 如 TECH/SALES/FUNC, NULL=未分类)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -260,6 +262,23 @@ CREATE TABLE org_position (
   CONSTRAINT pk_org_position PRIMARY KEY (id),
   CONSTRAINT uk_org_position_code UNIQUE (tenant_id, code)
 );
+
+-- 岗位×部门挂靠(ORG-F-006 深化: 岗位可在多部门挂靠)
+CREATE TABLE org_position_dept (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  position_id   BIGINT       NOT NULL,                            -- 岗位ID(逻辑外键 org_position.id)
+  dept_id       BIGINT       NOT NULL,                            -- 部门ID(逻辑外键 org_dept.id)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_org_position_dept PRIMARY KEY (id),
+  CONSTRAINT uk_org_position_dept UNIQUE (tenant_id, position_id, dept_id)
+);
+CREATE INDEX idx_org_position_dept_dept ON org_position_dept (tenant_id, dept_id);
 
 -- 职务/职级序列
 CREATE TABLE org_job (
@@ -342,6 +361,7 @@ CREATE TABLE org_hc_occupancy (
   change_type    VARCHAR(16)  NOT NULL,                           -- 变动类型 OCCUPY/RELEASE/TRANSFER
   dept_id        BIGINT       NOT NULL,                           -- 部门ID(逻辑外键 org_dept.id)
   position_id    BIGINT       NOT NULL,                           -- 岗位ID(逻辑外键 org_position.id)
+  trans_no       VARCHAR(64),                                     -- 事务幂等键(回写来源 emp_pending_transaction.trans_no, §10.5-B8)
   created_by     BIGINT       NOT NULL DEFAULT 0,                 -- 创建人ID,0=系统
   updated_by     BIGINT       NOT NULL DEFAULT 0,                 -- 更新人ID
   created_at     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
@@ -351,6 +371,7 @@ CREATE TABLE org_hc_occupancy (
   CONSTRAINT pk_org_hc_occupancy PRIMARY KEY (id)
 );
 CREATE INDEX idx_org_hc_occupancy_emp ON org_hc_occupancy (tenant_id, emp_id);
+CREATE INDEX idx_org_hc_occupancy_trans ON org_hc_occupancy (tenant_id, trans_no);
 
 -- 部门历史快照
 CREATE TABLE org_dept_history (
@@ -515,8 +536,9 @@ CREATE TABLE emp_contract (
   id               BIGINT       NOT NULL,                         -- 主键: 雪花ID
   tenant_id        BIGINT       NOT NULL,                         -- 租户ID
   emp_id           BIGINT       NOT NULL,                         -- 员工ID(逻辑外键 emp_employee.id)
+  legal_entity_id  BIGINT,                                        -- 签订法人ID(逻辑外键 org_legal_entity.id, NULL=未指定)
   contract_no      VARCHAR(64)  NOT NULL,                         -- 合同编号
-  type             VARCHAR(16)  NOT NULL,                         -- 合同类型 FIXED/OPEN_ENDED/INTERN
+  type             VARCHAR(16)  NOT NULL,                         -- 合同类型 FIXED/OPEN_ENDED/LABOR/INTERN
   start_date       DATE         NOT NULL,                         -- 合同开始日
   end_date         DATE,                                          -- 合同结束日(无固定期限为NULL)
   probation_end    DATE,                                          -- 试用期结束日
@@ -1747,7 +1769,7 @@ CREATE TABLE flow_ext_task_action (
   action        VARCHAR(16)  NOT NULL,                            -- 动作 APPROVE/REJECT/TRANSFER/ADD_SIGN/WITHDRAW
   operator      BIGINT       NOT NULL,                            -- 操作人用户ID(逻辑外键 auth_user.id)
   comment       VARCHAR(512),                                     -- 审批意见
-  attachments   JSONB,                                            -- 附件(json)
+  form_values   JSONB,                                            -- 动态表单值(json，docs/19 §10.5-C11)
   delegate_from BIGINT,                                           -- 委托来源用户ID(加签/转办链)
   ts            TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 动作时间(UTC)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
@@ -1798,6 +1820,24 @@ CREATE TABLE flow_ext_timeout_cfg (
   CONSTRAINT pk_flow_ext_timeout_cfg PRIMARY KEY (id),
   CONSTRAINT uk_flow_timeout_cfg UNIQUE (tenant_id, proc_def_id, node_id)
 );
+
+-- 审批抄送记录(FLW-F-011)
+CREATE TABLE flow_ext_cc (
+  id               BIGINT       NOT NULL,                         -- 主键: 雪花ID
+  tenant_id        BIGINT       NOT NULL,                         -- 租户ID
+  proc_inst_id     VARCHAR(64)  NOT NULL,                         -- 流程实例ID(逻辑外键 ACT_HI_PROCINST.ID_)
+  cc_node          VARCHAR(64)  NOT NULL,                         -- 抄送发起节点ID(BPMN userTask id)
+  emp_id           BIGINT       NOT NULL,                         -- 被抄送人用户ID(逻辑外键 auth_user.id)
+  created_by       BIGINT       NOT NULL DEFAULT 0,               -- 创建人ID,0=系统
+  updated_by       BIGINT       NOT NULL DEFAULT 0,               -- 更新人ID
+  created_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
+  updated_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 更新时间(UTC,应用层维护)
+  deleted          SMALLINT     NOT NULL DEFAULT 0,               -- 逻辑删除 0=否 1=是
+  version          INTEGER      NOT NULL DEFAULT 0,               -- 乐观锁版本号
+  CONSTRAINT pk_flow_ext_cc PRIMARY KEY (id),
+  CONSTRAINT uk_flow_cc UNIQUE (tenant_id, proc_inst_id, cc_node, emp_id)
+);
+CREATE INDEX idx_flow_cc_emp ON flow_ext_cc (tenant_id, emp_id, created_at);
 
 -- =====================================================================
 -- 域 9: rag_db 知识库与问答
@@ -2130,6 +2170,7 @@ CREATE TABLE sys_notify_template (
   channel       VARCHAR(16)  NOT NULL,                            -- 渠道 EMAIL/SMS/APP/WECOM
   subject       VARCHAR(128),                                     -- 标题
   content       TEXT,                                             -- 模板内容
+  webhook_url   VARCHAR(512),                                     -- webhook机器人地址(DINGTALK/WECOM/WEBHOOK渠道用)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)

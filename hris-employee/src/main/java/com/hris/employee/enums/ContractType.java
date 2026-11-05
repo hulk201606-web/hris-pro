@@ -9,7 +9,9 @@ public enum ContractType {
     FIXED("FIXED"),
     /** 无固定期限 */
     OPEN_ENDED("OPEN_ENDED"),
-    /** 实习/劳务 */
+    /** 劳务合同（EMP-F-014 深化：劳务派遣/外包用工，非劳动关系合同台账） */
+    LABOR("LABOR"),
+    /** 实习协议 */
     INTERN("INTERN");
 
     private final String code;

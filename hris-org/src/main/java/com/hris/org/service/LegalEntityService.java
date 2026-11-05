@@ -56,6 +56,6 @@ public class LegalEntityService {
     }
 
     private CatalogResponse toResponse(OrgLegalEntity e) {
-        return new CatalogResponse(e.getId(), e.getName(), e.getUscc(), e.getStatus(), null);
+        return new CatalogResponse(e.getId(), e.getName(), e.getUscc(), e.getStatus(), null, null);
     }
 }
