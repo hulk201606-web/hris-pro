@@ -6,8 +6,11 @@ import com.hris.employee.dto.ContractDtos.ContractCreateRequest;
 import com.hris.employee.dto.ContractDtos.ContractExpiringItem;
 import com.hris.employee.dto.ContractDtos.ContractRenewRequest;
 import com.hris.employee.dto.ContractDtos.ContractResponse;
+import com.hris.employee.dto.ContractTermDtos.ContractTermResponse;
+import com.hris.employee.dto.ContractTermDtos.ContractTermUpsertRequest;
 import com.hris.employee.service.ContractService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 合同台账端点（台账 / 续签 / 到期预警）。
+ * 合同台账端点（台账 / 续签 / 到期预警 / 条款明细 EMP-F-014 深化）。
  */
 @RestController
 @RequestMapping("/api/v1/emp/contracts")
@@ -60,5 +63,36 @@ public class ContractController {
     @GetMapping("/expiring")
     public R<List<ContractExpiringItem>> expiring(@RequestParam(defaultValue = "60") int days) {
         return R.ok(contractService.expiring(days));
+    }
+
+    /** 查询合同条款明细列表。 */
+    @RequirePerm("emp:contract:read")
+    @GetMapping("/{id}/terms")
+    public R<List<ContractTermResponse>> listTerms(@PathVariable Long id) {
+        return R.ok(contractService.listTerms(id));
+    }
+
+    /** 新增合同条款：termType/content 必填，effectiveTo 须晚于 effectiveFrom。 */
+    @RequirePerm("emp:contract:write")
+    @PostMapping("/{id}/terms")
+    public R<ContractTermResponse> createTerm(@PathVariable Long id,
+                                              @Valid @RequestBody ContractTermUpsertRequest req) {
+        return R.ok(contractService.createTerm(id, req));
+    }
+
+    /** 更新合同条款：termId 不属于该合同 → 10002。 */
+    @RequirePerm("emp:contract:write")
+    @PutMapping("/{id}/terms/{termId}")
+    public R<ContractTermResponse> updateTerm(@PathVariable Long id, @PathVariable Long termId,
+                                              @Valid @RequestBody ContractTermUpsertRequest req) {
+        return R.ok(contractService.updateTerm(id, termId, req));
+    }
+
+    /** 删除合同条款（逻辑删除），termId 不属于该合同 → 10002。 */
+    @RequirePerm("emp:contract:write")
+    @DeleteMapping("/{id}/terms/{termId}")
+    public R<Void> deleteTerm(@PathVariable Long id, @PathVariable Long termId) {
+        contractService.deleteTerm(id, termId);
+        return R.ok();
     }
 }

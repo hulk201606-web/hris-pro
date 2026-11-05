@@ -38,12 +38,14 @@ class PayrollRunServiceTest {
     private com.hris.compensation.mapper.PayrollDetailMapper detailMapper;
     @Mock
     private FlowIntegration flowIntegration;
+    @Mock
+    private PeriodLockService periodLockService;
 
     private PayrollRunService service;
 
     @BeforeEach
     void setUp() {
-        service = new PayrollRunService(mapper, detailMapper, flowIntegration);
+        service = new PayrollRunService(mapper, detailMapper, flowIntegration, periodLockService);
     }
 
     private com.hris.compensation.entity.PayrollRun run(String status) {
@@ -218,6 +220,79 @@ class PayrollRunServiceTest {
 
             verify(flowIntegration).start(eq("CMP_PAYROLL"), eq("700001"),
                     eq(Map.of("periodCode", "2026-01", "payGroupId", 1L, "employeeCount", 5L)));
+        }
+    }
+
+    @Nested
+    @DisplayName("期间级守卫（CMP-F-020）")
+    class PeriodLockGuard {
+
+        @Test
+        @DisplayName("create：期间已关账 → PARAM_INVALID，不落库")
+        void rejectsCreateOnLockedPeriod() {
+            org.mockito.Mockito.doThrow(new BizException(ErrorCode.PARAM_INVALID, "期间已关账，禁止变更: 2026-01"))
+                    .when(periodLockService).ensurePeriodUnlocked("2026-01");
+
+            BizException e = assertThrows(BizException.class, () -> service.create(
+                    new com.hris.compensation.dto.PayrollRunDtos.PayrollRunCreateRequest("2026-01", 1L, null, null)));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+            verify(mapper, never()).insert(any(com.hris.compensation.entity.PayrollRun.class));
+        }
+
+        @Test
+        @DisplayName("update：期间已关账 → PARAM_INVALID，不落库")
+        void rejectsUpdateOnLockedPeriod() {
+            when(mapper.selectById(RUN_ID)).thenReturn(run("INIT"));
+            org.mockito.Mockito.doThrow(new BizException(ErrorCode.PARAM_INVALID, "期间已关账，禁止变更: 2026-01"))
+                    .when(periodLockService).ensurePeriodUnlocked("2026-01");
+
+            BizException e = assertThrows(BizException.class, () -> service.update(RUN_ID, updateReq()));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+            verify(mapper, never()).updateById(any(com.hris.compensation.entity.PayrollRun.class));
+        }
+
+        @Test
+        @DisplayName("submit：期间已关账 → PARAM_INVALID，状态不迁移、流程不发起")
+        void rejectsSubmitOnLockedPeriod() {
+            when(mapper.selectById(RUN_ID)).thenReturn(run("INIT"));
+            org.mockito.Mockito.doThrow(new BizException(ErrorCode.PARAM_INVALID, "期间已关账，禁止变更: 2026-01"))
+                    .when(periodLockService).ensurePeriodUnlocked("2026-01");
+
+            BizException e = assertThrows(BizException.class, () -> service.submit(RUN_ID));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+            verify(mapper, never()).updateById(any(com.hris.compensation.entity.PayrollRun.class));
+            verify(flowIntegration, never()).start(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("delete：期间已关账 → PARAM_INVALID，不删除")
+        void rejectsDeleteOnLockedPeriod() {
+            when(mapper.selectById(RUN_ID)).thenReturn(run("INIT"));
+            org.mockito.Mockito.doThrow(new BizException(ErrorCode.PARAM_INVALID, "期间已关账，禁止变更: 2026-01"))
+                    .when(periodLockService).ensurePeriodUnlocked("2026-01");
+
+            BizException e = assertThrows(BizException.class, () -> service.delete(RUN_ID));
+
+            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
+            verify(mapper, never()).deleteById(any(Long.class));
+        }
+
+        @Test
+        @DisplayName("期间未关账 → 四路径正常放行")
+        void allowsWhenPeriodUnlocked() {
+            when(mapper.selectById(RUN_ID)).thenReturn(run("INIT"));
+            when(mapper.updateById(any(com.hris.compensation.entity.PayrollRun.class))).thenReturn(1);
+            when(mapper.deleteById(RUN_ID)).thenReturn(1);
+
+            service.update(RUN_ID, updateReq());
+            service.submit(RUN_ID);
+            service.delete(RUN_ID);
+
+            org.mockito.Mockito.verify(periodLockService,
+                    org.mockito.Mockito.times(3)).ensurePeriodUnlocked("2026-01");
         }
     }
 }

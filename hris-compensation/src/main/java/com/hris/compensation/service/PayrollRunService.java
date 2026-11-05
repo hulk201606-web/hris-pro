@@ -31,6 +31,10 @@ import java.util.Map;
  * <p>状态迁移路径：submit 端点（INIT/TRIAL/CALC→REVIEW 并发起 CMP_PAYROLL 流程）与
  * flow 审批回调（REVIEW→APPROVE，见 CompApprovalCallbackService）及既有锁定/支付动作；
  * create/update 不接受 status 入参，防止状态机旁路。</p>
+ *
+ * <p>期间级守卫（CMP-F-020）：create/update/delete/submit 四路径在 run 级守卫之后
+ * 检查 cmp_period_lock 的 ACTIVE 锁，期间已关账则拒绝变更。run 自身 LOCK 动作
+ * 不联动期间锁（独立语义，见 PeriodLockService）。</p>
  */
 @Service
 public class PayrollRunService {
@@ -47,12 +51,14 @@ public class PayrollRunService {
     private final PayrollRunMapper mapper;
     private final PayrollDetailMapper detailMapper;
     private final FlowIntegration flowIntegration;
+    private final PeriodLockService periodLockService;
 
     public PayrollRunService(PayrollRunMapper mapper, PayrollDetailMapper detailMapper,
-                             FlowIntegration flowIntegration) {
+                             FlowIntegration flowIntegration, PeriodLockService periodLockService) {
         this.mapper = mapper;
         this.detailMapper = detailMapper;
         this.flowIntegration = flowIntegration;
+        this.periodLockService = periodLockService;
     }
 
     /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
@@ -76,6 +82,8 @@ public class PayrollRunService {
      */
     @Transactional(rollbackFor = Exception.class)
     public PayrollRunResponse create(PayrollRunCreateRequest req) {
+        // 期间级守卫：该期间已关账则禁止新建批次
+        periodLockService.ensurePeriodUnlocked(req.periodCode());
         PayrollRun e = new PayrollRun();
         e.setPeriodCode(req.periodCode());
         e.setPayGroupId(req.payGroupId());
@@ -97,6 +105,8 @@ public class PayrollRunService {
         }
         // 当前已处于 LOCK/PAID：任何字段更新都被拒绝
         ensureMutable(e);
+        // 期间级守卫：目标期间已关账则禁止变更（periodCode 可空，缺省沿用原值）
+        periodLockService.ensurePeriodUnlocked(req.periodCode() != null ? req.periodCode() : e.getPeriodCode());
         e.setPeriodCode(req.periodCode());
         e.setPayGroupId(req.payGroupId());
         e.setCalcBy(req.calcBy());
@@ -130,6 +140,8 @@ public class PayrollRunService {
             throw new BizException(ErrorCode.CMP_ERROR,
                     "当前状态不可提交审批（" + status + "），仅 INIT/TRIAL/CALC 可提交");
         }
+        // 期间级守卫：该期间已关账则禁止提交
+        periodLockService.ensurePeriodUnlocked(e.getPeriodCode());
         e.setStatus(STATUS_REVIEW);
         if (mapper.updateById(e) == 0) {
             throw new BizException(ErrorCode.CMP_ERROR, "数据已被其他操作变更，请刷新后重试");
@@ -149,6 +161,8 @@ public class PayrollRunService {
             throw new BizException(ErrorCode.NOT_FOUND, "PayrollRun 不存在");
         }
         ensureMutable(e);
+        // 期间级守卫：该期间已关账则禁止删除
+        periodLockService.ensurePeriodUnlocked(e.getPeriodCode());
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "PayrollRun 不存在");
         }

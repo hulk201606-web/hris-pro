@@ -42,13 +42,15 @@ class ContractServiceTest {
     @Mock
     private ContractMapper contractMapper;
     @Mock
+    private com.hris.employee.mapper.ContractTermMapper termMapper;
+    @Mock
     private EmployeeMapper employeeMapper;
 
     private ContractService service;
 
     @BeforeEach
     void setUp() {
-        service = new ContractService(contractMapper, employeeMapper);
+        service = new ContractService(contractMapper, termMapper, employeeMapper);
     }
 
     private Contract contract(Integer status, Integer renewCnt, LocalDate endDate) {

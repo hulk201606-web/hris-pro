@@ -6,10 +6,14 @@ import com.hris.common.exception.ErrorCode;
 import com.hris.employee.dto.ContractDtos.ContractCreateRequest;
 import com.hris.employee.dto.ContractDtos.ContractExpiringItem;
 import com.hris.employee.dto.ContractDtos.ContractResponse;
+import com.hris.employee.dto.ContractTermDtos.ContractTermResponse;
+import com.hris.employee.dto.ContractTermDtos.ContractTermUpsertRequest;
 import com.hris.employee.entity.Contract;
+import com.hris.employee.entity.ContractTerm;
 import com.hris.employee.entity.Employee;
 import com.hris.employee.enums.ContractType;
 import com.hris.employee.mapper.ContractMapper;
+import com.hris.employee.mapper.ContractTermMapper;
 import com.hris.employee.mapper.EmployeeMapper;
 import com.hris.employee.util.CodeUtil;
 import org.springframework.stereotype.Service;
@@ -19,20 +23,32 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * 合同台账（EMP-F-014 多法人合同、EMP-F-015 到期预警 60/30/7 多级）。
+ *
+ * <p>条款明细（EMP-F-014 深化）：emp_contract_term 的 CRUD 挂在合同资源之下，
+ * termId 必须归属路径中的 contractId，否则 NOT_FOUND（防跨合同越权）。
+ * 注：合同台账当前无删除端点（仅登记/续签），故无级联清理场景。</p>
  */
 @Service
 public class ContractService {
 
+    /** 允许的条款类型 */
+    private static final Set<String> TERM_TYPES = Set.of(
+            "PROBATION", "SALARY", "CONFIDENTIALITY", "NON_COMPETE", "CUSTOM");
+
     private final ContractMapper contractMapper;
+    private final ContractTermMapper termMapper;
     private final EmployeeMapper employeeMapper;
 
-    public ContractService(ContractMapper contractMapper, EmployeeMapper employeeMapper) {
+    public ContractService(ContractMapper contractMapper, ContractTermMapper termMapper,
+                           EmployeeMapper employeeMapper) {
         this.contractMapper = contractMapper;
+        this.termMapper = termMapper;
         this.employeeMapper = employeeMapper;
     }
 
@@ -133,5 +149,86 @@ public class ContractService {
         return new ContractResponse(c.getId(), c.getEmpId(), c.getContractNo(), c.getType(),
                 c.getStartDate(), c.getEndDate(), c.getProbationEnd(), c.getLegalEntityId(),
                 c.getRenewCnt(), c.getFileId(), c.getStatus());
+    }
+
+    /* ---------- 条款明细（EMP-F-014 深化） ---------- */
+
+    /** 查询合同条款列表，按生效日倒序。 */
+    public List<ContractTermResponse> listTerms(Long contractId) {
+        requireContract(contractId);
+        return termMapper.selectList(new LambdaQueryWrapper<ContractTerm>()
+                        .eq(ContractTerm::getContractId, contractId)
+                        .orderByDesc(ContractTerm::getEffectiveFrom))
+                .stream().map(this::toTermResponse).toList();
+    }
+
+    /** 新增条款：合同须存在，term_type 合法，effective_to 晚于 effective_from。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ContractTermResponse createTerm(Long contractId, ContractTermUpsertRequest req) {
+        requireContract(contractId);
+        validateTerm(req);
+        ContractTerm t = new ContractTerm();
+        t.setContractId(contractId);
+        applyTerm(t, req);
+        termMapper.insert(t);
+        return toTermResponse(t);
+    }
+
+    /** 更新条款：termId 不属于该合同 → NOT_FOUND。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ContractTermResponse updateTerm(Long contractId, Long termId, ContractTermUpsertRequest req) {
+        requireContract(contractId);
+        ContractTerm t = requireTerm(contractId, termId);
+        validateTerm(req);
+        applyTerm(t, req);
+        if (termMapper.updateById(t) == 0) {
+            throw new BizException(ErrorCode.EMP_ERROR, "数据已被其他操作变更，请刷新后重试");
+        }
+        return toTermResponse(t);
+    }
+
+    /** 删除条款（逻辑删除，随 BaseEntity @TableLogic），termId 不属于该合同 → NOT_FOUND。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteTerm(Long contractId, Long termId) {
+        requireContract(contractId);
+        ContractTerm t = requireTerm(contractId, termId);
+        if (termMapper.deleteById(t.getId()) == 0) {
+            throw new BizException(ErrorCode.NOT_FOUND, "合同条款不存在");
+        }
+    }
+
+    private void requireContract(Long contractId) {
+        if (contractMapper.selectById(contractId) == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "合同不存在");
+        }
+    }
+
+    private ContractTerm requireTerm(Long contractId, Long termId) {
+        ContractTerm t = termMapper.selectById(termId);
+        if (t == null || !contractId.equals(t.getContractId())) {
+            throw new BizException(ErrorCode.NOT_FOUND, "合同条款不存在");
+        }
+        return t;
+    }
+
+    private void validateTerm(ContractTermUpsertRequest req) {
+        if (!TERM_TYPES.contains(req.termType())) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "未知条款类型: " + req.termType());
+        }
+        if (req.effectiveTo() != null && !req.effectiveTo().isAfter(req.effectiveFrom())) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "effectiveTo 必须晚于 effectiveFrom");
+        }
+    }
+
+    private void applyTerm(ContractTerm t, ContractTermUpsertRequest req) {
+        t.setTermType(req.termType());
+        t.setContent(req.content());
+        t.setEffectiveFrom(req.effectiveFrom());
+        t.setEffectiveTo(req.effectiveTo());
+    }
+
+    private ContractTermResponse toTermResponse(ContractTerm t) {
+        return new ContractTermResponse(t.getId(), t.getContractId(), t.getTermType(),
+                t.getContent(), t.getEffectiveFrom(), t.getEffectiveTo());
     }
 }
