@@ -12,6 +12,15 @@ import java.util.Map;
 public interface VectorStore {
 
     /**
+     * 检索命中项：切片主键 + 相似度得分。
+     *
+     * @param chunkId 命中切片主键（与 kb_chunk.id 对齐）
+     * @param score   相似度得分（COSINE 指标，取值范围见具体实现）
+     */
+    record SearchHit(long chunkId, double score) {
+    }
+
+    /**
      * 确保集合存在（幂等）。集合按租户隔离：collectionName 形如 kb_{tenantId}。
      *
      * @param collectionName 集合名
@@ -46,6 +55,16 @@ public interface VectorStore {
      * @return 命中切片主键列表（按相似度降序）
      */
     List<Long> search(String collectionName, List<Float> vector, int topK);
+
+    /**
+     * 向量相似度检索（Top-K，带得分）。用于无召回阈值判定（KBD-F-011）。
+     *
+     * @param collectionName 集合名
+     * @param vector         查询向量
+     * @param topK           返回条数
+     * @return 命中项列表（按得分降序）；score 为 COSINE 相似度（约 [-1, 1]，越大越相似）
+     */
+    List<SearchHit> searchWithScores(String collectionName, List<Float> vector, int topK);
 
     /**
      * 删除集合（重建索引时蓝绿切换用，阶段 C）。

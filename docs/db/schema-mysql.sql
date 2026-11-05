@@ -2164,6 +2164,7 @@ CREATE TABLE qa_message (
   `tool_calls`    JSON         DEFAULT NULL COMMENT '工具调用(json)',
   `latency_ms`    INT          DEFAULT NULL COMMENT '响应延迟(ms)',
   `model`         VARCHAR(64)  DEFAULT NULL COMMENT '模型标识',
+  `answer_status` VARCHAR(32)  DEFAULT NULL COMMENT '回答状态 ANSWERED/NO_RECALL',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',

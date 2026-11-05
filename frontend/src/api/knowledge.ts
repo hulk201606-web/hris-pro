@@ -68,3 +68,59 @@ export function fetchKnowledgeScope(empId: number): Promise<EmployeeProfileBrief
   if (isMockEnabled()) return adminMock.knowledgeScope(empId);
   return get<EmployeeProfileBrief>('/kb/scope', { empId });
 }
+
+/* ---------------------------- 智能问答（KBD-F-008/009/010/011/012） ---------------------------- */
+
+/** 引用项（citations 数组元素） */
+export interface QaCitation {
+  docId: number | null;
+  title: string | null;
+  chunkId: number;
+  score: number;
+}
+
+/** 问答消息（拒答时 answerStatus = NO_RECALL） */
+export interface QaMessage {
+  id: number;
+  sessionId: number;
+  question: string | null;
+  answer: string | null;
+  citations: QaCitation[] | null;
+  answerStatus: 'ANSWERED' | 'NO_RECALL' | null;
+  latencyMs: number | null;
+  model: string | null;
+  createdAt: string;
+}
+
+/** 问答会话 */
+export interface QaSession {
+  id: number;
+  userId: number;
+  title: string | null;
+  createdAt: string;
+}
+
+/** 创建问答会话（POST /kb/chat/sessions） */
+export function createQaSession(data: { spaceId?: number; title?: string }): Promise<QaSession> {
+  return post<QaSession>('/kb/chat/sessions', data);
+}
+
+/** 我的会话列表（GET /kb/chat/sessions） */
+export function listQaSessions(): Promise<QaSession[]> {
+  return get<QaSession[]>('/kb/chat/sessions');
+}
+
+/** 会话历史消息（GET /kb/chat/sessions/{id}/messages） */
+export function listQaMessages(sessionId: number): Promise<QaMessage[]> {
+  return get<QaMessage[]>(`/kb/chat/sessions/${sessionId}/messages`);
+}
+
+/** 提问并回答（POST /kb/chat/sessions/{id}/messages） */
+export function askQa(sessionId: number, question: string): Promise<QaMessage> {
+  return post<QaMessage>(`/kb/chat/sessions/${sessionId}/messages`, { question });
+}
+
+/** 消息反馈（POST /kb/chat/messages/{messageId}/feedback） */
+export function feedbackQa(messageId: number, helpful: boolean, comment?: string): Promise<void> {
+  return post<void>(`/kb/chat/messages/${messageId}/feedback`, { helpful, comment });
+}

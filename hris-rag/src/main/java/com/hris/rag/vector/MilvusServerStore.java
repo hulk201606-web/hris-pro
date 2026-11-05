@@ -20,6 +20,7 @@ import io.milvus.param.collection.CreateCollectionParam;
 import io.milvus.param.collection.DropCollectionParam;
 import io.milvus.param.collection.FieldType;
 import io.milvus.param.collection.HasCollectionParam;
+import io.milvus.param.collection.LoadCollectionParam;
 import io.milvus.param.index.CreateIndexParam;
 import io.milvus.param.index.DescribeIndexParam;
 import io.milvus.param.dml.DeleteParam;
@@ -156,7 +157,7 @@ public class MilvusServerStore implements VectorStore {
 
     @Override
     public List<Long> search(String collectionName, List<Float> vector, int topK) {
-        createVectorIndex(collectionName);
+        loadIfNeeded(collectionName);
         List<String> outFields = List.of(props.getIdField());
         SearchParam param = SearchParam.newBuilder()
                 .withCollectionName(collectionName)
@@ -185,12 +186,55 @@ public class MilvusServerStore implements VectorStore {
     }
 
     @Override
+    public List<SearchHit> searchWithScores(String collectionName, List<Float> vector, int topK) {
+        loadIfNeeded(collectionName);
+        List<String> outFields = List.of(props.getIdField());
+        SearchParam param = SearchParam.newBuilder()
+                .withCollectionName(collectionName)
+                .withMetricType(MetricType.COSINE)
+                .withTopK(topK)
+                .withVectorFieldName(props.getVectorField())
+                .withVectors(List.of(vector))
+                .withOutFields(outFields)
+                .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
+                .build();
+        R<SearchResults> result = client().search(param);
+        if (result.getStatus() != 0) {
+            throw new BizException(ErrorCode.RAG_ERROR, "向量检索失败: " + result.getMessage());
+        }
+        SearchResultsWrapper wrapper = new SearchResultsWrapper(result.getData().getResults());
+        List<SearchHit> hits = new ArrayList<>();
+        for (SearchResultsWrapper.IDScore is : wrapper.getIDScore(0)) {
+            hits.add(new SearchHit(is.getLongID(), is.getScore()));
+        }
+        return hits;
+    }
+
+    @Override
     public void dropCollection(String collectionName) {
         DropCollectionParam param = DropCollectionParam.newBuilder()
                 .withCollectionName(collectionName).build();
         R<RpcStatus> result = client().dropCollection(param);
         if (result.getStatus() != 0) {
             throw new BizException(ErrorCode.RAG_ERROR, "集合删除失败: " + result.getMessage());
+        }
+    }
+
+    /**
+     * 加载集合到内存（幂等，检索前置条件）。新建/重建索引后集合处于未加载态，
+     * 直接 search 会报 collection not loaded；已加载集合重复 load 返回成功。
+     */
+    private void loadIfNeeded(String collectionName) {
+        MilvusServiceClient c = client();
+        R<Boolean> has = c.hasCollection(HasCollectionParam.newBuilder()
+                .withCollectionName(collectionName).build());
+        if (has.getStatus() != 0 || Boolean.FALSE.equals(has.getData())) {
+            return;
+        }
+        R<RpcStatus> loaded = c.loadCollection(LoadCollectionParam.newBuilder()
+                .withCollectionName(collectionName).build());
+        if (loaded.getStatus() != 0) {
+            throw new BizException(ErrorCode.RAG_ERROR, "向量集合加载失败: " + loaded.getMessage());
         }
     }
 

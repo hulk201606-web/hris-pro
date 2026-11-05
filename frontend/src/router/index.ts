@@ -35,6 +35,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '自助首页' },
       },
       {
+        path: 'self/chat',
+        name: 'KbChat',
+        component: () => import('../views/self/ChatView.vue'),
+        meta: { title: '智能问答' },
+      },
+      {
         path: 'self/profile',
         name: 'MyProfile',
         component: () => import('../views/self/MyProfileView.vue'),

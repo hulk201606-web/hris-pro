@@ -22,6 +22,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  RobotOutlined,
 } from '@ant-design/icons-vue';
 import { useUserStore } from '../stores/user';
 
@@ -34,6 +35,7 @@ interface MenuItem {
 // 自助门户菜单（静态；后续由 GET /auth/menus 菜单树 + 本地 code→route/icon 注册表驱动）
 const menuItems: MenuItem[] = [
   { key: '/self/home', label: '自助首页', icon: HomeOutlined },
+  { key: '/self/chat', label: '智能问答', icon: RobotOutlined },
   { key: '/self/profile', label: '我的信息', icon: IdcardOutlined },
   { key: '/self/applications', label: '我的申请', icon: FormOutlined },
   { key: '/self/approvals', label: '我的审批', icon: AuditOutlined },

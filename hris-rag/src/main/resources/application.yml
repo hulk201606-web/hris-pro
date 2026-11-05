@@ -1,6 +1,12 @@
 server:
   port: 8110
 
+# HTTP 客户端统一超时（Boot 4）：LLM 调用要求 30s 上限（KBD-F-008）。
+# 影响范围：OpenAI chat/embedding 走的自动配置 RestClient；Feign 走独立通道不受影响。
+spring.http.client:
+  connect-timeout: 30s
+  read-timeout: 30s
+
 spring:
   application:
     name: hris-rag
