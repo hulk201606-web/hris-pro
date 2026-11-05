@@ -80,6 +80,16 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <!-- 排除 okhttp sender（okhttp-jvm 5.x 传递的 okio 新版与 Milvus SDK 的
+                 okhttp 4.12/okio 3.6 冲突：Okio.socket NoSuchMethodError）。
+                 本项目缺省仅内存 span（未配 OTEL_EXPORTER_OTLP_ENDPOINT），sender
+                 不会被实例化；启用 OTLP 导出时需统一 okhttp 版本（见 docs/21）。 -->
+            <exclusions>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-exporter-sender-okhttp</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- Lombok -->
         <dependency>
