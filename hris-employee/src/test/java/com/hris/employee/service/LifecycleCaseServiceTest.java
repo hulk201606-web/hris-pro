@@ -118,7 +118,7 @@ class LifecycleCaseServiceTest {
         void createsProcessingCase() {
             when(pendingService.hasPending(100L)).thenReturn(false);
             when(caseMapper.selectCount(any())).thenReturn(0L);
-            when(flowIntegration.start(anyString(), anyString(), any(), any())).thenReturn("FLOW001");
+            when(flowIntegration.start(anyString(), anyString(), any(), any(), any())).thenReturn("FLOW001");
 
             LifecycleCase c = service.createCase(100L, LifecycleType.ONBOARD,
                     LocalDate.now().plusDays(7), Map.of("deptId", 2), "入职办理");
@@ -133,7 +133,7 @@ class LifecycleCaseServiceTest {
         void degradesWhenFlowUnavailable() {
             when(pendingService.hasPending(100L)).thenReturn(false);
             when(caseMapper.selectCount(any())).thenReturn(0L);
-            when(flowIntegration.start(anyString(), anyString(), any(), any())).thenReturn(null);
+            when(flowIntegration.start(anyString(), anyString(), any(), any(), any())).thenReturn(null);
 
             LifecycleCase c = service.createCase(100L, LifecycleType.REGULAR,
                     LocalDate.now(), Map.of(), "转正");

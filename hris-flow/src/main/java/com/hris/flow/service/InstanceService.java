@@ -84,6 +84,14 @@ public class InstanceService {
         vars.put("assignee", assignee != null ? assignee : "");
         // 3. 记录发起人（Flowable startedBy），供「我发起的」查询
         String initiator = String.valueOf(resolveInitiator(req));
+        // 兜底：Feign 系统发起（无登录用户）时 resolveInitiator 落 0——模板里
+        // ${initiator} 表达式（如 EMP_REGULAR 自评节点 flowable:initiator）会把
+        // 任务指给不存在的用户 0，既不在 todo 也不在无主池，成为死任务。
+        // 此时用审批人解析值兜底，并显式放入 vars 保证 ${initiator} 可解析。
+        if ("0".equals(initiator) && assignee != null) {
+            initiator = assignee;
+        }
+        vars.put("initiator", initiator);
         ProcessInstance pi;
         try {
             Authentication.setAuthenticatedUserId(initiator);

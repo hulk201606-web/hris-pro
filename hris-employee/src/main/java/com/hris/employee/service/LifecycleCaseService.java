@@ -70,8 +70,10 @@ public class LifecycleCaseService {
         c.setState(STATE_PROCESSING);
         c.setEffectDate(effectDate);
         caseMapper.insert(c);
+        // 透传操作者作为流程发起人：Feign 调用无登录态，不传会被 flow 记成 0，
+        // EMP_REGULAR 等含 ${initiator} 节点的模板会产出指给用户 0 的死任务（docs/19 §9.2）
         String procInstId = flowIntegration.start(flowBizType(type), c.getBizKey(),
-                TraceContext.getTenantId(), payload);
+                TraceContext.getTenantId(), payload, TraceContext.getUserId());
         c.setProcInstId(procInstId);
         caseMapper.updateById(c);
         return c;

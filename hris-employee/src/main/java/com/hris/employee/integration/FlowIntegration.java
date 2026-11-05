@@ -25,14 +25,21 @@ public class FlowIntegration {
 
     /**
      * 发起流程实例。返回流程实例 ID；flow 未就绪时返回 null（降级）。
+     *
+     * @param initiator 操作者用户 ID（TraceContext 取得）；Feign 系统发起无登录用户时
+     *                  传 null，flow 侧会以审批人解析值兜底，避免 ${initiator} 死任务
      */
-    public String start(String bizType, String bizKey, Long tenantId, Map<String, Object> payload) {
+    public String start(String bizType, String bizKey, Long tenantId, Map<String, Object> payload,
+                        Long initiator) {
         try {
             Map<String, Object> request = new java.util.HashMap<>();
             request.put("bizType", bizType);
             request.put("bizKey", bizKey);
             request.put("tenantId", tenantId);
             request.put("payload", payload);
+            if (initiator != null) {
+                request.put("initiator", initiator);
+            }
             R<Map<String, Object>> resp = flowClient.startInstance(request);
             Map<String, Object> data = resp == null ? null : resp.getData();
             Object id = data == null ? null : data.get("instanceId");
