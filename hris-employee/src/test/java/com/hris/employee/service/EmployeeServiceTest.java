@@ -31,6 +31,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -56,7 +57,7 @@ class EmployeeServiceTest {
     @Mock
     private EmploymentMapper employmentMapper;
     @Mock
-    private ChangeAuditMapper changeAuditMapper;
+    private EmpChangeAuditService changeAuditService;
     @Mock
     private EmpNoService empNoService;
     @Mock
@@ -70,7 +71,7 @@ class EmployeeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new EmployeeService(employeeMapper, employmentMapper, changeAuditMapper,
+        service = new EmployeeService(employeeMapper, employmentMapper, changeAuditService,
                 empNoService, employmentService, profileService, stateMachine);
     }
 
@@ -149,7 +150,7 @@ class EmployeeServiceTest {
     class Update {
 
         @Test
-        @DisplayName("证件号变更 → 落 ChangeAudit 并更新密文/掩码")
+        @DisplayName("证件号变更 → 同步密文/hash/掩码，并把前后快照交给 diff 审计")
         void auditsCertNoChange() {
             Employee emp = active();
             when(employeeMapper.selectById(100L)).thenReturn(emp);
@@ -159,19 +160,18 @@ class EmployeeServiceTest {
                     "110101199001015678", null, List.of(), List.of(), List.of(), List.of());
             service.update(100L, req);
 
-            ArgumentCaptor<ChangeAudit> audit = ArgumentCaptor.forClass(ChangeAudit.class);
-            verify(changeAuditMapper).insert(audit.capture());
-            assertEquals("cert_no", audit.getValue().getFieldName());
-            assertEquals("1101********34", audit.getValue().getOldValue());
-            assertEquals("1101********78", audit.getValue().getNewValue());
             assertEquals("110101199001015678", emp.getCertNoCipher());
+            assertEquals("1101********78", emp.getCertNoMask());
             assertEquals(sha256("110101199001015678"), emp.getCertNoHash(),
                 "证件号变更应同步刷新 cert_no_hash");
+            ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.forClass(Map.class);
+            verify(changeAuditService).record(eq(100L), eq("UPDATE"), any(), after.capture(), eq(null));
+            assertEquals("110101199001015678", after.getValue().get("cert_no"));
             verify(employeeMapper).updateById(emp);
         }
 
         @Test
-        @DisplayName("证件号未变 → 不落审计")
+        @DisplayName("证件号未变 → 前后快照一致（diff 为空，由审计服务短路）")
         void noAuditWhenUnchanged() {
             Employee emp = active();
             when(employeeMapper.selectById(100L)).thenReturn(emp);
@@ -181,7 +181,12 @@ class EmployeeServiceTest {
                     "110101199001011234", null, List.of(), List.of(), List.of(), List.of());
             service.update(100L, req);
 
-            verify(changeAuditMapper, never()).insert(any(ChangeAudit.class));
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> before = ArgumentCaptor.forClass(Map.class);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> after = ArgumentCaptor.forClass(Map.class);
+            verify(changeAuditService).record(eq(100L), eq("UPDATE"), before.capture(), after.capture(), eq(null));
+            assertEquals(before.getValue(), after.getValue(), "未变更时前后快照应完全一致");
         }
 
         @Test

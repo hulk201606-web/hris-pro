@@ -17,11 +17,9 @@ import com.hris.employee.dto.ProfileDtos.ProfileEducationDto;
 import com.hris.employee.dto.ProfileDtos.ProfileEmergencyDto;
 import com.hris.employee.dto.ProfileDtos.ProfileFamilyDto;
 import com.hris.employee.dto.ProfileDtos.ProfileWorkDto;
-import com.hris.employee.entity.ChangeAudit;
 import com.hris.employee.entity.Employee;
 import com.hris.employee.entity.Employment;
 import com.hris.employee.enums.EmployeeStatus;
-import com.hris.employee.mapper.ChangeAuditMapper;
 import com.hris.employee.mapper.EmployeeMapper;
 import com.hris.employee.mapper.EmploymentMapper;
 import com.hris.employee.util.MaskUtil;
@@ -54,18 +52,18 @@ public class EmployeeService {
 
     private final EmployeeMapper employeeMapper;
     private final EmploymentMapper employmentMapper;
-    private final ChangeAuditMapper changeAuditMapper;
+    private final EmpChangeAuditService changeAuditService;
     private final EmpNoService empNoService;
     private final EmploymentService employmentService;
     private final ProfileService profileService;
     private final EmployeeStateMachine stateMachine;
 
     public EmployeeService(EmployeeMapper employeeMapper, EmploymentMapper employmentMapper,
-                           ChangeAuditMapper changeAuditMapper, EmpNoService empNoService,
+                           EmpChangeAuditService changeAuditService, EmpNoService empNoService,
                            EmploymentService employmentService, ProfileService profileService, EmployeeStateMachine stateMachine) {
         this.employeeMapper = employeeMapper;
         this.employmentMapper = employmentMapper;
-        this.changeAuditMapper = changeAuditMapper;
+        this.changeAuditService = changeAuditService;
         this.empNoService = empNoService;
         this.employmentService = employmentService;
         this.profileService = profileService;
@@ -91,6 +89,7 @@ public class EmployeeService {
         e.setBlacklisted(0);
         employeeMapper.insert(e);
         profileService.replace(e.getId(), req.educations(), req.works(), req.families(), req.emergencies());
+        changeAuditService.record(e.getId(), "CREATE", null, snapshot(e), "建档");
         return get(e.getId());
     }
 
@@ -135,6 +134,7 @@ public class EmployeeService {
     @Transactional(rollbackFor = Exception.class)
     public EmployeeProfileResponse update(Long id, EmployeeUpdateRequest req) {
         Employee e = require(id);
+        Map<String, Object> before = snapshot(e);
         applySensitiveChange(e, "cert_no", e.getCertNoCipher(), req.certNo());
         applySensitiveChange(e, "mobile", e.getMobileCipher(), req.mobile());
         if (req.name() != null && !req.name().isBlank()) {
@@ -153,8 +153,59 @@ public class EmployeeService {
             e.setCertType(req.certType());
         }
         employeeMapper.updateById(e);
+        changeAuditService.record(id, "UPDATE", before, snapshot(e), null);
         profileService.replace(id, req.educations(), req.works(), req.families(), req.emergencies());
         return get(id);
+    }
+
+    /**
+     * 关键信息变更审批通过后落账（EMP_PROFILE_CHG 回调）。
+     *
+     * <p>与 update 共用 diff 采集：证件的密文/哈希/掩码三列同写，手机号走原
+     * TypeHandler 密文列；hireType 落在现行雇佣关系上。未知字段忽略，避免回调
+     * 载荷夹带任意列写入。</p>
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void applyProfileChange(Long empId, Map<String, Object> changes, String reason) {
+        Employee e = require(empId);
+        Map<String, Object> before = snapshot(e);
+        String certNo = text(changes.get("certNo"));
+        String mobile = text(changes.get("mobile"));
+        applySensitiveChange(e, "cert_no", e.getCertNoCipher(), certNo);
+        applySensitiveChange(e, "mobile", e.getMobileCipher(), mobile);
+        String name = text(changes.get("name"));
+        if (name != null && !name.isBlank()) {
+            e.setName(name);
+        }
+        if (changes.containsKey("certType")) {
+            e.setCertType(text(changes.get("certType")));
+        }
+        if (changes.containsKey("email")) {
+            e.setEmail(text(changes.get("email")));
+        }
+        if (changes.containsKey("address")) {
+            e.setAddress(text(changes.get("address")));
+        }
+        employeeMapper.updateById(e);
+        changeAuditService.record(empId, "PROFILE_CHANGE_APPROVED", before, snapshot(e), reason);
+        // 银行卡落库归薪酬域（cmp_employee_pay.bank_account_cipher），emp 无对应列：
+        // 审批通过的变更至少留一条脱敏审计，避免「批了但无痕迹」。
+        String bankAccount = text(changes.get("bankAccount"));
+        if (bankAccount != null && !bankAccount.isBlank()) {
+            changeAuditService.record(empId, "PROFILE_CHANGE_APPROVED",
+                    Map.of("bankAccount", ""), Map.of("bankAccount", bankAccount), reason);
+        }
+        String hireType = text(changes.get("hireType"));
+        if (hireType != null && !hireType.isBlank()) {
+            Employment current = employmentService.current(empId);
+            if (current != null) {
+                Map<String, Object> empBefore = Map.of("hireType", current.getHireType());
+                current.setHireType(hireType);
+                employmentMapper.updateById(current);
+                changeAuditService.record(empId, "PROFILE_CHANGE_APPROVED",
+                        empBefore, Map.of("hireType", hireType), reason);
+            }
+        }
     }
 
     /** 教育经历分签独立整体替换（EMP-F-001：null 保留旧数据，空列表清空该域）。 */
@@ -279,7 +330,7 @@ public class EmployeeService {
         return e;
     }
 
-    /** 敏感字段 diff 审计 + 更新密文/掩码列（MVP 密文列存明文，见实体注释）。 */
+    /** 更新敏感列的密文/哈希/掩码（审计由 changeAuditService 统一按 diff 落库）。 */
     private void applySensitiveChange(Employee e, String field, String currentCipher, String newPlain) {
         if (newPlain == null || newPlain.isBlank()) {
             return;
@@ -287,21 +338,30 @@ public class EmployeeService {
         if (newPlain.equals(currentCipher)) {
             return;
         }
-        ChangeAudit audit = new ChangeAudit();
-        audit.setEmpId(e.getId());
-        audit.setFieldName(field);
-        audit.setOldValue(field.equals("cert_no") ? e.getCertNoMask() : e.getMobileMask());
         if ("cert_no".equals(field)) {
-            audit.setNewValue(MaskUtil.maskCertNo(newPlain));
             e.setCertNoCipher(newPlain);
             e.setCertNoHash(hashCertNo(newPlain));
             e.setCertNoMask(MaskUtil.maskCertNo(newPlain));
         } else {
-            audit.setNewValue(MaskUtil.maskMobile(newPlain));
             e.setMobileCipher(newPlain);
             e.setMobileMask(MaskUtil.maskMobile(newPlain));
         }
-        changeAuditMapper.insert(audit);
+    }
+
+    /** 关键字段快照（diff 采集用；明文只在内存中比较，落审计前由 EmpDiffUtil 脱敏）。 */
+    private Map<String, Object> snapshot(Employee e) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("name", e.getName());
+        m.put("cert_no", e.getCertNoCipher());
+        m.put("cert_type", e.getCertType());
+        m.put("mobile", e.getMobileCipher());
+        m.put("email", e.getEmail());
+        m.put("address", e.getAddress());
+        return m;
+    }
+
+    private String text(Object v) {
+        return v == null ? null : String.valueOf(v);
     }
 
     private List<Long> resolveEmpIdsByEmployment(Long deptId, Long positionId, String hireType) {

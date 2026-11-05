@@ -1,5 +1,6 @@
 package com.hris.employee.config;
 
+import com.hris.common.security.AuthContextHolder;
 import com.hris.common.trace.TraceContext;
 import com.hris.common.trace.TraceIdFilter;
 import feign.RequestInterceptor;
@@ -27,6 +28,23 @@ public class EmployeeFeignConfig {
             }
             if (tenantId != null) {
                 template.header(TraceIdFilter.HEADER_TENANT_ID, String.valueOf(tenantId));
+            }
+            // 自助聚合/跨域查询要代用户取数：透传用户与权限头，否则下游 /me 与 @RequirePerm 全部 401/403
+            Long userId = AuthContextHolder.getUserId() != null
+                    ? AuthContextHolder.getUserId() : TraceContext.getUserId();
+            if (userId != null) {
+                template.header(com.hris.common.security.AuthContextFilter.HEADER_USER_ID,
+                        String.valueOf(userId));
+            }
+            java.util.Set<String> perms = AuthContextHolder.getPerms();
+            if (perms != null && !perms.isEmpty()) {
+                template.header(com.hris.common.security.AuthContextFilter.HEADER_PERMS,
+                        String.join(",", perms));
+            }
+            java.util.Set<String> roles = AuthContextHolder.getRoles();
+            if (roles != null && !roles.isEmpty()) {
+                template.header(com.hris.common.security.AuthContextFilter.HEADER_ROLES,
+                        String.join(",", roles));
             }
         };
     }

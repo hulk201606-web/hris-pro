@@ -35,6 +35,12 @@ public class TenantConfigService {
         return toResponse(requireByKey(key));
     }
 
+    /** 按 config_key 查询原始值，不存在返回 null（内部只读取数，不抛 NOT_FOUND）。 */
+    public String findValue(String key) {
+        SysTenantConfig e = findByKey(normalize(key));
+        return e == null ? null : e.getConfigValue();
+    }
+
     /** 按 config_key upsert（存在则更新值，不存在则插入）。 */
     public ConfigResponse set(String key, ConfigRequest req) {
         String k = normalize(key);

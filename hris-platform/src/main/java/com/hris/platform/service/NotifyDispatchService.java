@@ -96,6 +96,55 @@ public class NotifyDispatchService {
                 result.httpStatus(), result.responseBody(), result.failedReason());
     }
 
+    /** 直发结果（内部通知端点/报表订阅复用；失败不抛异常）。 */
+    public record DirectSendResult(String status, Integer httpStatus, String responseBody,
+                                   String failedReason) {
+    }
+
+    /**
+     * 无模板直发（PLT 内部通知端点，供招聘 Offer 等跨域事件使用）。
+     *
+     * <p>复用三渠道 payload 构造与 SSRF 防线；EMAIL 走邮件网关的
+     * {@code {to,subject,content}} 体，WECOM/DINGTALK 走机器人 text 体。
+     * 发送失败以 {@code status=FAILED + failedReason} 返回，绝不抛出 500。</p>
+     */
+    public DirectSendResult sendDirect(String channel, String recipient, String subject,
+                                       String content, String webhookUrl) {
+        String ch = channel == null ? "" : channel.trim().toUpperCase();
+        String text = (subject == null ? "" : subject) + "\n" + (content == null ? "" : content);
+        if (webhookUrl == null || webhookUrl.isBlank()) {
+            return failDirect(ch, "渠道 " + ch + " 未配置 webhook 地址");
+        }
+        try {
+            checkSsrf(webhookUrl);
+        } catch (BizException e) {
+            return failDirect(ch, e.getMessage());
+        }
+        String payload = "EMAIL".equals(ch)
+                ? JsonUtil.toJson(emailPayload(recipient, subject, content))
+                : buildPayload(ch, text);
+        WebhookPoster.PostResult result = poster.postJson(webhookUrl, payload);
+        writeRecord(ch, result.success());
+        if (result.success()) {
+            return new DirectSendResult("SENT", result.httpStatus(), result.responseBody(), null);
+        }
+        return new DirectSendResult("FAILED", result.httpStatus(), result.responseBody(),
+                result.failedReason());
+    }
+
+    private Map<String, Object> emailPayload(String recipient, String subject, String content) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("to", recipient);
+        payload.put("subject", subject);
+        payload.put("content", content);
+        return payload;
+    }
+
+    private DirectSendResult failDirect(String channel, String reason) {
+        writeRecord(channel, false);
+        return new DirectSendResult("FAILED", null, null, reason);
+    }
+
     /** 渲染样例：无参数占位符原样保留，直观展示模板内容。 */
     private String renderSample(SysNotifyTemplate t) {
         String subject = t.getSubject() == null ? "" : t.getSubject();
@@ -156,6 +205,22 @@ public class NotifyDispatchService {
             return parts.length >= 2 ? Integer.parseInt(parts[1]) : -1;
         } catch (NumberFormatException e) {
             return -1;
+        }
+    }
+
+    /** 直发场景回写记录：无模板、无目标用户（内部系统事件，userId 记 0）。 */
+    private void writeRecord(String channel, boolean success) {
+        try {
+            SysNotifyRecord r = new SysNotifyRecord();
+            r.setUserId(0L);
+            r.setChannel(channel);
+            r.setSendStatus(success ? "SENT" : "FAILED");
+            if (success) {
+                r.setSentAt(LocalDateTime.now());
+            }
+            recordMapper.insert(r);
+        } catch (Exception e) {
+            log.warn("notify direct record write-back failed: channel={}: {}", channel, e.getMessage());
         }
     }
 

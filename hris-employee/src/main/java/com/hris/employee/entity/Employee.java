@@ -52,6 +52,9 @@ public class Employee extends BaseEntity {
     /** 邮箱 */
     private String email;
 
+    /** 联系地址（EMP-F-021 自助可改） */
+    private String address;
+
     /** 性别 M/F */
     private String gender;
 
@@ -142,6 +145,14 @@ public class Employee extends BaseEntity {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
     }
 
     public String getGender() {

@@ -38,15 +38,18 @@ public class LifecycleCaseService {
     private final PendingTransactionService pendingService;
     private final EmployeeStateMachine stateMachine;
     private final FlowIntegration flowIntegration;
+    private final SelfProfileService selfProfileService;
 
     public LifecycleCaseService(LifecycleCaseMapper caseMapper, EmployeeMapper employeeMapper,
                                 PendingTransactionService pendingService,
-                                EmployeeStateMachine stateMachine, FlowIntegration flowIntegration) {
+                                EmployeeStateMachine stateMachine, FlowIntegration flowIntegration,
+                                SelfProfileService selfProfileService) {
         this.caseMapper = caseMapper;
         this.employeeMapper = employeeMapper;
         this.pendingService = pendingService;
         this.stateMachine = stateMachine;
         this.flowIntegration = flowIntegration;
+        this.selfProfileService = selfProfileService;
     }
 
     /** 落生命周期单 + 发起流程（降级不阻断）。 */
@@ -114,6 +117,16 @@ public class LifecycleCaseService {
         TraceContext.setTenantId(tid);
         TraceContext.setUserId(0L);
         try {
+            // 关键信息变更（EMP_PROFILE_CHG）不是生命周期单，按 bizKey 先查申请单；
+            // 命中则落账，未命中再走生命周期单（两类单据 key 前缀不重叠，互不误判）。
+            SelfProfileService.CallbackResult profileResult =
+                    selfProfileService.handleCallback(bizKey, approved, comment);
+            if (profileResult != null && profileResult != SelfProfileService.CallbackResult.NOT_FOUND) {
+                boolean changed = profileResult != SelfProfileService.CallbackResult.IDEMPOTENT;
+                String state = profileResult == SelfProfileService.CallbackResult.APPLIED
+                        ? STATE_DONE : STATE_REJECTED;
+                return new ApprovalCallbackResponse(changed, state);
+            }
             LifecycleCase c = requireCase(bizKey);
             if (!STATE_PROCESSING.equals(c.getState())) {
                 // 幂等：终态重复回调直接返回成功，不重复落账

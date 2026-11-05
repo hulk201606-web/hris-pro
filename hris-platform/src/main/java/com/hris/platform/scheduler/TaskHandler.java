@@ -23,4 +23,12 @@ public interface TaskHandler {
      * @throws Exception 任何异常都会被调度器记为 FAILED 并触发重试
      */
     String execute() throws Exception;
+
+    /**
+     * 带任务键执行（批11#22 报表订阅）：同一 handler 服务多行订阅时，靠 task_key
+     * 区分「本次该跑哪条订阅」。默认忽略 taskKey，兼容既有单例任务。
+     */
+    default String execute(String taskKey) throws Exception {
+        return execute();
+    }
 }

@@ -412,6 +412,8 @@ CREATE TABLE org_position_version (
   `position_id`   BIGINT       NOT NULL COMMENT '岗位ID(逻辑外键 org_position.id)',
   `snapshot_date` DATE         NOT NULL COMMENT '快照日期',
   `snapshot`      JSON         NOT NULL COMMENT '岗位快照(主数据+挂靠部门, 不含员工归属)',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT '版本状态(批11#23): DRAFT=草稿(仅管理端可见) ACTIVE=当前生效 SUPERSEDED=已被替代',
+  `effective_from` DATE        DEFAULT NULL COMMENT '计划生效日(未到该日期保持DRAFT, 到期由调度/手动 activate)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -420,7 +422,8 @@ CREATE TABLE org_position_version (
   `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_org_position_version` (`tenant_id`, `version_no`, `position_id`),
-  KEY `idx_org_position_version_date` (`tenant_id`, `position_id`, `snapshot_date`)
+  KEY `idx_org_position_version_date` (`tenant_id`, `position_id`, `snapshot_date`),
+  KEY `idx_org_position_version_status` (`tenant_id`, `status`, `effective_from`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='组织版本-岗位快照';
 
 -- 组织版本-职级快照(批8#16 MVP: 组织版本扩展到职级)
@@ -431,6 +434,8 @@ CREATE TABLE org_grade_version (
   `grade_id`      BIGINT       NOT NULL COMMENT '职级ID(逻辑外键 org_grade.id)',
   `snapshot_date` DATE         NOT NULL COMMENT '快照日期',
   `snapshot`      JSON         NOT NULL COMMENT '职级快照(主数据)',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT '版本状态(批11#23): DRAFT=草稿(仅管理端可见) ACTIVE=当前生效 SUPERSEDED=已被替代',
+  `effective_from` DATE        DEFAULT NULL COMMENT '计划生效日(未到该日期保持DRAFT, 到期由调度/手动 activate)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -439,7 +444,8 @@ CREATE TABLE org_grade_version (
   `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_org_grade_version` (`tenant_id`, `version_no`, `grade_id`),
-  KEY `idx_org_grade_version_date` (`tenant_id`, `grade_id`, `snapshot_date`)
+  KEY `idx_org_grade_version_date` (`tenant_id`, `grade_id`, `snapshot_date`),
+  KEY `idx_org_grade_version_status` (`tenant_id`, `status`, `effective_from`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='组织版本-职级快照';
 
 -- =====================================================================
@@ -462,6 +468,7 @@ CREATE TABLE emp_employee (
   `mobile_cipher`    VARCHAR(256) DEFAULT NULL COMMENT '手机号密文(逻辑列 mobile)',
   `mobile_mask`      VARCHAR(32)  DEFAULT NULL COMMENT '手机号掩码',
   `email`            VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
+  `address`          VARCHAR(255) DEFAULT NULL COMMENT '联系地址(自助可改,EMP-F-021)',
   `gender`           VARCHAR(8)   DEFAULT NULL COMMENT '性别 M/F',
   `birth_date`       DATE         DEFAULT NULL COMMENT '出生日期',
   `status`           TINYINT      NOT NULL DEFAULT 0 COMMENT '员工状态机(8态,见03-02§4) 0=待入职 1=试用 2=在职 3=离职中 4=已离职 5=已取消 6=退休 7=黑名单',
@@ -707,6 +714,45 @@ CREATE TABLE emp_change_audit (
   KEY `idx_emp_change_audit` (`tenant_id`, `emp_id`, `field_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='字段变更审计';
 
+-- 工号序号段(EMP-F-002): 按租户+前缀+年度分配序号, 行锁保证并发安全
+CREATE TABLE emp_no_seq (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `prefix`        VARCHAR(32)  NOT NULL COMMENT '工号前缀(模板 {PREFIX} 渲染值)',
+  `seq_year`      SMALLINT     NOT NULL COMMENT '序号年度(按年重置)',
+  `current_seq`   INT          NOT NULL DEFAULT 0 COMMENT '已分配最大序号',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_emp_no_seq` (`tenant_id`, `prefix`, `seq_year`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='工号序号段';
+
+-- 关键信息变更申请(EMP-F-021): 自助拒绝直改的关键字段经 EMP_PROFILE_CHG 审批后回写
+CREATE TABLE emp_profile_change (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `emp_id`        BIGINT       NOT NULL COMMENT '员工ID(逻辑外键 emp_employee.id)',
+  `biz_key`       VARCHAR(64)  NOT NULL COMMENT '流程业务键(EMP_PROFILE_CHG)',
+  `changes_json`  JSON         DEFAULT NULL COMMENT '待生效字段变更(before/after 明文语义)',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT '状态 PENDING/APPLIED/REJECTED',
+  `proc_inst_id`  VARCHAR(64)  DEFAULT NULL COMMENT '流程实例ID',
+  `reason`        VARCHAR(255) DEFAULT NULL COMMENT '申请原因',
+  `applied_at`    DATETIME(3)  DEFAULT NULL COMMENT '落账时间(UTC)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_emp_profile_change_biz` (`tenant_id`, `biz_key`),
+  KEY `idx_emp_profile_change_emp` (`tenant_id`, `emp_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='关键信息变更申请';
+
 -- =====================================================================
 -- 域 4: att_db 假勤 (att_punch_record 分片 + 按月分区)
 -- =====================================================================
@@ -749,6 +795,11 @@ CREATE TABLE att_group (
   `code`          VARCHAR(64)  NOT NULL COMMENT '班组编码',
   `leader_emp_id` BIGINT       DEFAULT NULL COMMENT '班组长员工ID(逻辑外键 emp_employee.id)',
   `holiday_calendar_year` INT  DEFAULT NULL COMMENT '绑定的节假日历年度(空=不绑定,日考勤按此年取att_holiday)',
+  `work_mode`     VARCHAR(16)  NOT NULL DEFAULT 'FIXED' COMMENT '工作制 FIXED=固定 FLEXIBLE=弹性(批12#27)',
+  `timezone`      VARCHAR(48)  NOT NULL DEFAULT 'Asia/Shanghai' COMMENT '组时区(决定"今天"与迟到/早退比较基准,批12#27)',
+  `time_window_minutes` INT    NOT NULL DEFAULT 0 COMMENT '弹性区间(分钟,FLEXIBLE 生效,0=关闭)',
+  `location_id`   BIGINT       DEFAULT NULL COMMENT '绑定考勤围栏ID(逻辑外键 att_location.id,空=不校验围栏)',
+  `require_location` TINYINT   NOT NULL DEFAULT 1 COMMENT '是否强制定位打卡 1=是 0=否(仅组绑围栏时生效)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -775,6 +826,44 @@ CREATE TABLE att_group_member (
   UNIQUE KEY `uk_att_group_member` (`tenant_id`, `group_id`, `emp_id`),
   KEY `idx_att_group_member_emp` (`tenant_id`, `emp_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤组成员';
+
+-- 考勤围栏(批12#27): 组绑定 location_id 后,打卡坐标须落在半径内
+CREATE TABLE att_location (
+  `id`          BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`   BIGINT       NOT NULL COMMENT '租户ID',
+  `name`        VARCHAR(64)  NOT NULL COMMENT '围栏名称',
+  `lat`         DECIMAL(10,7) NOT NULL COMMENT '中心点纬度(-90~90)',
+  `lng`         DECIMAL(10,7) NOT NULL COMMENT '中心点经度(-180~180)',
+  `radius_m`    INT          NOT NULL DEFAULT 200 COMMENT '允许半径(米)',
+  `enabled`     TINYINT      NOT NULL DEFAULT 1 COMMENT '是否启用 1=是 0=否',
+  `created_by`  BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`  BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`     TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`     INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_att_location_name` (`tenant_id`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤围栏';
+
+-- 考勤机设备(批12#27): 设备推送打卡鉴权,device_key_hash=SHA-256(设备密钥明文)
+CREATE TABLE att_device (
+  `id`              BIGINT      NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`       BIGINT      NOT NULL COMMENT '租户ID',
+  `device_sn`       VARCHAR(64) NOT NULL COMMENT '设备序列号(租户内唯一)',
+  `device_key_hash` CHAR(64)    NOT NULL COMMENT '设备密钥摘要(SHA-256 十六进制,不存明文)',
+  `location_id`     BIGINT      DEFAULT NULL COMMENT '设备所在围栏ID(逻辑外键 att_location.id)',
+  `status`          VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态 ACTIVE/DISABLED',
+  `created_by`      BIGINT      NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`      BIGINT      NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`         TINYINT     NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`         INT         NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_att_device_sn` (`tenant_id`, `device_sn`),
+  KEY `idx_att_device_loc` (`tenant_id`, `location_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤机设备';
 
 CREATE TABLE att_holiday (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
@@ -1094,6 +1183,30 @@ CREATE TABLE att_closing_adjustment (
   PRIMARY KEY (`id`),
   KEY `idx_att_closing_adj` (`tenant_id`, `emp_id`, `closing_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='月结调整';
+
+-- 日考勤月结锁(批11#19): 期间(YYYY-MM)置 ACTIVE 后冻结该期间日考勤重算;
+-- 解锁置 RELEASED 保留历史行(审计),因此 uk 含 closed_at 以支持「一月多锁」;
+-- 「同租户同期间 ACTIVE 至多一条」由应用层保证(DailyCloseService)。
+CREATE TABLE att_daily_close (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `period`        VARCHAR(7)   NOT NULL COMMENT '期间(YYYY-MM,如 2026-10)',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT '状态 ACTIVE=已锁定 RELEASED=已解锁',
+  `closed_by`     BIGINT       DEFAULT NULL COMMENT '锁定操作人员工ID',
+  `closed_at`     DATETIME(3)  NOT NULL COMMENT '锁定时间(UTC,uk 组成部分)',
+  `released_by`   BIGINT       DEFAULT NULL COMMENT '解锁操作人员工ID',
+  `released_at`   DATETIME(3)  DEFAULT NULL COMMENT '解锁时间(UTC)',
+  `release_reason` VARCHAR(255) DEFAULT NULL COMMENT '解锁理由(必填,审计留痕)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_att_daily_close` (`tenant_id`, `period`, `closed_at`),
+  KEY `idx_att_daily_close_active` (`tenant_id`, `period`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='日考勤月结锁';
 
 -- =====================================================================
 -- 域 5: rcu_db 招聘
@@ -1682,6 +1795,28 @@ CREATE TABLE cmp_period_lock (
   UNIQUE KEY `uk_cmp_period_lock` (`tenant_id`, `period_code`, `locked_at`),
   KEY `idx_cmp_period_lock_status` (`tenant_id`, `period_code`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='期间关账记录';
+
+-- 法人成本物化快照(批 12 #29, 报表 source=snapshot 读聚合库; legal_entity_id=0 表示法人未知)
+CREATE TABLE cmp_cost_snapshot (
+  `id`               BIGINT        NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`        BIGINT        NOT NULL COMMENT '租户ID',
+  `period_code`      VARCHAR(16)   NOT NULL COMMENT '周期编码(如 2026-01)',
+  `legal_entity_id`  BIGINT        NOT NULL DEFAULT 0 COMMENT '法人ID(逻辑外键 org_legal_entity.id,0=未知法人哨兵)',
+  `headcount`        INT           NOT NULL DEFAULT 0 COMMENT '人数(员工去重)',
+  `gross_total`      DECIMAL(18,4) NOT NULL DEFAULT 0 COMMENT '应发合计',
+  `deduction_total`  DECIMAL(18,4) NOT NULL DEFAULT 0 COMMENT '扣减合计(应发-实发)',
+  `tax_total`        DECIMAL(18,4) DEFAULT NULL COMMENT '个税合计(MVP 无数据源,NULL)',
+  `net_total`        DECIMAL(18,4) NOT NULL DEFAULT 0 COMMENT '实发合计',
+  `refreshed_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '快照刷新时间(UTC)',
+  `created_by`       BIGINT        NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`       BIGINT        NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`          TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`          INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cmp_cost_snapshot` (`tenant_id`, `period_code`, `legal_entity_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='法人成本物化快照';
 
 -- =====================================================================
 -- 域 7: prf_db 绩效与培训
@@ -2619,6 +2754,25 @@ CREATE TABLE sys_export_task (
   PRIMARY KEY (`id`),
   KEY `idx_sys_export_task` (`tenant_id`, `status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='异步导出任务';
+
+-- 报表订阅(PLT-F-005): 按 cron 定时触发导出并投递通知; 生效时同步注册调度中心任务
+CREATE TABLE sys_report_subscription (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `report_def_id` BIGINT       NOT NULL COMMENT '报表定义ID(逻辑外键 sys_report_def.id)',
+  `cron_expr`     VARCHAR(64)  NOT NULL COMMENT 'cron 表达式',
+  `channels`      JSON         DEFAULT NULL COMMENT '通知渠道(json 数组 EMAIL/WECOM/DINGTALK)',
+  `recipients`    JSON         DEFAULT NULL COMMENT '接收人(json 数组 邮箱/用户ID)',
+  `status`        TINYINT      NOT NULL DEFAULT 1 COMMENT '状态 1=启用 0=停用',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_sys_report_sub` (`tenant_id`, `status`, `report_def_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='报表订阅';
 
 -- 审计日志(只追加, 月分区; 分区由调度任务维护)
 CREATE TABLE sys_audit_log (

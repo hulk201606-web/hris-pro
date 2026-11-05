@@ -44,16 +44,19 @@ public class PendingTransactionService {
     private final EmploymentService employmentService;
     private final AccountIntegration accountIntegration;
     private final HeadcountIntegration headcountIntegration;
+    private final EmpChangeAuditService changeAuditService;
 
     public PendingTransactionService(PendingTransactionMapper pendingMapper, EmployeeMapper employeeMapper,
                                      EmployeeStateMachine stateMachine, EmploymentService employmentService,
-                                     AccountIntegration accountIntegration, HeadcountIntegration headcountIntegration) {
+                                     AccountIntegration accountIntegration, HeadcountIntegration headcountIntegration,
+                                     EmpChangeAuditService changeAuditService) {
         this.pendingMapper = pendingMapper;
         this.employeeMapper = employeeMapper;
         this.stateMachine = stateMachine;
         this.employmentService = employmentService;
         this.accountIntegration = accountIntegration;
         this.headcountIntegration = headcountIntegration;
+        this.changeAuditService = changeAuditService;
     }
 
     /** 生成待生效事务（审批通过调用）。payload 为事务载荷（日期字段请以字符串存入）。 */
@@ -160,6 +163,11 @@ public class PendingTransactionService {
         var current = employmentService.current(emp.getId());
         Long legalEntityId = current == null ? null : current.getLegalEntityId();
         String hireType = current == null ? null : current.getHireType();
+        // 变更前组织维度快照（审批回调/调动落账统一走 diff 审计）
+        Map<String, Object> before = new java.util.LinkedHashMap<>();
+        before.put("deptId", current == null ? null : current.getDeptId());
+        before.put("positionId", current == null ? null : current.getPositionId());
+        before.put("gradeId", current == null ? null : current.getGradeId());
         // 旧部门/岗位释放占用（fail-open，须在 closeCurrent 前取现行雇佣关系）
         writebackOccupancy(emp.getId(),
                 current == null ? null : current.getDeptId(),
@@ -169,6 +177,11 @@ public class PendingTransactionService {
         employmentService.open(emp.getId(), legalEntityId, asLong(p, "targetDeptId"),
                 asLong(p, "targetPositionId"), asLong(p, "targetGradeId"), hireType,
                 asLong(p, "targetSupervisorEmpId"), tx.getEffectDate());
+        Map<String, Object> after = new java.util.LinkedHashMap<>();
+        after.put("deptId", asLong(p, "targetDeptId"));
+        after.put("positionId", asLong(p, "targetPositionId"));
+        after.put("gradeId", asLong(p, "targetGradeId"));
+        changeAuditService.record(emp.getId(), "TRANSFER", before, after, tx.getTransNo());
         writebackOccupancy(emp.getId(), asLong(p, "targetDeptId"), asLong(p, "targetPositionId"),
                 1, tx.getTransNo() + ":IN");
     }

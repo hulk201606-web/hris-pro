@@ -133,7 +133,7 @@ public class SchedulerRegistry {
                 retryable = false;
                 message = "未找到处理器: " + t.getHandler() + "（可用: " + handlers.keySet() + "）";
             } else {
-                message = handler.execute();
+                message = handler.execute(t.getTaskKey());
                 status = "SUCCESS";
             }
         } catch (Exception e) {

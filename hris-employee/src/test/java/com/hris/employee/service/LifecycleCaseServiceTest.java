@@ -57,13 +57,15 @@ class LifecycleCaseServiceTest {
     private EmployeeStateMachine stateMachine;
     @Mock
     private FlowIntegration flowIntegration;
+    @Mock
+    private SelfProfileService selfProfileService;
 
     private LifecycleCaseService service;
 
     @BeforeEach
     void setUp() {
         service = new LifecycleCaseService(caseMapper, employeeMapper, pendingService,
-                stateMachine, flowIntegration);
+                stateMachine, flowIntegration, selfProfileService);
     }
 
     @AfterEach

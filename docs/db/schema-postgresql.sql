@@ -415,6 +415,8 @@ CREATE TABLE org_position_version (
   position_id   BIGINT       NOT NULL,                            -- 岗位ID(逻辑外键 org_position.id)
   snapshot_date DATE         NOT NULL,                            -- 快照日期
   snapshot      JSONB        NOT NULL,                            -- 岗位快照(主数据+挂靠部门, 不含员工归属)
+  status        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',            -- 版本状态(批11#23): DRAFT/ACTIVE/SUPERSEDED
+  effective_from DATE        DEFAULT NULL,                        -- 计划生效日(未到保持DRAFT)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -425,6 +427,7 @@ CREATE TABLE org_position_version (
   CONSTRAINT uk_org_position_version UNIQUE (tenant_id, version_no, position_id)
 );
 CREATE INDEX idx_org_position_version_date ON org_position_version (tenant_id, position_id, snapshot_date);
+CREATE INDEX idx_org_position_version_status ON org_position_version (tenant_id, status, effective_from);
 
 -- 组织版本-职级快照(批8#16 MVP: 组织版本扩展到职级)
 CREATE TABLE org_grade_version (
@@ -434,6 +437,8 @@ CREATE TABLE org_grade_version (
   grade_id      BIGINT       NOT NULL,                            -- 职级ID(逻辑外键 org_grade.id)
   snapshot_date DATE         NOT NULL,                            -- 快照日期
   snapshot      JSONB        NOT NULL,                            -- 职级快照(主数据)
+  status        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',            -- 版本状态(批11#23): DRAFT/ACTIVE/SUPERSEDED
+  effective_from DATE        DEFAULT NULL,                        -- 计划生效日(未到保持DRAFT)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -444,6 +449,7 @@ CREATE TABLE org_grade_version (
   CONSTRAINT uk_org_grade_version UNIQUE (tenant_id, version_no, grade_id)
 );
 CREATE INDEX idx_org_grade_version_date ON org_grade_version (tenant_id, grade_id, snapshot_date);
+CREATE INDEX idx_org_grade_version_status ON org_grade_version (tenant_id, status, effective_from);
 
 -- =====================================================================
 -- 域 3: emp_db 员工 (全表按 tenant_id 分片, 绑定表组)
@@ -465,6 +471,7 @@ CREATE TABLE emp_employee (
   mobile_cipher    VARCHAR(256),                                  -- 手机号密文(逻辑列 mobile)
   mobile_mask      VARCHAR(32),                                   -- 手机号掩码
   email            VARCHAR(128),                                  -- 邮箱
+  address          VARCHAR(255),                                  -- 联系地址(自助可改,EMP-F-021)
   gender           VARCHAR(8),                                    -- 性别 M/F
   birth_date       DATE,                                          -- 出生日期
   status           SMALLINT     NOT NULL DEFAULT 0,               -- 员工状态机(8态,见03-02§4) 0=待入职 1=试用 2=在职 3=离职中 4=已离职 5=已取消 6=退休 7=黑名单
@@ -709,6 +716,45 @@ CREATE TABLE emp_change_audit (
 );
 CREATE INDEX idx_emp_change_audit ON emp_change_audit (tenant_id, emp_id, field_name);
 
+-- 工号序号段(EMP-F-002): 按租户+前缀+年度分配序号, 行锁保证并发安全
+CREATE TABLE emp_no_seq (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  prefix        VARCHAR(32)  NOT NULL,                            -- 工号前缀
+  seq_year      SMALLINT     NOT NULL,                            -- 序号年度(按年重置)
+  current_seq   INTEGER      NOT NULL DEFAULT 0,                  -- 已分配最大序号
+  created_by    BIGINT       NOT NULL DEFAULT 0,
+  updated_by    BIGINT       NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted       SMALLINT     NOT NULL DEFAULT 0,
+  version       INTEGER      NOT NULL DEFAULT 0,
+  CONSTRAINT pk_emp_no_seq PRIMARY KEY (id),
+  CONSTRAINT uk_emp_no_seq UNIQUE (tenant_id, prefix, seq_year)
+);
+
+-- 关键信息变更申请(EMP-F-021): 自助拒绝直改的关键字段经 EMP_PROFILE_CHG 审批后回写
+CREATE TABLE emp_profile_change (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  emp_id        BIGINT       NOT NULL,                            -- 员工ID
+  biz_key       VARCHAR(64)  NOT NULL,                            -- 流程业务键
+  changes_json  JSONB,                                            -- 待生效字段变更
+  status        VARCHAR(16)  NOT NULL DEFAULT 'PENDING',          -- PENDING/APPLIED/REJECTED
+  proc_inst_id  VARCHAR(64),                                      -- 流程实例ID
+  reason        VARCHAR(255),                                     -- 申请原因
+  applied_at    TIMESTAMP(3),                                     -- 落账时间(UTC)
+  created_by    BIGINT       NOT NULL DEFAULT 0,
+  updated_by    BIGINT       NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted       SMALLINT     NOT NULL DEFAULT 0,
+  version       INTEGER      NOT NULL DEFAULT 0,
+  CONSTRAINT pk_emp_profile_change PRIMARY KEY (id),
+  CONSTRAINT uk_emp_profile_change_biz UNIQUE (tenant_id, biz_key)
+);
+CREATE INDEX idx_emp_profile_change_emp ON emp_profile_change (tenant_id, emp_id, status);
+
 -- =====================================================================
 -- 域 4: att_db 假勤 (att_punch_record 分片 + 按月分区)
 -- =====================================================================
@@ -749,6 +795,11 @@ CREATE TABLE att_group (
   code          VARCHAR(64)  NOT NULL,                            -- 班组编码
   leader_emp_id BIGINT,                                           -- 班组长员工ID(逻辑外键 emp_employee.id)
   holiday_calendar_year INTEGER,                                 -- 绑定的节假日历年度(空=不绑定,日考勤按此年取att_holiday)
+  work_mode     VARCHAR(16)  NOT NULL DEFAULT 'FIXED',            -- 工作制 FIXED=固定 FLEXIBLE=弹性(批12#27)
+  timezone      VARCHAR(48)  NOT NULL DEFAULT 'Asia/Shanghai',    -- 组时区(决定"今天"与迟到/早退比较基准,批12#27)
+  time_window_minutes INTEGER NOT NULL DEFAULT 0,                 -- 弹性区间(分钟,FLEXIBLE 生效,0=关闭)
+  location_id   BIGINT,                                           -- 绑定考勤围栏ID(逻辑外键 att_location.id,空=不校验围栏)
+  require_location SMALLINT  NOT NULL DEFAULT 1,                  -- 是否强制定位打卡 1=是 0=否(仅组绑围栏时生效)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -775,6 +826,44 @@ CREATE TABLE att_group_member (
   CONSTRAINT uk_att_group_member UNIQUE (tenant_id, group_id, emp_id)
 );
 CREATE INDEX idx_att_group_member_emp ON att_group_member (tenant_id, emp_id);
+
+-- 考勤围栏(批12#27): 组绑定 location_id 后,打卡坐标须落在半径内
+CREATE TABLE att_location (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  name          VARCHAR(64)  NOT NULL,                            -- 围栏名称
+  lat           DECIMAL(10,7) NOT NULL,                           -- 中心点纬度(-90~90)
+  lng           DECIMAL(10,7) NOT NULL,                           -- 中心点经度(-180~180)
+  radius_m      INTEGER      NOT NULL DEFAULT 200,                -- 允许半径(米)
+  enabled       SMALLINT     NOT NULL DEFAULT 1,                  -- 是否启用 1=是 0=否
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_att_location PRIMARY KEY (id),
+  CONSTRAINT uk_att_location_name UNIQUE (tenant_id, name)
+);
+
+-- 考勤机设备(批12#27): 设备推送打卡鉴权,device_key_hash=SHA-256(设备密钥明文)
+CREATE TABLE att_device (
+  id              BIGINT      NOT NULL,                           -- 主键: 雪花ID
+  tenant_id       BIGINT      NOT NULL,                           -- 租户ID
+  device_sn       VARCHAR(64) NOT NULL,                           -- 设备序列号(租户内唯一)
+  device_key_hash CHAR(64)    NOT NULL,                           -- 设备密钥摘要(SHA-256 十六进制,不存明文)
+  location_id     BIGINT,                                         -- 设备所在围栏ID(逻辑外键 att_location.id)
+  status          VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',           -- 状态 ACTIVE/DISABLED
+  created_by      BIGINT      NOT NULL DEFAULT 0,                 -- 创建人ID,0=系统
+  updated_by      BIGINT      NOT NULL DEFAULT 0,                 -- 更新人ID
+  created_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,-- 创建时间(UTC)
+  updated_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,-- 更新时间(UTC,应用层维护)
+  deleted         SMALLINT    NOT NULL DEFAULT 0,                 -- 逻辑删除 0=否 1=是
+  version         INTEGER     NOT NULL DEFAULT 0,                 -- 乐观锁版本号
+  CONSTRAINT pk_att_device PRIMARY KEY (id),
+  CONSTRAINT uk_att_device_sn UNIQUE (tenant_id, device_sn)
+);
+CREATE INDEX idx_att_device_loc ON att_device (tenant_id, location_id);
 
 -- 法定节假日与调班日
 CREATE TABLE att_holiday (
@@ -1095,6 +1184,29 @@ CREATE TABLE att_closing_adjustment (
   CONSTRAINT pk_att_closing_adjustment PRIMARY KEY (id)
 );
 CREATE INDEX idx_att_closing_adj ON att_closing_adjustment (tenant_id, emp_id, closing_id);
+
+-- 日考勤月结锁(批11#19): 期间置 ACTIVE 后冻结该期间日考勤重算; 解锁置 RELEASED 保留历史行;
+-- uk 含 closed_at 支持「一月多锁」,「同租户同期间 ACTIVE 至多一条」由应用层保证。
+CREATE TABLE att_daily_close (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  period        VARCHAR(7)   NOT NULL,                            -- 期间(YYYY-MM,如 2026-10)
+  status        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',           -- 状态 ACTIVE=已锁定 RELEASED=已解锁
+  closed_by     BIGINT,                                           -- 锁定操作人员工ID
+  closed_at     TIMESTAMP(3) NOT NULL,                            -- 锁定时间(UTC,uk 组成部分)
+  released_by   BIGINT,                                           -- 解锁操作人员工ID
+  released_at   TIMESTAMP(3),                                     -- 解锁时间(UTC)
+  release_reason VARCHAR(255),                                    -- 解锁理由(必填,审计留痕)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_att_daily_close PRIMARY KEY (id),
+  CONSTRAINT uk_att_daily_close UNIQUE (tenant_id, period, closed_at)
+);
+CREATE INDEX idx_att_daily_close_active ON att_daily_close (tenant_id, period, status);
 
 -- =====================================================================
 -- 域 5: rcu_db 招聘
@@ -1682,6 +1794,28 @@ CREATE TABLE cmp_period_lock (
   CONSTRAINT uk_cmp_period_lock UNIQUE (tenant_id, period_code, locked_at)
 );
 CREATE INDEX idx_cmp_period_lock_status ON cmp_period_lock (tenant_id, period_code, status);
+
+-- 法人成本物化快照(批 12 #29, 报表 source=snapshot 读聚合库; legal_entity_id=0 表示法人未知)
+CREATE TABLE cmp_cost_snapshot (
+  id               BIGINT        NOT NULL,                        -- 主键: 雪花ID
+  tenant_id        BIGINT        NOT NULL,                        -- 租户ID
+  period_code      VARCHAR(16)   NOT NULL,                        -- 周期编码(如 2026-01)
+  legal_entity_id  BIGINT        NOT NULL DEFAULT 0,              -- 法人ID(逻辑外键 org_legal_entity.id,0=未知法人哨兵)
+  headcount        INTEGER       NOT NULL DEFAULT 0,              -- 人数(员工去重)
+  gross_total      NUMERIC(18,4) NOT NULL DEFAULT 0,              -- 应发合计
+  deduction_total  NUMERIC(18,4) NOT NULL DEFAULT 0,              -- 扣减合计(应发-实发)
+  tax_total        NUMERIC(18,4),                                 -- 个税合计(MVP 无数据源,NULL)
+  net_total        NUMERIC(18,4) NOT NULL DEFAULT 0,              -- 实发合计
+  refreshed_at     TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 快照刷新时间(UTC)
+  created_by       BIGINT        NOT NULL DEFAULT 0,              -- 创建人ID,0=系统
+  updated_by       BIGINT        NOT NULL DEFAULT 0,              -- 更新人ID
+  created_at       TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
+  updated_at       TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 更新时间(UTC,应用层维护)
+  deleted          SMALLINT      NOT NULL DEFAULT 0,              -- 逻辑删除 0=否 1=是
+  version          INTEGER       NOT NULL DEFAULT 0,              -- 乐观锁版本号
+  CONSTRAINT pk_cmp_cost_snapshot PRIMARY KEY (id),
+  CONSTRAINT uk_cmp_cost_snapshot UNIQUE (tenant_id, period_code, legal_entity_id)
+);
 
 -- =====================================================================
 -- 域 7: prf_db 绩效与培训
@@ -2621,6 +2755,25 @@ CREATE TABLE sys_export_task (
   CONSTRAINT pk_sys_export_task PRIMARY KEY (id)
 );
 CREATE INDEX idx_sys_export_task ON sys_export_task (tenant_id, status, created_at);
+
+-- 报表订阅(PLT-F-005): 按 cron 定时触发导出并投递通知
+CREATE TABLE sys_report_subscription (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  report_def_id BIGINT       NOT NULL,                            -- 报表定义ID
+  cron_expr     VARCHAR(64)  NOT NULL,                            -- cron 表达式
+  channels      JSONB,                                            -- 通知渠道(json 数组)
+  recipients    JSONB,                                            -- 接收人(json 数组)
+  status        SMALLINT     NOT NULL DEFAULT 1,                  -- 1=启用 0=停用
+  created_by    BIGINT       NOT NULL DEFAULT 0,
+  updated_by    BIGINT       NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted       SMALLINT     NOT NULL DEFAULT 0,
+  version       INTEGER      NOT NULL DEFAULT 0,
+  CONSTRAINT pk_sys_report_sub PRIMARY KEY (id)
+);
+CREATE INDEX idx_sys_report_sub ON sys_report_subscription (tenant_id, status, report_def_id);
 
 -- 审计日志(只追加, 月分区; 分区由调度任务维护)
 CREATE TABLE sys_audit_log (

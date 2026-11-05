@@ -41,7 +41,7 @@ class EmployeeFieldGroupTest {
     @Mock
     private EmploymentMapper employmentMapper;
     @Mock
-    private ChangeAuditMapper changeAuditMapper;
+    private EmpChangeAuditService changeAuditService;
     @Mock
     private EmpNoService empNoService;
     @Mock
@@ -55,7 +55,7 @@ class EmployeeFieldGroupTest {
 
     @BeforeEach
     void setUp() {
-        service = new EmployeeService(employeeMapper, employmentMapper, changeAuditMapper,
+        service = new EmployeeService(employeeMapper, employmentMapper, changeAuditService,
                 empNoService, employmentService, profileService, stateMachine);
     }
 

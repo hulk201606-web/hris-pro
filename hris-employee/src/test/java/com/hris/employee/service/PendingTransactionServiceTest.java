@@ -59,13 +59,15 @@ class PendingTransactionServiceTest {
     private AccountIntegration accountIntegration;
     @Mock
     private com.hris.employee.integration.HeadcountIntegration headcountIntegration;
+    @Mock
+    private EmpChangeAuditService changeAuditService;
 
     private PendingTransactionService service;
 
     @BeforeEach
     void setUp() {
         service = new PendingTransactionService(pendingMapper, employeeMapper, stateMachine,
-                employmentService, accountIntegration, headcountIntegration);
+                employmentService, accountIntegration, headcountIntegration, changeAuditService);
     }
 
 
