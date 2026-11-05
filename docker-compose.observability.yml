@@ -1,0 +1,129 @@
+# =====================================================================
+# 可观测栈：Prometheus + Grafana + node-exporter + mysqld-exporter
+# 与业务编排解耦（不合并进 docker-compose.app.yml）：
+# 观测栈挂掉不应影响 11 个应用服务的启动与运行。
+#
+# 用法（从仓库根目录）：
+#   docker compose -f docker-compose.observability.yml up -d
+#   访问 Grafana   http://127.0.0.1:3000  （账密见 .env，缺省 admin/<GRAFANA_ADMIN_PASSWORD>，启动后改密）
+#   访问 Prometheus http://127.0.0.1:9090
+#   冒烟：
+#     curl -s http://127.0.0.1:9090/api/v1/targets | grep -c '"health":"up"'
+#     curl -s http://127.0.0.1:3000/api/health
+#
+# 版本号来源（2026-10-18 实测，GitHub releases/latest）：
+#   prometheus/prometheus    -> v3.15.0
+#   grafana/grafana          -> v13.2.4
+#   prometheus/node_exporter -> v1.12.1
+#   prom/mysqld-exporter     -> v0.15.1（0.16 尚未稳定，锁 0.15 线）
+#
+# 网络说明：hris-net 是业务编排（docker-compose.yml）创建的网络，
+# 实际名为 hris-pro_hris-net（Compose 按「项目名_网络名」命名，项目名取自目录名）。
+# 用 external: true 显式挂载前必须先起业务编排，或先手工创建该网络。
+# 验收：docker network ls | grep hris-pro_hris-net
+# =====================================================================
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    container_name: hris-prometheus
+    # 只读挂载配置（Prometheus 不需写配置），配置变更重启即生效
+    volumes:
+      - ./docker/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/observability/prometheus/rules:/etc/prometheus/rules:ro
+      # 保留期 15d：低于 7 天无法覆盖一次长周期故障回溯
+      - prom-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      # 改完 rules/*.yml 可用 HTTP 触发热加载，无需重启容器
+      - "--web.enable-lifecycle"
+      # 抓取噪声控制：JVM 指标量大，30s 抓取对当前规模足够（对齐 NFR-P-001 300ms 预算的判定需求）
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - "${PORT_PROMETHEUS:-9090}:9090"
+    networks: [hris-net]
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: hris-node-exporter
+    # 仅在 Linux 宿主机（或支持 mount propagation 的环境）启用：
+    # 挂载宿主机根目录为只读需要 shared/slave 传播，Docker Desktop for Windows
+    # （WSL2 后端）不支持，直接 up 会报
+    #   "path / is mounted on / but it is not a shared or slave mount"
+    # 并使整个 up -d 部分失败。因此归入 host profile：
+    #   默认 up -d —— 只起 prometheus / grafana / mysqld-exporter（跨平台可用）
+    #   --profile host —— 追加宿主机指标采集（Linux 服务器部署时用）
+    # 注意：默认模式下 prometheus.yml 的 node job target 会是 down，属预期。
+    profiles: ["host"]
+    command:
+      # 采集宿主机指标。容器内挂载宿主机根目录（只读）以读取 /proc 与 /sys
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /:/host:ro,rslave
+    pid: host
+    networks: [hris-net]
+    restart: unless-stopped
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: hris-mysqld-exporter
+    environment:
+      # 监控账号口令（账号需先在 MySQL 上创建，见 docs/18 §4.2「监控账号」段）
+      MYSQLD_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD:?必须设置 MYSQL_EXPORTER_PASSWORD}
+    command:
+      # 0.15.x 移除了 DATA_SOURCE_NAME 环境变量，地址与账号必须走命令行标志。
+      # 本机 MySQL 是宿主机上的 Windows 服务（非容器），故默认指向 host.docker.internal；
+      # 若 MySQL 改为 compose 容器（--profile db），在 .env 里把 MYSQLD_ADDRESS 覆盖为 mysql:3306。
+      - "--mysqld.address=${MYSQLD_ADDRESS:-host.docker.internal:3306}"
+      - "--mysqld.username=${MYSQL_EXPORTER_USER:-hris_exporter}"
+      - "--collect.info_schema.innodb_metrics"
+      - "--collect.info_schema.processlist"
+      - "--collect.perf_schema.eventsstatements"
+      - "--collect.global_status"
+      - "--collect.global_variables"
+    ports:
+      - "${PORT_MYSQL_EXPORTER:-9104}:9104"
+    networks: [hris-net]
+    # 不写 depends_on：mysql 服务定义在 docker-compose.yml（中间件编排），
+    # 不在本文件中。跨文件引用会让 `docker compose -f 本文件 config` 直接报
+    # "depends on undefined service" 而无法渲染。启动顺序交由人工保证：
+    # 先起中间件编排，再起本编排。
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    container_name: hris-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?必须设置 GRAFANA_ADMIN_PASSWORD}
+      # 关闭匿名访问：指标含租户维度信息，匿名可读等于泄露
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      # provisioning：首次启动自动建数据源与看板，避免每次重建丢配置
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${PORT_GRAFANA:-3000}:3000"
+    networks: [hris-net]
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  hris-net:
+    external: true
+    name: hris-pro_hris-net
+
+volumes:
+  prom-data:
+  grafana-data:

@@ -1,0 +1,110 @@
+# =====================================================================
+# 告警规则。阈值口径说明：
+#   错误率 5%        —— 运维规范默认阈值
+#   p95 > 2s         —— 运维规范默认阈值（较 docs/09 NFR-P-001 的 300ms 宽，
+#                       业务侧 NFR 未达标先告警不阻塞，避免告警疲劳）
+#   连接池耗尽      —— 立即通知
+#   容器消失        —— compose 服务挂掉，兜底信号（当前无编排层采集，用 up==0 近似）
+# =====================================================================
+groups:
+  - name: hris-service-availability
+    rules:
+      - alert: HrisServiceDown
+        expr: up{job="hris-services"} == 0
+        for: 1m
+        labels:
+          severity: P0
+        annotations:
+          summary: "服务不可达：{{ $labels.service }}"
+          description: "实例 {{ $labels.instance }} 已 1 分钟无响应"
+
+      - alert: HrisHighErrorRate
+        expr: |
+          sum by (service) (
+            rate(http_server_requests_seconds_count{job="hris-services", status=~"5.."}[5m])
+          )
+          /
+          sum by (service) (
+            rate(http_server_requests_seconds_count{job="hris-services"}[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: "错误率超 5%：{{ $labels.service }}"
+
+      - alert: HrisHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le) (
+              rate(http_server_requests_seconds_bucket{job="hris-services"}[5m])
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: P1
+        annotations:
+          summary: "p95 延迟 > 2s：{{ $labels.service }}"
+
+  - name: hris-runtime
+    rules:
+      - alert: HrisJvmHeapPressure
+        # Dockerfile 设定 -XX:+UseG1GC + MaxRAMPercentage=70，容器 limit 的 70% 是 JVM 堆上限；
+        # 老年代持续超 85% 说明接近 OOMKill。
+        # 注意 id 用正则匹配多种 GC 实现的老年代名：G1 是 "G1 Old Gen"，
+        # Parallel 是 "PS-Old-Gen"，CMS/Serial 是 "Tenured Gen"。
+        # 写死 "PS-Old-Gen" 在 G1 下永远匹配不到 —— 该告警会静默失效（已实测发现并修正）。
+        expr: |
+          sum by (service) (
+            jvm_memory_used_bytes{area="heap", id=~"G1 Old Gen|PS-Old-Gen|Tenured Gen"}
+          )
+          /
+          sum by (service) (
+            jvm_memory_max_bytes{area="heap", id=~"G1 Old Gen|PS-Old-Gen|Tenured Gen"}
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: P1
+        annotations:
+          summary: "老年代使用率 > 85%：{{ $labels.service }}"
+
+      - alert: HrisHighGcPause
+        expr: |
+          sum by (service) (
+            rate(jvm_gc_pause_seconds_sum{job="hris-services"}[5m])
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: P2
+        annotations:
+          summary: "GC 停顿占比偏高：{{ $labels.service }}"
+
+  - name: hris-middleware
+    rules:
+      - alert: MysqlConnectionsHigh
+        expr: mysql_global_status_threads_connected{job="mysql"} / mysql_global_variables_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: "MySQL 连接数超 max_connections 的 80%"
+
+      - alert: MysqlDown
+        expr: up{job="mysql"} == 0
+        for: 1m
+        labels:
+          severity: P0
+        annotations:
+          summary: "mysqld-exporter 无法采集 MySQL"
+
+      - alert: HostDiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{job="node", fstype!="tmpfs", mountpoint="/"}
+          /
+          node_filesystem_size_bytes{job="node", fstype!="tmpfs", mountpoint="/"}
+          < 0.15
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: "宿主机根分区剩余空间不足 15%"

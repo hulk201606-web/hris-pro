@@ -1,0 +1,68 @@
+# =====================================================================
+# Prometheus 抓取配置（hris-pro）
+# 采集三类：11 个应用服务 / 宿主机 / MySQL
+# =====================================================================
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    project: hris-pro
+    # 注意：Prometheus 不支持 shell 的 ${VAR:-default} 语法。
+    # 它会把 "ENV_NAME:-local" 当成变量名，未定义时只发一条
+    # WARN "Empty environment variable" 并把标签置空 —— 语法检查仍报 SUCCESS，
+    # 属于静默失效。因此这里直接写死，由 compose 用 env_file 区分环境。
+    env: local
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+
+  # ---------- 11 个应用服务（Micrometer /actuator/prometheus） ----------
+  # 服务名与 docker-compose.app.yml 的服务名一一对应（即 hris-net 上的 DNS 别名）
+  - job_name: hris-services
+    metrics_path: /actuator/prometheus
+    scrape_interval: 30s
+    static_configs:
+      # 网关指标采集暂缺：网关自身 actuator 不经 JWT fall-through（docs/18 §3.0 实测），
+      # 网关已在完成收口 2 前从 exposure 中移除 prometheus（返回 404），抓取必 down，
+      # 挂上去只会触发「容器消失」类告警误报。收口 2 落地后把 target 改回 gateway:<管理端口>。
+      # - targets: ["gateway:8080"]
+      #   labels: { service: hris-gateway }
+      - targets: ["auth:8080"]
+        labels: { service: hris-auth }
+      - targets: ["org:8080"]
+        labels: { service: hris-org }
+      - targets: ["employee:8080"]
+        labels: { service: hris-employee }
+      - targets: ["flow:8080"]
+        labels: { service: hris-flow }
+      - targets: ["platform:8080"]
+        labels: { service: hris-platform }
+      - targets: ["attendance:8080"]
+        labels: { service: hris-attendance }
+      - targets: ["recruit:8080"]
+        labels: { service: hris-recruit }
+      - targets: ["compensation:8080"]
+        labels: { service: hris-compensation }
+      - targets: ["performance:8080"]
+        labels: { service: hris-performance }
+      - targets: ["rag:8080"]
+        labels: { service: hris-rag }
+
+  # ---------- 宿主机 ----------
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels: { host: docker-host }
+
+  # ---------- MySQL ----------
+  - job_name: mysql
+    static_configs:
+      - targets: ["mysqld-exporter:9104"]
+
+  # ---------- 采集端自监控 ----------
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

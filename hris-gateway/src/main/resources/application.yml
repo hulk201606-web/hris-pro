@@ -71,12 +71,32 @@ management:
   endpoints:
     web:
       exposure:
+        # 网关只暴露 health/info：白名单收口（docs/18 §3.0）只保护「命中路由的请求」，
+        # 网关自身的 /actuator/** 不命中任何路由、直接 fall-through 到本服务的 WebFlux
+        # handler，完全绕过 JwtAuthGlobalFilter——实测 8080/actuator/prometheus 不带 JWT
+        # 返回 200（2026-11 实测）。容器部署里 8080 是唯一对外端口，等于 JVM/HTTP 指标公网可读。
+        # 故网关在完成收口 2（management.server.port 隔离，见 docs/18 §3.0）之前不暴露 prometheus；
+        # 指标采集缺失期间，网关侧依赖 Grafana 的 access log 指标（AccessLogGlobalFilter 落盘日志）兜底。
         include: health,info
   endpoint:
     health:
       probes:
         enabled: true
-
+      # 生产环境不外泄组件明细（曾出现过的 db/redis 连接串泄露风险点）
+      show-details: never
+  metrics:
+    tags:
+      # 关键：给所有指标打上服务名标签，Prometheus 侧无需靠 job 名区分实例
+      application: ${spring.application.name}
+    distribution:
+      # 显式声明分位数，避免不同版本的 histogram bucket 默认值漂移
+      percentiles-histogram:
+        http.server.requests: true
+      # 延迟观测重点在 p95/p99，对齐 docs/09 NFR-P-001（P95 <= 300ms）
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      slo:
+        http.server.requests: 300ms, 500ms, 1000ms
 # 网关 JWT 验签：与 hris-auth 同源（HS256 + 同一 JWT_SECRET 环境变量 + 同一 issuer）。
 # 注意：hris-auth 的配置前缀是 auth.jwt，这里网关用 hris.jwt，但 secret 走同一个 JWT_SECRET 注入，
 # 均为必填、无默认值，弱密钥/缺省密钥由 JwtSecretGuard 拒绝启动。

@@ -149,6 +149,16 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Prometheus 指标暴露（docs/18 §3.1）：
+             Spring Boot 4 使用 Prometheus client 1.x，artifact 必须是不带 -simpleclient
+             后缀的新 registry（micrometer-registry-prometheus，基于 io.prometheus:prometheus-metrics-core）。
+             带 -simpleclient 的旧 registry 在 Boot 4 下不会注册 /actuator/prometheus 端点（返回 404）。
+             version 省略：由 spring-boot-starter-parent:4.0.6 的 BOM 管理 = micrometer 1.16.5，
+             显式写版本会脱离 BOM 管理，是升级时的隐患源。 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
         <!-- 全模块统一：Lombok（编译期）+ 测试 -->
         <dependency>
             <groupId>org.projectlombok</groupId>

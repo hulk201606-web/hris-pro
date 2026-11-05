@@ -37,13 +37,29 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # health/info/probes 供编排与探针；prometheus 供采集端（网关白名单已收口为 /actuator/health/**，见 docs/18 §3.0）
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+      # 生产环境不外泄组件明细（曾出现过的 db/redis 连接串泄露风险点）
       show-details: never
-
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      # 关键：给所有指标打上服务名标签，Prometheus 侧无需靠 job 名区分实例
+      application: ${spring.application.name}
+    distribution:
+      # 显式声明分位数，避免不同版本的 histogram bucket 默认值漂移
+      percentiles-histogram:
+        http.server.requests: true
+      # 延迟观测重点在 p95/p99，对齐 docs/09 NFR-P-001（P95 <= 300ms）
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      slo:
+        http.server.requests: 300ms, 500ms, 1000ms
 # ---------- OpenAPI 契约（springdoc） ----------
 # 生产默认关闭：/v3/api-docs 会完整暴露端点、字段与模型结构。
 # 需要导出契约时显式开启（本地/CI 已由 scripts 与 .env.example 约定）。

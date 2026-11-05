@@ -30,9 +30,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * 员工档案（EMP-F-001 建档/详情/更新、EMP-F-016 黑名单、EMP-F-022 花名册、内部档案简报）。
- */
+/** 员工档案（EMP-F-001 建档/详情/更新、EMP-F-016 黑名单、EMP-F-022 花名册、内部档案简报）。 */
 @Service
 public class EmployeeService {
 
@@ -46,8 +44,7 @@ public class EmployeeService {
 
     public EmployeeService(EmployeeMapper employeeMapper, EmploymentMapper employmentMapper,
                            ChangeAuditMapper changeAuditMapper, EmpNoService empNoService,
-                           EmploymentService employmentService, ProfileService profileService,
-                           EmployeeStateMachine stateMachine) {
+                           EmploymentService employmentService, ProfileService profileService, EmployeeStateMachine stateMachine) {
         this.employeeMapper = employeeMapper;
         this.employmentMapper = employmentMapper;
         this.changeAuditMapper = changeAuditMapper;
@@ -143,12 +140,10 @@ public class EmployeeService {
 
     /**
      * 再入职识别（EMP-F-029）：按证件号查历史任职记录，供录用/建档前查重。
-     *
      * <p>返回全部命中记录而不只是已离职的，因为三种情况处置不同：
      * 命中已离职 -> 走二次雇佣（工龄是否连续由业务决定）；
      * 命中在职 -> 属重复建档，应直接使用现有档案；
      * 命中黑名单 -> 禁止录用。判断交给调用方，本方法不做裁决。</p>
-     *
      * <p>实现说明：按 certNoCipher 等值查询，依赖该列当前按明文落库
      * （未接 ShardingSphere 加密插件，见 Employee 类注释）。若改为随机 IV 加密，
      * 同值密文不同，本查询会静默返回空——届时须增加 cert_no_hash 列改为哈希查询。</p>
