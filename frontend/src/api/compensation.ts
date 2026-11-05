@@ -3,12 +3,14 @@
  * 覆盖：薪酬核算批次（payroll-runs）CRUD、员工薪酬档（employee-pays）CRUD、
  *       算薪取数预览（跨域组合员工主档 + 考勤月结）。
  */
-import { del, get, post, put } from './http';
+import { del, get, http, post, put } from './http';
+import { BizError } from './error';
 import { isMockEnabled } from './mock';
 import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { EmployeePay, PayrollPreviewLine, PayrollRun } from '../types/admin';
 import type { PeriodLock } from '../types/api-batch2';
+import type { EmployeePayHistoryItem, PayrollCompareResult } from '../types/api-batch9';
 import type {
   CalcProgress,
   CalcRunResponse,
@@ -153,6 +155,51 @@ export function retryCalcTask(runId: number, empId: number): Promise<CalcTask> {
 /** 计算进度（GET /cmp/payroll-runs/{id}/calc-progress） */
 export function getCalcProgress(runId: number): Promise<CalcProgress> {
   return get<CalcProgress>(`/cmp/payroll-runs/${runId}/calc-progress`);
+}
+
+/* ---------------------------- 环比 / 复核 / 报盘（批 9） ---------------------------- */
+
+/**
+ * 环比对比（GET /cmp/payroll-runs/{id}/compare）。
+ * baseRunId 缺省取同期间上一批次；无上期时 employees 为空、note 说明。
+ */
+export function comparePayrollRun(id: number, baseRunId?: number): Promise<PayrollCompareResult> {
+  return get<PayrollCompareResult>(`/cmp/payroll-runs/${id}/compare`, baseRunId ? { baseRunId } : undefined);
+}
+
+/** 双人复核（POST /cmp/payroll-runs/{id}/review）：approved=false 为驳回，退回 CALC */
+export function reviewPayrollRun(
+  id: number,
+  approved: boolean,
+  comment?: string,
+): Promise<PayrollRun> {
+  return post<PayrollRun>(`/cmp/payroll-runs/${id}/review`, { approved, comment });
+}
+
+/**
+ * 报盘导出（GET /cmp/payroll-runs/{id}/bank-export）：返回 CSV Blob。
+ * 后端正常路径为裸文件流，异常时回落统一信封 JSON，此处按 Blob MIME 区分后抛出业务错误。
+ */
+export async function downloadPayrollBankExport(id: number): Promise<Blob> {
+  const resp = await http.get(`/cmp/payroll-runs/${id}/bank-export`, { responseType: 'blob' });
+  const blob = resp.data as Blob;
+  if (blob.type.includes('json')) {
+    const text = await blob.text();
+    let msg = '报盘导出失败';
+    try {
+      const body = JSON.parse(text) as { message?: string };
+      if (body.message) msg = body.message;
+    } catch {
+      // 非 JSON 错误体：保留兜底文案
+    }
+    throw new BizError(0, msg);
+  }
+  return blob;
+}
+
+/** 调薪轨迹（GET /cmp/employee-pays/{empId}/history）：按生效日倒序 */
+export function listEmployeePayHistory(empId: number): Promise<EmployeePayHistoryItem[]> {
+  return get<EmployeePayHistoryItem[]>(`/cmp/employee-pays/${empId}/history`);
 }
 
 /* ---------------------------- 公式沙箱与报表（二期批 3） ---------------------------- */

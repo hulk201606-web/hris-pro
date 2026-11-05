@@ -109,6 +109,7 @@ export interface ContractResponse {
   /** 已续签次数，null 视为 0 */
   renewCnt?: number;
   fileId?: number;
+  legalEntityId?: number;  // 契约 EmpContractResponse.legalEntityId（法人维度）
 }
 
 /** 合同到期预警项 */

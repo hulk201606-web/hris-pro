@@ -8,6 +8,7 @@ import { message } from 'ant-design-vue';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue';
 import EmptyHint from '../../../components/admin/EmptyHint.vue';
 import PayItemFormModal from '../../../components/admin/PayItemFormModal.vue';
+import CompCalcSwitchCard from '../../../components/admin/compensation/CompCalcSwitchCard.vue';
 import { errorText } from '../../../components/admin/crud-helpers';
 import {
   deletePayItem,
@@ -197,6 +198,8 @@ onMounted(async () => {
       :pay-group-id="payGroupId"
       @saved="load"
     />
+
+    <CompCalcSwitchCard />
   </div>
 </template>
 

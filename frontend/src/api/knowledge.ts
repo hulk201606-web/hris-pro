@@ -8,6 +8,7 @@ import { isMockEnabled } from './mock';
 import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { EmployeeProfileBrief, KbDocument, KnowledgeSpace } from '../types/admin';
+import type { SensitiveWordRow, ChunkRow } from '../types/api-batch9';
 
 /* ---------------------------- 知识空间 ---------------------------- */
 
@@ -59,6 +60,40 @@ export function updateDocument(id: number, data: Record<string, unknown>): Promi
 export function deleteDocument(id: number): Promise<void> {
   if (isMockEnabled()) return adminMock.removeDocument(id);
   return del<void>(`/kb/documents/${id}`);
+}
+
+/* ---------------------------- 敏感词（KBD-F-017） ---------------------------- */
+
+/** 敏感词列表（GET /kb/sensitive-words）：复用 kb:document:read */
+export function listSensitiveWords(): Promise<SensitiveWordRow[]> {
+  return get<SensitiveWordRow[]>('/kb/sensitive-words');
+}
+
+/** 新增敏感词（POST /kb/sensitive-words）：level 缺省 WARN，仅 BLOCK/WARN */
+export function createSensitiveWord(word: string, level: 'BLOCK' | 'WARN'): Promise<SensitiveWordRow> {
+  return post<SensitiveWordRow>('/kb/sensitive-words', { word, level });
+}
+
+/** 删除敏感词（DELETE /kb/sensitive-words/{id}） */
+export function deleteSensitiveWord(id: number): Promise<void> {
+  return del<void>(`/kb/sensitive-words/${id}`);
+}
+
+/* ---------------------------- 知识切片（KBD-F-017） ---------------------------- */
+
+/** 切片分页（GET /kb/chunks） */
+export function listChunks(page: number, size: number): Promise<PageResult<ChunkRow>> {
+  return get<PageResult<ChunkRow>>('/kb/chunks', { page, size });
+}
+
+/** 新建切片（POST /kb/chunks）：warnings 非空表示命中敏感词 WARN 级 */
+export function createChunk(data: Record<string, unknown>): Promise<ChunkRow> {
+  return post<ChunkRow>('/kb/chunks', data);
+}
+
+/** 删除切片（DELETE /kb/chunks/{id}） */
+export function deleteChunk(id: number): Promise<void> {
+  return del<void>(`/kb/chunks/${id}`);
 }
 
 /* ---------------------------- 知识范围（跨域） ---------------------------- */

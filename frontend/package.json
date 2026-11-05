@@ -16,6 +16,7 @@
     "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.0.0",
     "axios": "^1.0.0",
+    "bpmn-js": "^18.31.1",
     "pinia": "^2.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.0.0"

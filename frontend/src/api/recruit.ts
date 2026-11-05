@@ -11,6 +11,13 @@ import type { CandidateDedupResponse } from '../types/api';
 import type { Candidate, Offer, Requisition } from '../types/admin';
 import type { ResumeParseResult } from '../types/api-batch2';
 import type { CandidateResume, SiteDomain } from '../types/api-batch4';
+import type {
+  ApplicationRow,
+  ApplicationStageRequest,
+  OfferSendResult,
+  ResumeCleanupResult,
+  ResumeRow,
+} from '../types/api-batch9';
 
 /* ---------------------------- 职位需求 ---------------------------- */
 
@@ -128,6 +135,29 @@ export function onboardOffer(id: number): Promise<number> {
   return post<number>(`/rcu/offers/${id}/onboard`);
 }
 
+/* ---------------------------- Offer 发送与回执（RCS-F-018） ---------------------------- */
+
+/**
+ * 发送 Offer（POST /rcu/offers/{id}/send）：channel 仅 EMAIL/WECOM/DINGTALK，
+ * 成功 DRAFT→SENT；失败返回 status=FAILED + error，Offer 保持 DRAFT。
+ */
+export function sendOffer(
+  id: number,
+  channel: string,
+  recipient?: string,
+): Promise<OfferSendResult> {
+  return post<OfferSendResult>(`/rcu/offers/${id}/send`, { channel, recipient });
+}
+
+/** 候选人回执（POST /rcu/offers/{id}/receipt）：ACCEPTED→ACCEPTED / DECLINED→REJECTED */
+export function submitOfferReceipt(
+  id: number,
+  type: 'ACCEPTED' | 'DECLINED',
+  note?: string,
+): Promise<Offer> {
+  return post<Offer>(`/rcu/offers/${id}/receipt`, { type, note });
+}
+
 /* ---------------------------- 简历解析（二期批 2） ---------------------------- */
 
 /**
@@ -151,6 +181,34 @@ export function parseResumeAi(resumeId: number): Promise<ResumeParseResult> {
 /** 候选人简历列表（GET /rcu/candidates/{id}/resumes，批 6 #8）：存在但无简历返回空数组 */
 export function listCandidateResumes(candidateId: number): Promise<CandidateResume[]> {
   return get<CandidateResume[]>(`/rcu/candidates/${candidateId}/resumes`);
+}
+
+/** 简历分页（GET /rcu/resumes）：含 retentionUntil 保留期 */
+export function listResumes(page: number, size: number): Promise<PageResult<ResumeRow>> {
+  return get<PageResult<ResumeRow>>('/rcu/resumes', { page, size });
+}
+
+/** 清理过期简历（POST /rcu/resumes/cleanup）：逻辑删除 retentionUntil < today 的记录 */
+export function cleanupExpiredResumes(): Promise<ResumeCleanupResult> {
+  return post<ResumeCleanupResult>('/rcu/resumes/cleanup');
+}
+
+/* ---------------------------- 投递阶段流转（RCS-F-012） ---------------------------- */
+
+/** 投递记录分页（GET /rcu/applications） */
+export function listApplications(page: number, size: number): Promise<PageResult<ApplicationRow>> {
+  return get<PageResult<ApplicationRow>>('/rcu/applications', { page, size });
+}
+
+/**
+ * 阶段流转（POST /rcu/applications/{id}/stage）：
+ * PASS 可推进 toStage 并打标签；REJECT 必填 reason（OTHER 必填 note）。
+ */
+export function advanceApplication(
+  id: number,
+  req: ApplicationStageRequest,
+): Promise<ApplicationRow> {
+  return post<ApplicationRow>(`/rcu/applications/${id}/stage`, req);
 }
 
 /** 候选人最新解析结果（GET /rcu/candidates/{id}/resume-parse）：无简历/无解析时后端 NOT_FOUND */

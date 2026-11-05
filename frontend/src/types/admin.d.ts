@@ -40,6 +40,10 @@ export interface Offer {
   salaryAmountMask: string;
   status: string;
   procInstId: string;
+  /** 候选人回执（RCS-F-018）：ACCEPTED/DECLINED + 备注 + 回执时间 */
+  receiptType?: string | null;
+  receiptNote?: string | null;
+  receiptAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +57,12 @@ export interface PayrollRun {
   status: string;
   calcBy: number;
   reviewBy: number;
+  /** 双人复核进度（CMP-F-013b）：两列齐全且互异才可 REVIEW→APPROVE */
+  reviewedBy1?: number | null;
+  reviewedAt1?: string | null;
+  reviewedBy2?: number | null;
+  reviewedAt2?: string | null;
+  reviewComment?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -102,6 +112,8 @@ export interface Goal {
   cycleId: number;
   empId: number;
   title: string;
+  /** 目标维度（缺省 KPI；权重按 cycle+emp+dimension 合计 100） */
+  dimension?: string;
   weight: number;
   targetValue: string;
   resultValue: string;
@@ -127,6 +139,8 @@ export interface KbDocument {
   titleHash: string;
   docType: string;
   fileId: number;
+  /** 敏感词 WARN 级命中词（KBD-F-017）；BLOCK 命中由后端直接拒绝 */
+  warnings?: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -166,7 +180,7 @@ export interface CrudFieldOption {
 export interface CrudField {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'date' | 'time' | 'select' | 'textarea';
+  type: 'text' | 'number' | 'date' | 'time' | 'select' | 'textarea' | 'switch';
   required?: boolean;
   options?: CrudFieldOption[];
   placeholder?: string;

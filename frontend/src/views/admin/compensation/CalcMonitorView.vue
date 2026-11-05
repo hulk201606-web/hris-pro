@@ -9,6 +9,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { CaretRightOutlined, ReloadOutlined } from '@ant-design/icons-vue';
 import CalcMonitorPanel from '../../../components/admin/CalcMonitorPanel.vue';
+import PayrollOpsActions from '../../../components/admin/compensation/PayrollOpsActions.vue';
 import { errorText } from '../../../components/admin/crud-helpers';
 import {
   calculatePayrollRun,
@@ -30,6 +31,7 @@ const POLL_MAX_TIMES = 30;
 
 const runs = ref<PayrollRun[]>([]);
 const runId = ref<number | null>(null);
+const selectedRun = computed(() => runs.value.find((r) => r.id === runId.value) ?? null);
 const progress = ref<CalcProgress | null>(null);
 const tasks = ref<CalcTask[]>([]);
 const statusFilter = ref<string | undefined>(undefined);
@@ -137,6 +139,12 @@ async function selectRun() {
   await loadTasks();
 }
 
+/** 复核/对比等操作完成后同时刷新批次状态与当前批次进度 */
+async function refreshAfterOps() {
+  await loadRuns();
+  await selectRun();
+}
+
 async function loadTasks() {
   if (!canRead.value || !runId.value) return;
   loadingTasks.value = true;
@@ -177,6 +185,7 @@ onBeforeUnmount(stopPolling);
         <p class="head-sub">选择核算批次执行计算，跟踪逐员工任务进度；失败员工可单人重算</p>
       </div>
       <a-space>
+        <PayrollOpsActions :run="selectedRun" @done="refreshAfterOps" />
         <a-button @click="selectRun">
           <template #icon><ReloadOutlined /></template>
           刷新

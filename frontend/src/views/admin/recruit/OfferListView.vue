@@ -1,12 +1,15 @@
 <script setup lang="ts">
 
 /**
- * 管理端-Offer 列表：CRUD + 录用建档动作（onboard，跨域转员工预建档），
+ * 管理端-Offer 列表：CRUD + 录用建档（onboard，跨域转员工预建档）
+ * + 发送（EMAIL/WECOM/DINGTALK，结果 SENT/FAILED）+ 回执登记（ACCEPTED/DECLINED），
  * 走 EntityCrudPage 组件 + /rcu/offers 接口。
  */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Modal, message } from 'ant-design-vue';
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
+import OfferSendModal from '../../../components/admin/recruit/OfferSendModal.vue';
+import OfferReceiptModal from '../../../components/admin/recruit/OfferReceiptModal.vue';
 import {
   createOffer,
   deleteOffer,
@@ -20,12 +23,31 @@ import type { CrudApi, CrudColumn, CrudField, CrudRow } from '../../../types/adm
 
 const userStore = useUserStore();
 const canOnboard = computed(() => userStore.hasPerm('rcu:offer:onboard'));
+const canWrite = computed(() => userStore.hasPerm('rcu:offer:write'));
+
+const sendOpen = ref(false);
+const receiptOpen = ref(false);
+const currentOffer = ref<CrudRow | null>(null);
+/** 发送/回执成功后递增，靠重挂载刷新通用列表（避免改通用组件内部接口） */
+const refreshKey = ref(0);
+
+function openSend(record: CrudRow) {
+  currentOffer.value = record;
+  sendOpen.value = true;
+}
+
+function openReceipt(record: CrudRow) {
+  currentOffer.value = record;
+  receiptOpen.value = true;
+}
 
 const columns: CrudColumn[] = [
   { key: 'offerNo', title: 'Offer 编号', width: 160 },
   { key: 'applicationId', title: '投递 ID', width: 110 },
   { key: 'salaryAmountMask', title: '薪资金额(脱敏)', width: 150 },
-  { key: 'status', title: '状态', width: 120, type: 'tag' },
+  { key: 'status', title: '状态', width: 110, type: 'tag' },
+  { key: 'receiptType', title: '回执', width: 110, type: 'tag' },
+  { key: 'receiptAt', title: '回执时间', width: 160, type: 'datetime' },
   { key: 'createdAt', title: '创建时间', width: 170, type: 'datetime' },
 ];
 
@@ -40,7 +62,9 @@ const fields: CrudField[] = [
     type: 'select',
     required: true,
     options: [
+      { label: '草稿', value: 'DRAFT' },
       { label: '待确认', value: 'PENDING' },
+      { label: '已发送', value: 'SENT' },
       { label: '已接受', value: 'ACCEPTED' },
       { label: '已拒绝', value: 'REJECTED' },
       { label: '已过期', value: 'EXPIRED' },
@@ -77,14 +101,27 @@ function handleOnboard(record: CrudRow, reload?: () => Promise<void> | void) {
 
 <template>
   <EntityCrudPage
+    :key="refreshKey"
     title="Offer 管理"
-    subtitle="维护 Offer 与录用结果；录用后将跨域创建员工预建档"
+    subtitle="维护 Offer 与录用结果；支持多渠道发送、候选人回执与录用建档"
     perm-prefix="rcu:offer"
     :columns="columns"
     :fields="fields"
     :api="api"
   >
     <template #rowActions="{ record, reload }">
+      <a-button
+        v-if="canWrite && record.status === 'DRAFT'"
+        type="link"
+        size="small"
+        @click="openSend(record)"
+      >发送</a-button>
+      <a-button
+        v-if="canWrite && record.status !== 'DRAFT'"
+        type="link"
+        size="small"
+        @click="openReceipt(record)"
+      >回执</a-button>
       <a-button
         v-if="canOnboard && record.status !== 'ACCEPTED'"
         type="link"
@@ -96,4 +133,7 @@ function handleOnboard(record: CrudRow, reload?: () => Promise<void> | void) {
       <a-tag v-else-if="record.status === 'ACCEPTED'" color="green">已录用</a-tag>
     </template>
   </EntityCrudPage>
+
+  <OfferSendModal v-model:open="sendOpen" :offer="currentOffer" @done="refreshKey++" />
+  <OfferReceiptModal v-model:open="receiptOpen" :offer="currentOffer" @done="refreshKey++" />
 </template>

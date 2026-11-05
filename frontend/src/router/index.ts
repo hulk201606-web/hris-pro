@@ -107,6 +107,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '我的假期' },
       },
       {
+        // 批 11#20：今日打卡卡片 + 假勤台账分页（GET /att/daily/today、/att/ledgers）
+        path: 'self/attendance',
+        name: 'MyAttendance',
+        component: () => import('../views/self/MyAttendanceView.vue'),
+        meta: { title: '我的考勤' },
+      },
+      {
         path: 'self/interviews',
         name: 'MyInterviews',
         component: () => import('../views/self/MyInterviewsView.vue'),

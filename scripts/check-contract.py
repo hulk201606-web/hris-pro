@@ -46,6 +46,8 @@ def normalize(path: str) -> str:
     一定写成 `/{xxx}`，因此**紧贴标识符的 `{}` 必属 query 而非路径段**，
     需剔除，否则会误报「端点不存在」。
     """
+    # 显式 query（`?a=b`）直接剥离：只比对 path 段
+    path = path.split("?")[0]
     path = re.sub(r"\$\{[^}]*\}", "{}", path)
     path = re.sub(r"\{[^}]*\}", "{}", path)
     # 剔除紧贴标识符的 {}（query 拼接），保留 /{} 形式的路径参数

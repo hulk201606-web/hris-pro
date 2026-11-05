@@ -45,6 +45,19 @@ FRONTEND_ONLY = {
     "AttQueryParams", "AttRequestQuery",  # 前端查询参数聚合类型
     # 自助端首页聚合：由前端组合多个接口拼装，后端无单一端点，故无对应 schema
     "SelfHomeSummary",
+    # 列表行投影（从 response 中挑列展示，字段为子集，不适合字段级比对）
+    "ApplicationRow", "AttLedgerRow", "ChunkRow", "ResumeRow", "SensitiveWordRow",
+    "EvalTaskRow", "EvaluationRow", "InterviewRecord",
+    # 前端在契约无 schema 的情况下自建的响应形状（后端返回 Map/内联记录，
+    # springdoc 未展开，见 docs/21 批 9-12 说明）
+    "AttDevice", "AttLocation", "DailyCloseLock", "FlowAttachment",
+    "ReportSubscription", "ReportSubscriptionRequest",
+    "PayrollEmployeeCompare", "PayrollItemDiff",
+    "ResumeParseEducation", "ResumeParseExperience",
+    "CandidateResume", "TripRequest",
+    # 自助首页聚合的子区块投影（父端点响应内联定义，子块字段不同）
+    "SelfAttendanceSection", "SelfLeaveSection", "SelfPayslipSection",
+    "SelfPendingFlowSection", "SelfProfileSection",
 }
 
 # 手写类型名 -> 契约 schema 名 的显式映射。
@@ -58,6 +71,29 @@ ALIAS = {
     "FixRequest": "AttFixResponse",
     "LeaveRequest": "AttLeaveResponse",
     "OvertimeRequest": "AttOvertimeResponse",
+    # 批 9-12 新增端点：前端按域习惯命名，契约名为 {模块}{语义}Response。
+    # 登记后字段一致性照常校验（覆盖而非绕过）。
+    "AttPunchToday": "AttPunchTodayResponse",
+    "DailyCloseLock": "AttDailyCloseResponse",
+    "FlowDeployResult": "FlowDeployResponse",
+    "FlowOpinionTag": "FlowOpinionTagView",
+    "GoalBatchRequest": "PrfGoalBatchSaveRequest",
+    "ModelValidateResult": "FlowModelValidateResponse",
+    "OfferSendResult": "RcuOfferSendResponse",
+    "OrgVersion": "OrgOrgVersionSummary",
+    "PayrollCompareResult": "CmpPayrollCompareResponse",
+    "PresignUploadResult": "PltPresignUploadResponse",
+    "ResumeCleanupResult": "RcuResumeCleanupResponse",
+    "ResumeParseResult": "RcuResumeParseResponse",
+    "CalcProgress": "CmpCalcProgressResponse",
+    "CalcTask": "CmpCalcTaskResponse",
+    "ContractTerm": "EmpContractTermResponse",
+    "PayGroup": "CmpPayGroupResponse",
+    "PayItem": "CmpPayItemResponse",
+    "PeriodLock": "CmpPeriodLockResponse",
+    "SelfDashboard": "EmpSelfDashboardResponse",
+    "SelfProfile": "EmpSelfProfileResponse",
+    "SiteDomain": "RcuSiteDomainResponse",
 }
 
 # 解析 `export interface X {` 或 `export type X = {`

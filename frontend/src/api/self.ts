@@ -1,10 +1,22 @@
 /**
  * 员工自助域 API 封装（聚合自助门户专属端点）。
- * 覆盖：我的假期（额度余额 / 台账流水）、我的工资条（掩码列表 / 密域明文）。
+ * 覆盖：我的信息（SELF-F-002 直改 + 关键字段申请） / 自助首页聚合（SELF-F-001） /
+ *       我的假期（额度余额 / 台账流水） / 我的工资条（掩码列表 / 密域明文） /
+ *       今日考勤与假勤台账（批 11）。
  * 端点均按当前登录用户过滤（后端经网关透传身份解析 employeeId），
  * 工资条仅返回掩码字段，明文读取需密域权限并走独立端点。
  */
-import { get } from './http';
+import { get, patch, post } from './http';
+import type {
+  AttLedgerRow,
+  AttPunchToday,
+  CriticalChangeRequest,
+  CriticalChangeResponse,
+  SelfDashboard,
+  SelfProfile,
+  SelfProfileUpdateRequest,
+} from '../types/api';
+import type { PageResult } from '../types/api';
 
 /* ---------------------------- 我的假期（att 自助） ---------------------------- */
 
@@ -83,4 +95,53 @@ export function fetchMyPayslips(): Promise<MyPayslip[]> {
 /** 工资条明文实发（GET /cmp/salary-secret/payslips/{id}，需 cmp:payslip:read + cmp:salary:read） */
 export function fetchPayslipSecret(id: number): Promise<PayslipSecret> {
   return get<PayslipSecret>(`/cmp/salary-secret/payslips/${id}`);
+}
+
+/* ---------------------------- 我的信息（SELF-F-002 / EMP-F-021） ---------------------------- */
+
+/** 我的信息（GET /emp/me/profile，需 emp:employee:read；证件/手机仅掩码） */
+export function fetchSelfProfile(): Promise<SelfProfile> {
+  return get<SelfProfile>('/emp/me/profile');
+}
+
+/**
+ * 自助信息直改（PATCH /emp/me/profile，需 emp:employee:write）。
+ * 仅姓名/手机/邮箱/地址/紧急联系人可直改；提交关键字段会被后端整体拒绝。
+ */
+export function updateSelfProfile(data: SelfProfileUpdateRequest): Promise<SelfProfile> {
+  return patch<SelfProfile>('/emp/me/profile', data);
+}
+
+/**
+ * 关键信息变更申请（POST /emp/me/profile/change-requests）。
+ * 落 EMP_PROFILE_CHG 审批，返回 bizKey 与 procInstId。
+ */
+export function requestCriticalChange(data: CriticalChangeRequest): Promise<CriticalChangeResponse> {
+  return post<CriticalChangeResponse>('/emp/me/profile/change-requests', data);
+}
+
+/* ---------------------------- 自助首页聚合（SELF-F-001） ---------------------------- */
+
+/** 自助首页聚合（GET /emp/me/dashboard，单端点返回 5 个子项与 partial 降级标记） */
+export function fetchSelfDashboard(): Promise<SelfDashboard> {
+  return get<SelfDashboard>('/emp/me/dashboard');
+}
+
+/* ---------------------------- 自助考勤（批 11） ---------------------------- */
+
+/** 当日考勤卡片（GET /att/daily/today?empId=，班次/上下班打卡/状态） */
+export function fetchTodayAttendance(empId: number): Promise<AttPunchToday> {
+  return get<AttPunchToday>('/att/daily/today', { empId });
+}
+
+/** 假勤台账分页（GET /att/ledgers，可按假种与时间区间过滤） */
+export function fetchAttendanceLedgers(params: {
+  empId?: number;
+  leaveTypeId?: number;
+  from?: string;
+  to?: string;
+  page: number;
+  size: number;
+}): Promise<PageResult<AttLedgerRow>> {
+  return get<PageResult<AttLedgerRow>>('/att/ledgers', params);
 }

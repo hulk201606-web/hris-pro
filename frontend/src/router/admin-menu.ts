@@ -47,6 +47,8 @@ const MODULES: ModuleMeta[] = [
       { resource: 'requisition', route: '/admin/recruit/funnel', title: '招聘漏斗' },
       { resource: 'candidate', route: '/admin/recruit/candidates', title: '候选人' },
       { resource: 'candidate', route: '/admin/recruit/candidate-dedup', title: '候选人查重' },
+      { resource: 'application', route: '/admin/recruit/applications', title: '投递阶段' },
+      { resource: 'resume', route: '/admin/recruit/resumes', title: '简历库' },
       { resource: 'offer', route: '/admin/recruit/offers', title: 'Offer 管理' },
       // 站点域名（批 7 #13）：权限点 rcu:site:read/write，资源段为 site
       { resource: 'site', route: '/admin/recruit/site-domains', title: '站点域名' },
@@ -66,6 +68,11 @@ const MODULES: ModuleMeta[] = [
       { resource: 'report', route: '/admin/attendance/reports', title: '考勤报表' },
       { resource: 'holiday', route: '/admin/attendance/holidays', title: '节假日历' },
       { resource: 'out-office', route: '/admin/attendance/out-offices', title: '外出/居家审批' },
+      // 批 11/12 追加：围栏与考勤机后端复用 att:group:read/write；月结锁读也复用 group，
+      // 写操作（月结/解锁）在前端按 att:closing:run 单独控显，故三项统一挂 group 资源键
+      { resource: 'group', route: '/admin/attendance/locations', title: '考勤围栏' },
+      { resource: 'group', route: '/admin/attendance/devices', title: '考勤机设备' },
+      { resource: 'group', route: '/admin/attendance/daily-close', title: '月结锁管理' },
     ],
   },
   {
@@ -94,6 +101,7 @@ const MODULES: ModuleMeta[] = [
       { resource: 'cycle', route: '/admin/performance/cycles', title: '考核周期' },
       { resource: 'goal', route: '/admin/performance/goals', title: '目标管理' },
       { resource: 'review', route: '/admin/performance/context', title: '评估上下文' },
+      { resource: 'evaluation', route: '/admin/performance/evaluations', title: '评分记录' },
       { resource: 'interview', route: '/admin/performance/interviews', title: '面谈记录' },
     ],
   },
@@ -104,6 +112,9 @@ const MODULES: ModuleMeta[] = [
     resources: [
       { resource: 'space', route: '/admin/knowledge/spaces', title: '知识空间' },
       { resource: 'document', route: '/admin/knowledge/documents', title: '文档管理' },
+      // 敏感词复用 kb:document:read/write 权限码（后端 SensitiveWordController）
+      { resource: 'document', route: '/admin/knowledge/sensitive-words', title: '敏感词词库' },
+      { resource: 'chunk', route: '/admin/knowledge/chunks', title: '知识切片' },
       { resource: 'doc', route: '/admin/knowledge/scope', title: '知识范围' },
     ],
   },
@@ -124,6 +135,8 @@ const MODULES: ModuleMeta[] = [
       { resource: 'headcount', route: '/admin/org/headcount-board', title: '编制看板' },
       // 人力结构分析（P1 聚合报表）：后端端点挂 org:dept:read，菜单挂 dept 资源键
       { resource: 'dept', route: '/admin/org/headcount-structure', title: '人力结构分析' },
+      // 组织版本：后端 OrgVersionController 复用 org:dept:read/write
+      { resource: 'dept', route: '/admin/org/versions', title: '组织版本' },
     ],
   },
   {
@@ -166,6 +179,8 @@ const MODULES: ModuleMeta[] = [
       { resource: 'notification', route: '/admin/platform/templates', title: '通知模板' },
       { resource: 'report', route: '/admin/platform/reports', title: '报表定义' },
       { resource: 'report', route: '/admin/platform/exports', title: '导出记录' },
+      // 报表订阅（PLT-F-005）：plt:report:read/write
+      { resource: 'report', route: '/admin/platform/report-subscriptions', title: '报表订阅' },
       { resource: 'scheduler', route: '/admin/platform/scheduler', title: '调度中心' },
     ],
   },

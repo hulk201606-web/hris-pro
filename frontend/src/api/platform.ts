@@ -17,6 +17,7 @@ import type {
   ReportDefResponse,
   TemplateResponse,
 } from '../types/api';
+import type { PresignUploadResult } from '../types/api-batch9';
 
 /* ---------------------------- 审计日志 ---------------------------- */
 
@@ -45,6 +46,21 @@ export function saveConfig(key: string, configValue: string): Promise<ConfigResp
 /** 删除配置（DELETE /plt/configs/{key}） */
 export function deleteConfig(key: string): Promise<void> {
   return del<void>(`/plt/configs/${encodeURIComponent(key)}`);
+}
+
+/* ---------------------------- 文件服务（PLT-F-001） ---------------------------- */
+
+/**
+ * 预签名上传（POST /plt/files/presign-upload）：先落文件元数据再返回直传 URL。
+ * degraded=true 表示 MinIO 未就绪，uploadUrl 为占位，此时仅登记 fileId 元数据。
+ */
+export function presignUpload(data: {
+  fileName: string;
+  contentType?: string;
+  sizeBytes?: number;
+  module?: string;
+}): Promise<PresignUploadResult> {
+  return post<PresignUploadResult>('/plt/files/presign-upload', data);
 }
 
 /* ---------------------------- 数据字典 ---------------------------- */

@@ -3,15 +3,26 @@
 /**
  * 管理端-员工薪酬档列表：CRUD（员工 ID / 薪酬组 / 薪级 / 生效日期），
  * 走 EntityCrudPage 组件 + /cmp/employee-pays 接口。
+ * 行操作「调薪轨迹」：按 empId 拉取版本链与调整单时间线（CMP-F-018）。
  */
+import { ref } from 'vue';
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
+import PayHistoryDrawer from '../../../components/admin/compensation/PayHistoryDrawer.vue';
 import {
   createEmployeePay,
   deleteEmployeePay,
   listEmployeePays,
   updateEmployeePay,
 } from '../../../api/compensation';
-import type { CrudApi, CrudColumn, CrudField } from '../../../types/admin';
+import type { CrudApi, CrudColumn, CrudField, CrudRow } from '../../../types/admin';
+
+const historyOpen = ref(false);
+const historyEmpId = ref<number | null>(null);
+
+function openHistory(record: CrudRow) {
+  historyEmpId.value = Number(record.empId);
+  historyOpen.value = true;
+}
 
 const columns: CrudColumn[] = [
   { key: 'empId', title: '员工 ID', width: 120 },
@@ -51,5 +62,11 @@ const api: CrudApi = {
     :columns="columns"
     :fields="fields"
     :api="api"
-  />
+  >
+    <template #rowActions="{ record }">
+      <a-button type="link" size="small" @click="openHistory(record)">调薪轨迹</a-button>
+    </template>
+  </EntityCrudPage>
+
+  <PayHistoryDrawer v-model:open="historyOpen" :emp-id="historyEmpId" />
 </template>

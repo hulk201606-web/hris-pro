@@ -166,6 +166,13 @@ async function runNow(record: SchedulerTask) {
       </a-space>
     </section>
 
+    <a-alert
+      type="info"
+      show-icon
+      message="运营配置指引：组织版本到期激活"
+      description="新建任务时 taskKey 填 ORG_VERSION_ACTIVATE_DUE，cron 设为每日一次（如 0 30 1 * * *），处理器选择组织版本到期激活。若处理器下拉中没有该项，说明后端尚未注册该 handler，需先在平台侧注册后再配置；草稿版本也可在组织版本页手动激活。"
+    />
+
     <a-card :bordered="false" class="panel">
       <a-table
         row-key="id"

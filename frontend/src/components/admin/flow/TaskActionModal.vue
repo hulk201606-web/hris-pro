@@ -12,6 +12,7 @@ import { message } from 'ant-design-vue';
 import { addSignTask, approveTask, rejectTask, transferTask, withdrawTask } from '../../../api/flow';
 import type { TaskView } from '../../../types/api';
 import DynamicForm from '../DynamicForm.vue';
+import TaskAttachmentPanel from './TaskAttachmentPanel.vue';
 
 export type TaskAction = 'approve' | 'reject' | 'transfer' | 'addSign' | 'withdraw';
 
@@ -27,8 +28,18 @@ const comment = ref('');
 const targetUserId = ref('');
 const submitting = ref(false);
 const formValues = ref<Record<string, unknown>>({});
+/** 结构化意见标签（approve/reject 可选，随动作落 flow_ext_task_opinion_tag） */
+const opinionTag = ref<string | undefined>(undefined);
 /** 已解析的动态表单 Schema；为空表示该任务无动态表单或解析失败（保持现状仅意见输入） */
 const parsedSchema = ref<Record<string, unknown> | null>(null);
+
+/** 与后端 TaskExtDtos.OpinionTagRequest 枚举一致的标签选项 */
+const OPINION_TAGS = [
+  { label: '需复核数据', value: 'RECHECK_DATA' },
+  { label: '需补充材料', value: 'NEED_MORE_INFO' },
+  { label: '符合规定', value: 'COMPLIANT' },
+  { label: '其他', value: 'OTHER' },
+];
 
 const ACTION_META: Record<TaskAction, { title: string; needTarget: boolean; okText: string }> = {
   approve: { title: '同意', needTarget: false, okText: '确认同意' },
@@ -47,6 +58,7 @@ watch(
       comment.value = '';
       targetUserId.value = '';
       formValues.value = {};
+      opinionTag.value = undefined;
       parsedSchema.value = null;
       const raw = props.task?.formSchemaJson;
       if (props.action === 'approve' && raw) {
@@ -80,12 +92,16 @@ async function handleOk() {
         const req = {
           comment: comment.value,
           ...(hasValues ? { formValues: formValues.value } : {}),
+          ...(opinionTag.value ? { tag: opinionTag.value } : {}),
         };
         await approveTask(id, req as never);
         break;
       }
       case 'reject':
-        await rejectTask(id, { comment: comment.value } as never);
+        await rejectTask(id, {
+          comment: comment.value,
+          ...(opinionTag.value ? { tag: opinionTag.value } : {}),
+        } as never);
         break;
       case 'transfer':
         await transferTask(id, targetUserId.value.trim(), comment.value);
@@ -109,13 +125,11 @@ async function handleOk() {
 </script>
 
 <template>
-  <a-modal
+  <a-drawer
     :open="open"
-    :title="meta ? `${meta.title}任务` : '任务操作'"
-    :confirm-loading="submitting"
-    :ok-text="meta?.okText"
+    :title="meta ? `${meta.title}任务` : '任务办理'"
+    width="480"
     @update:open="emit('update:open', $event)"
-    @ok="handleOk"
   >
     <a-descriptions v-if="task" :column="1" size="small" bordered class="brief">
       <a-descriptions-item label="节点">{{ task.nodeName }}</a-descriptions-item>
@@ -134,10 +148,26 @@ async function handleOk() {
       <a-form-item v-if="meta?.needTarget" label="目标用户 ID" required>
         <a-input v-model:value="targetUserId" placeholder="转办/加签的目标用户 ID" />
       </a-form-item>
+      <a-form-item
+        v-if="action === 'approve' || action === 'reject'"
+        label="结构化意见"
+      >
+        <a-select
+          v-model:value="opinionTag"
+          :options="OPINION_TAGS"
+          allow-clear
+          placeholder="选填，随本次审批留痕"
+        />
+      </a-form-item>
       <a-form-item label="审批意见">
         <a-textarea v-model:value="comment" :rows="3" placeholder="选填" />
       </a-form-item>
     </a-form>
+
+    <TaskAttachmentPanel
+      v-if="(action === 'approve' || action === 'reject') && task?.taskId"
+      :task-id="task.taskId"
+    />
 
     <a-alert
       v-if="action === 'withdraw'"
@@ -145,7 +175,16 @@ async function handleOk() {
       show-icon
       message="撤回仅在首节点未被处理时可用；若已被处理，服务端会拒绝。"
     />
-  </a-modal>
+
+    <template #footer>
+      <a-space>
+        <a-button @click="emit('update:open', false)">取消</a-button>
+        <a-button type="primary" :loading="submitting" @click="handleOk">
+          {{ meta?.okText }}
+        </a-button>
+      </a-space>
+    </template>
+  </a-drawer>
 </template>
 
 <style scoped>

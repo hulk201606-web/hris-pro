@@ -1,4 +1,4 @@
-import { get, post, del } from './http';
+import { get, http, post, put, del } from './http';
 import { isMockEnabled, mockApi } from './mock';
 import type {
   PageResult,
@@ -7,6 +7,12 @@ import type {
   TaskActionRequest,
   TaskView,
 } from '../types/api';
+import type {
+  FlowAttachment,
+  FlowDeployResult,
+  FlowOpinionTag,
+  ModelValidateResult,
+} from '../types/api-batch9';
 
 /** 我的待办（GET /flow/tasks/todo，分页聚合） */
 export function fetchTodoTasks(page: number, size: number): Promise<PageResult<TaskView>> {
@@ -83,14 +89,58 @@ export function createModel(data: Record<string, unknown>): Promise<FlowModel> {
   return post<FlowModel>('/flow/models', data);
 }
 
-/** 部署模型（POST /flow/models/{id}/deploy） */
-export function deployModel(id: number): Promise<FlowModel> {
-  return post<FlowModel>(`/flow/models/${id}/deploy`);
+/** 部署模型（POST /flow/models/{id}/deploy）：返回 modelId/procDefKey/version/deploymentId */
+export function deployModel(id: number): Promise<FlowDeployResult> {
+  return post<FlowDeployResult>(`/flow/models/${id}/deploy`);
 }
 
 /** 模型版本列表（GET /flow/models/{id}/versions） */
 export function listModelVersions(id: number): Promise<FlowModel[]> {
   return get<FlowModel[]>(`/flow/models/${id}/versions`);
+}
+
+/* ---------------------------- BPMN 设计器（批 12） ---------------------------- */
+
+/**
+ * 读取模型 BPMN XML（GET /flow/models/{id}/xml）。
+ * 后端直接返回 text/xml 原文（非 R 信封），故用裸 http 客户端取 responseText。
+ */
+export async function getModelXml(id: number): Promise<string> {
+  const resp = await http.get<string>(`/flow/models/${id}/xml`, {
+    responseType: 'text',
+    transformResponse: [(data: unknown) => data],
+  });
+  return typeof resp.data === 'string' ? resp.data : String(resp.data ?? '');
+}
+
+/** 校验 BPMN XML（POST /flow/models/{id}/validate-xml）：不部署、不落库 */
+export function validateModelXml(id: number, xml: string): Promise<ModelValidateResult> {
+  return post<ModelValidateResult>(`/flow/models/${id}/validate-xml`, { xml });
+}
+
+/**
+ * 保存 BPMN XML（PUT /flow/models/{id}/xml）：同 key 生成新版本（version+1，DRAFT），
+ * 不自动部署。返回新版本模型，后续保存/部署须使用返回的 id。
+ */
+export function saveModelXml(id: number, xml: string): Promise<FlowModel> {
+  return put<FlowModel>(`/flow/models/${id}/xml`, { xml });
+}
+
+/* ---------------------------- 任务附件与意见标签（FLW-F-020） ---------------------------- */
+
+/** 节点附件列表（GET /flow/tasks/{taskId}/attachments，按上传时间正序） */
+export function listTaskAttachments(taskId: string): Promise<FlowAttachment[]> {
+  return get<FlowAttachment[]>(`/flow/tasks/${taskId}/attachments`);
+}
+
+/** 节点附件登记（POST /flow/tasks/{taskId}/attachments）：fileId 引用 PLT 文件服务 */
+export function addTaskAttachment(taskId: string, fileId: string, fileName: string): Promise<FlowAttachment> {
+  return post<FlowAttachment>(`/flow/tasks/${taskId}/attachments`, { fileId, fileName });
+}
+
+/** 意见标签列表（GET /flow/tasks/{taskId}/opinions） */
+export function listTaskOpinions(taskId: string): Promise<FlowOpinionTag[]> {
+  return get<FlowOpinionTag[]>(`/flow/tasks/${taskId}/opinions`);
 }
 
 /* ---------------------------- 任务查询（补充） ---------------------------- */

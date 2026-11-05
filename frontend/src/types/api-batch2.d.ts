@@ -42,6 +42,8 @@ export interface ResumeParseResult {
   experienceJson?: string | ResumeParseExperience[] | null;
   parseStatus?: ResumeParseStatus | string;
   parseError?: string | null;
+  createdAt?: string;  // 契约 RcuResumeParseResponse.createdAt
+  updatedAt?: string;  // 契约 RcuResumeParseResponse.updatedAt
 }
 
 /* ============================ 面谈记录（prf） ============================ */
@@ -108,6 +110,4 @@ export interface ContractTerm {
   content: string;
   effectiveFrom: string;
   effectiveTo?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
 }

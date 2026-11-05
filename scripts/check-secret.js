@@ -108,6 +108,18 @@ const FILE_EXEMPT_PATTERNS = [
  */
 const LINE_EXEMPT = [
   {
+    // e2e 脚本的 demo 账号口令（seed 数据固定值，非生产凭据）
+    file: /scripts\/e2e_kb_chat\.py$/,
+    line: /"password":\s*"Admin@123"/,
+    reason: 'E2E 脚本 demo 种子账号固定口令（非真实凭据）',
+  },
+  {
+    // 迁移脚本：password 取自环境变量 db_password（非字面量）
+    file: /scripts\/migrate_(encrypt|org_snapshot)\.py$/,
+    line: /password=db_password/,
+    reason: 'pymysql 连接参数，右侧为环境变量读取结果 db_password（非字面量）',
+  },
+  {
     // 门禁脚本自身：豁免表里写的匹配模式本身就是 password=xxx 形态。
     // 这不是漏洞——这些是「用来识别凭据的正则」，不是凭据本身。
     file: /scripts\/check-secret\.js$/,

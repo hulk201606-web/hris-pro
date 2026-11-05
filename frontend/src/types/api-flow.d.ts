@@ -22,6 +22,7 @@ export interface TaskView {
   formSchemaJson?: string | null;
   /** 是否已超期（配置了超时时长且任务超期） */
   overdue?: boolean;
+  delegatedFrom?: number | null;  // 契约 FlowTaskView.delegatedFrom（委托代办人）
 }
 
 export interface TaskActionRequest {
@@ -32,6 +33,8 @@ export interface TaskActionRequest {
   terminate?: boolean;
   /** 动态表单值（键=字段名），随审批动作落库 */
   formValues?: Record<string, unknown>;
+  /** 结构化意见标签（approve/reject 可选）：RECHECK_DATA/NEED_MORE_INFO/COMPLIANT/OTHER */
+  tag?: string;
 }
 
 /* ============================ 审批流（flow + 考勤请求单） ============================ */
@@ -45,6 +48,7 @@ export interface StartInstanceRequest {
   variables?: Record<string, unknown>;
   initiator?: number;
   assignee?: number;
+  ccEmpIds?: number[];  // 契约 FlowStartInstanceRequest.ccEmpIds（抄送）
 }
 
 export interface StartInstanceResponse {

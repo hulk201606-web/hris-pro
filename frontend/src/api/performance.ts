@@ -9,6 +9,11 @@ import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { Cycle, EmployeeProfileBrief, Goal } from '../types/admin';
 import type { InterviewRecord, PipStatus } from '../types/api-batch2';
+import type {
+  EvalTaskRow,
+  EvaluationRow,
+  GoalBatchRequest,
+} from '../types/api-batch9';
 
 /* ---------------------------- 考核周期 ---------------------------- */
 
@@ -36,6 +41,14 @@ export function deleteCycle(id: number): Promise<void> {
   return del<void>(`/prf/cycles/${id}`);
 }
 
+/**
+ * 周期状态流转（POST /prf/cycles/{id}/transition）。
+ * 仅白名单 DRAFT→ACTIVE→SCORING→CLOSED，非法流转返回 PARAM_INVALID(10001)。
+ */
+export function transitionCycle(id: number, target: string): Promise<Cycle> {
+  return post<Cycle>(`/prf/cycles/${id}/transition`, { target });
+}
+
 /* ---------------------------- 目标 ---------------------------- */
 
 /** 分页查询目标（GET /prf/goals） */
@@ -60,6 +73,42 @@ export function updateGoal(id: number, data: Record<string, unknown>): Promise<G
 export function deleteGoal(id: number): Promise<void> {
   if (isMockEnabled()) return adminMock.removeGoal(id);
   return del<void>(`/prf/goals/${id}`);
+}
+
+/**
+ * 目标整组提交（POST /prf/goals/batch）：按 cycleId+empId+dimension 整体替换，
+ * 权重合计必须恰好 100%，不足/超差时后端返回 PARAM_INVALID 且消息含「当前合计 xx%」。
+ */
+export function batchSaveGoals(req: GoalBatchRequest): Promise<Goal[]> {
+  return post<Goal[]>('/prf/goals/batch', req);
+}
+
+/* ---------------------------- 评估结果（评分页） ---------------------------- */
+
+/** 评分任务分页（GET /prf/eval-tasks） */
+export function listEvalTasks(page: number, size: number): Promise<PageResult<EvalTaskRow>> {
+  return get<PageResult<EvalTaskRow>>('/prf/eval-tasks', { page, size });
+}
+
+/**
+ * 评分列表（GET /prf/evaluations）。
+ * scores/comment 为 null 表示当前视角无权查看（互见掩码），不可当作「未评分」回填。
+ */
+export function listEvaluations(page: number, size: number): Promise<PageResult<EvaluationRow>> {
+  return get<PageResult<EvaluationRow>>('/prf/evaluations', { page, size });
+}
+
+/** 新建评分（POST /prf/evaluations）：受周期状态机守卫（自评仅 ACTIVE） */
+export function createEvaluation(data: Record<string, unknown>): Promise<EvaluationRow> {
+  return post<EvaluationRow>('/prf/evaluations', data);
+}
+
+/** 更新评分（PUT /prf/evaluations/{id}）：原任务与新任务均过评分窗口守卫 */
+export function updateEvaluation(
+  id: number,
+  data: Record<string, unknown>,
+): Promise<EvaluationRow> {
+  return put<EvaluationRow>(`/prf/evaluations/${id}`, data);
 }
 
 /* ---------------------------- 面谈记录（二期批 2） ---------------------------- */

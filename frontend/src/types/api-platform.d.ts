@@ -56,6 +56,7 @@ export interface TemplateResponse {
   subject?: string;
   content: string;
   updatedAt?: string;
+  webhookUrl?: string | null;  // 契约 PltTemplateResponse.webhookUrl
 }
 
 /** 报表定义（defJson 为报表配置的 JSON 描述） */

@@ -130,3 +130,8 @@ export function put<T>(url: string, data?: unknown): Promise<T> {
 export function del<T>(url: string): Promise<T> {
   return request<T>({ method: 'DELETE', url });
 }
+
+/** 部分更新（如自助信息直改 PATCH /emp/me/profile） */
+export function patch<T>(url: string, data?: unknown): Promise<T> {
+  return request<T>({ method: 'PATCH', url, data });
+}

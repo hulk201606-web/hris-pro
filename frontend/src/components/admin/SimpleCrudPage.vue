@@ -56,6 +56,8 @@ function isTag(key: string): boolean {
 }
 
 function defaultValue(f: CrudField): unknown {
+  // 开关默认开启（后端布尔字段普遍缺省 true，如考勤组 requireLocation）
+  if (f.type === 'switch') return true;
   return f.type === 'number' || f.type === 'select' || f.type === 'time' ? undefined : '';
 }
 
@@ -229,6 +231,7 @@ onMounted(load);
             allow-clear
             :placeholder="f.placeholder ?? `请选择${f.label}`"
           />
+          <a-switch v-else-if="f.type === 'switch'" v-model:checked="formState[f.key]" />
         </a-form-item>
       </a-form>
     </a-modal>

@@ -2,17 +2,21 @@
 /**
  * 管理端-流程模型：维护 BPMN 流程定义并部署。
  *
- * 流程：新建模型（填 procDefKey + BPMN XML）→ 部署 → 部署后该 key 有新版本，
- * 在跑实例仍按旧版本继续，新发起的流程走新版本。
- *
- * 注意：BPMN XML 较长，表单用多行文本框录入；实际生产中通常由 bpmn-js 设计器
- * 生成，本页作为无设计器时的兜底录入方式。
+ * 流程：新建模型（填 procDefKey + BPMN XML）→ 设计器可视化编辑（/admin/flow/designer/:modelId）
+ * → 校验/保存（生成新版本）→ 部署 → 新发起走新版本，在跑实例仍按旧版本继续。
  */
+import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import EntityCrudPage from '../../../components/admin/EntityCrudPage.vue';
 import { createModel, deployModel, listModels } from '../../../api/flow';
 import type { CrudApi, CrudColumn, CrudField, CrudRow } from '../../../types/admin';
 import type { PageResult } from '../../../types/api';
+
+const router = useRouter();
+
+function openDesigner(record: CrudRow) {
+  router.push({ name: 'AdminFlowDesigner', params: { modelId: String(record.id) } });
+}
 
 const columns: CrudColumn[] = [
   { key: 'procDefKey', title: '流程定义 Key', width: 220 },
@@ -70,6 +74,7 @@ async function handleDeploy(record: CrudRow, reload: () => void) {
     :api="api"
   >
     <template #rowActions="{ record, reload }">
+      <a-button type="link" size="small" @click="openDesigner(record)">设计</a-button>
       <a-popconfirm
         v-if="record.deployState !== 'DEPLOYED'"
         title="确认部署该流程模型？"
