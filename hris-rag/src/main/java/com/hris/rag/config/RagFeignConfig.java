@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>跨服务内部调用必须透传 X-Tenant-Id / X-Trace-Id（docs/08 §2 服务间签名头 + §3 租户隔离）。</p>
  */
 @Configuration
-@EnableFeignClients(basePackages = "com.hris.rag.client")
+@EnableFeignClients(basePackages = {"com.hris.rag.client", "com.hris.common.client"})
 public class RagFeignConfig {
 
     @Bean

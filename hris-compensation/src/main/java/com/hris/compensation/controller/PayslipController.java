@@ -6,6 +6,7 @@ import com.hris.compensation.dto.PayslipDtos.PayslipUpdateRequest;
 import com.hris.compensation.entity.Payslip;
 import com.hris.compensation.service.PayslipService;
 import com.hris.common.api.R;
+import com.hris.common.audit.AuditLog;
 import com.hris.common.dto.PageResult;
 import com.hris.common.security.RequirePerm;
 import jakarta.validation.Valid;
@@ -34,6 +35,7 @@ public class PayslipController {
     /** 分页查询列表。权限点见 @RequirePerm。 */
 
     @RequirePerm("cmp:payslip:read")
+    @AuditLog(value = "查看工资单列表", module = "cmp")
     @GetMapping
     public R<PageResult<PayslipResponse>> list(
             @RequestParam(defaultValue = "1") long page,
@@ -43,6 +45,7 @@ public class PayslipController {
     /** 按 ID 查询详情。权限点见 @RequirePerm。 */
 
     @RequirePerm("cmp:payslip:read")
+    @AuditLog(value = "查看工资单详情", module = "cmp")
     @GetMapping("/{id}")
     public R<PayslipResponse> get(@PathVariable Long id) {
         return R.ok(service.get(id));

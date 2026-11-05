@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
  * （与 hris-employee / hris-org 的 Feign 配置保持一致，docs/08 §2/§3）。</p>
  */
 @Configuration
-@EnableFeignClients(basePackages = "com.hris.flow.client")
+@EnableFeignClients(basePackages = {"com.hris.flow.client", "com.hris.common.client"})
 public class FlowFeignConfig {
 
     @Bean

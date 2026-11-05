@@ -1,6 +1,7 @@
 package com.hris.platform.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.audit.AuditLog;
 import com.hris.common.security.RequirePerm;
 import com.hris.platform.dto.PageResult;
 import com.hris.platform.dto.ReportDtos.CatalogItem;
@@ -80,6 +81,7 @@ public class ReportController {
     }
 
     @RequirePerm("plt:report:export")
+    @AuditLog(value = "创建导出任务", module = "plt")
     @PostMapping("/exports")
     public R<ExportTaskResponse> createExport(@RequestBody ExportTaskRequest req) {
         return R.ok(exportTaskService.create(req));

@@ -1,6 +1,7 @@
 package com.hris.compensation.controller;
 
 import com.hris.common.api.R;
+import com.hris.common.audit.AuditLog;
 import com.hris.common.security.RequirePerm;
 import com.hris.compensation.dto.SalarySecretDtos.EmployeePaySecretResponse;
 import com.hris.compensation.dto.SalarySecretDtos.PayrollDetailSecretResponse;
@@ -30,24 +31,28 @@ public class SalarySecretController {
     }
 
     @RequirePerm("cmp:payslip:read")
+    @AuditLog(value = "查看薪酬密域-工资单", module = "cmp")
     @GetMapping("/payslips/{id}")
     public R<PayslipSecretResponse> payslip(@PathVariable Long id) {
         return R.ok(service.payslip(id));
     }
 
     @RequirePerm("cmp:payroll-detail:read")
+    @AuditLog(value = "查看薪酬密域-算薪明细", module = "cmp")
     @GetMapping("/payroll-details/{id}")
     public R<PayrollDetailSecretResponse> payrollDetail(@PathVariable Long id) {
         return R.ok(service.payrollDetail(id));
     }
 
     @RequirePerm("cmp:employee-pay:read")
+    @AuditLog(value = "查看薪酬密域-员工薪酬", module = "cmp")
     @GetMapping("/employee-pays/{id}")
     public R<EmployeePaySecretResponse> employeePay(@PathVariable Long id) {
         return R.ok(service.employeePay(id));
     }
 
     @RequirePerm("cmp:tax-deduction:read")
+    @AuditLog(value = "查看薪酬密域-专项扣除", module = "cmp")
     @GetMapping("/tax-deductions/{id}")
     public R<TaxDeductionSecretResponse> taxDeduction(@PathVariable Long id) {
         return R.ok(service.taxDeduction(id));

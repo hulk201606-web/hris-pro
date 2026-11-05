@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
  * 否则下游 TraceIdFilter 无法还原租户上下文，租户插件会注入 tenant_id=0 导致跨租户风险。</p>
  */
 @Configuration
-@EnableFeignClients(basePackages = "com.hris.recruit.client")
+@EnableFeignClients(basePackages = {"com.hris.recruit.client", "com.hris.common.client"})
 public class RecruitFeignConfig {
 
     @Bean
