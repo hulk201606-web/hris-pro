@@ -30,7 +30,8 @@ public class SchedulerInternalController {
     /** 新租户缺省任务：handler 必须在 TaskHandler 白名单内，cron 与既有约定一致。 */
     private static final List<DefaultTask> DEFAULT_TASKS = List.of(
             new DefaultTask("EXPORT_TASK_DISPATCH", "0 */10 * * * *"),
-            new DefaultTask("PENDING_TRANSACTION_APPLY", "0 0 3 * * *"));
+            new DefaultTask("PENDING_TRANSACTION_APPLY", "0 0 3 * * *"),
+            new DefaultTask("TIMEOUT_ESCALATION", "0 */30 * * * ?"));
 
     private record DefaultTask(String taskKey, String cron) {
     }

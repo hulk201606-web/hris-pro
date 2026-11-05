@@ -4,6 +4,7 @@ import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
 import com.hris.platform.dto.DictDtos.DictItemRequest;
 import com.hris.platform.entity.SysDictItem;
+import com.hris.platform.mapper.DictRefProbeMapper;
 import com.hris.platform.mapper.SysDictItemMapper;
 import com.hris.platform.mapper.SysDictTypeMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,12 +37,14 @@ class DictItemServiceTest {
     private SysDictItemMapper itemMapper;
     @Mock
     private SysDictTypeMapper typeMapper;
+    @Mock
+    private DictRefProbeMapper refProbeMapper;
 
     private DictItemService service;
 
     @BeforeEach
     void setUp() {
-        service = new DictItemService(itemMapper, typeMapper);
+        service = new DictItemService(itemMapper, typeMapper, refProbeMapper);
     }
 
     @Nested

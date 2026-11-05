@@ -41,10 +41,14 @@ public final class FileDtos {
             LocalDateTime createdAt) {
     }
 
-    /** 文件下载响应（预签名 URL） */
+    /**
+     * 文件下载响应（预签名 URL）；watermark=true 表示该文件上传时声明了水印策略
+     * （MVP 语义：标记 + 下载审计行，MinIO presign 不支持携带响应头，报告注明落地程度）
+     */
     public record FileDownloadResponse(
             Long fileId,
             String downloadUrl,
-            boolean degraded) {
+            boolean degraded,
+            boolean watermark) {
     }
 }

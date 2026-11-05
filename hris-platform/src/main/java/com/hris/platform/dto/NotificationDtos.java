@@ -17,7 +17,8 @@ public final class NotificationDtos {
             @NotBlank(message = "模板编码不能为空") String code,
             @NotBlank(message = "渠道不能为空") String channel,
             String subject,
-            String content) {
+            String content,
+            String webhookUrl) {
     }
 
     /** 模板响应 */
@@ -27,7 +28,23 @@ public final class NotificationDtos {
             String channel,
             String subject,
             String content,
+            String webhookUrl,
             LocalDateTime updatedAt) {
+    }
+
+    /** 模板测试发送请求（webhookUrl 可选，覆盖模板配置的地址） */
+    public record TestSendRequest(String webhookUrl) {
+    }
+
+    /** 测试发送结果摘要：失败不抛出，以 status/failedReason 表达 */
+    public record TestSendResponse(
+            Long templateId,
+            String channel,
+            String webhookUrl,
+            String status,
+            Integer httpStatus,
+            String responseBody,
+            String failedReason) {
     }
 
     /** 通知记录响应 */

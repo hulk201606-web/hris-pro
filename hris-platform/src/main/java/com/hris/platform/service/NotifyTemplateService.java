@@ -46,6 +46,7 @@ public class NotifyTemplateService {
         e.setChannel(channel);
         e.setSubject(req.subject());
         e.setContent(req.content());
+        e.setWebhookUrl(req.webhookUrl());
         mapper.insert(e);
         return toResponse(e);
     }
@@ -58,6 +59,9 @@ public class NotifyTemplateService {
         }
         if (req.content() != null) {
             e.setContent(req.content());
+        }
+        if (req.webhookUrl() != null) {
+            e.setWebhookUrl(req.webhookUrl().trim());
         }
         mapper.updateById(e);
         return toResponse(e);
@@ -123,6 +127,6 @@ public class NotifyTemplateService {
 
     private TemplateResponse toResponse(SysNotifyTemplate e) {
         return new TemplateResponse(e.getId(), e.getCode(), e.getChannel(), e.getSubject(), e.getContent(),
-                e.getUpdatedAt());
+                e.getWebhookUrl(), e.getUpdatedAt());
     }
 }

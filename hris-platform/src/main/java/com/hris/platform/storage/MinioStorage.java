@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -57,7 +58,17 @@ public class MinioStorage {
 
     /** 生成下载预签名 URL；不可用/异常时返回 null（由调用方降级）。 */
     public String presignGet(String bucket, String objectKey, int expirySeconds) {
-        return presign(Method.GET, bucket, objectKey, expirySeconds);
+        return presign(Method.GET, bucket, objectKey, expirySeconds, null);
+    }
+
+    /**
+     * 生成下载预签名 URL 并附带签名查询参数（PLT-F-002 深化）：
+     * watermark 开启时传 {@code response-content-disposition}，MinIO 会将其作为
+     * 响应头返回（覆盖下载文件名），SDK 按 V4 签名一并纳入签名。
+     */
+    public String presignGet(String bucket, String objectKey, int expirySeconds,
+                             Map<String, String> extraQueryParams) {
+        return presign(Method.GET, bucket, objectKey, expirySeconds, extraQueryParams);
     }
 
     /**
@@ -86,16 +97,24 @@ public class MinioStorage {
     }
 
     private String presign(Method method, String bucket, String objectKey, int expirySeconds) {
+        return presign(method, bucket, objectKey, expirySeconds, null);
+    }
+
+    private String presign(Method method, String bucket, String objectKey, int expirySeconds,
+                           Map<String, String> extraQueryParams) {
         if (!isReady()) {
             return null;
         }
         try {
-            return client().getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+            GetPresignedObjectUrlArgs.Builder builder = GetPresignedObjectUrlArgs.builder()
                     .method(method)
                     .bucket(bucket)
                     .object(objectKey)
-                    .expiry(expirySeconds, TimeUnit.SECONDS)
-                    .build());
+                    .expiry(expirySeconds, TimeUnit.SECONDS);
+            if (extraQueryParams != null && !extraQueryParams.isEmpty()) {
+                builder.extraQueryParams(extraQueryParams);
+            }
+            return client().getPresignedObjectUrl(builder.build());
         } catch (Exception e) {
             log.warn("MinIO presign {} failed, object={}: {}", method, objectKey, e.getMessage());
             return null;

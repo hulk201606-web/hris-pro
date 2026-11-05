@@ -1,9 +1,13 @@
 package com.hris.platform.client;
 
 import com.hris.common.api.R;
+import com.hris.platform.dto.ProbationReminderItem;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 /**
  * 员工域运维操作内部客户端（platform 调度中心跨域任务用，docs/19 §9.1）。
@@ -24,4 +28,13 @@ public interface EmployeeOpsClient {
     @PostMapping("/pending-transactions/apply-due")
     R<Integer> applyDue(@RequestParam("tenantId") Long tenantId,
                         @RequestParam(value = "effectDate", required = false) String effectDate);
+
+    /**
+     * 试用期到期提醒（EMP-F-007 深化）：拉取 probation_end 落在 [今天, 今天+windowDays] 的合同摘要。
+     *
+     * @param windowDays 提醒窗口天数（15 天）
+     */
+    @GetMapping("/probation-reminders")
+    R<List<ProbationReminderItem>> probationReminders(
+            @RequestParam(value = "windowDays", defaultValue = "15") int windowDays);
 }

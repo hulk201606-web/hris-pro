@@ -49,6 +49,8 @@ class FileServiceObjectKeyTest {
     private SysFileMetaMapper fileMetaMapper;
     @Mock
     private MinioStorage minioStorage;
+    @Mock
+    private AuditLogService auditLogService;
 
     private MinioProperties props;
     private FileService service;
@@ -57,7 +59,7 @@ class FileServiceObjectKeyTest {
     void setUp() {
         props = new MinioProperties();
         props.setBucket("hris-files");
-        service = new FileService(fileMetaMapper, minioStorage, props);
+        service = new FileService(fileMetaMapper, minioStorage, props, auditLogService);
     }
 
     @AfterEach

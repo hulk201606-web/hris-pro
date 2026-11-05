@@ -157,7 +157,7 @@ class NotifyTemplateRenderTest {
             when(mapper.selectCount(any())).thenReturn(1L);
 
             BizException e = assertThrows(BizException.class,
-                    () -> service.create(new TemplateRequest("tpl", "SMS", "主题", "正文")));
+                    () -> service.create(new TemplateRequest("tpl", "SMS", "主题", "正文", null)));
 
             assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
             verify(mapper, never()).insert(any(SysNotifyTemplate.class));
@@ -168,7 +168,7 @@ class NotifyTemplateRenderTest {
         void normalizesCodeAndChannelOnCreate() {
             when(mapper.selectCount(any())).thenReturn(0L);
 
-            service.create(new TemplateRequest("  ONBOARD_WELCOME ", " sms ", "主题", "正文"));
+            service.create(new TemplateRequest("  ONBOARD_WELCOME ", " sms ", "主题", "正文", null));
 
             ArgumentCaptor<SysNotifyTemplate> captor =
                     ArgumentCaptor.forClass(SysNotifyTemplate.class);

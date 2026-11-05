@@ -3,10 +3,12 @@ package com.hris.platform.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
+import com.hris.common.trace.TraceContext;
 import com.hris.platform.dto.DictDtos.DictItemRequest;
 import com.hris.platform.dto.DictDtos.DictItemResponse;
 import com.hris.platform.entity.SysDictItem;
 import com.hris.platform.entity.SysDictType;
+import com.hris.platform.mapper.DictRefProbeMapper;
 import com.hris.platform.mapper.SysDictItemMapper;
 import com.hris.platform.mapper.SysDictTypeMapper;
 import org.slf4j.Logger;
@@ -14,25 +16,41 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 字典项管理（PLT-F-007，广播表）。
  *
- * <p>引用保护：字典项被业务数据引用时不可物理删除，统一走逻辑删除（BaseEntity @TableLogic）。
- * 跨服务引用校验依赖业务域提供「按字典值计数」只读接口，platform 本增量不引入 Feign（横向被调用方），
- * 故引用探测留空扩展点，逻辑删除机制已保证数据永不物理清除。</p>
+ * <p>引用保护（深化）：删除字典项前按 curated 静态映射（type_code → 业务表.列）
+ * 查业务表引用计数，count>0 抛 PARAM_INVALID 拒绝。映射覆盖一期已确证的消费点：
+ * 合同类型（emp_contract.type）、证件类型（emp_employee.cert_type）；
+ * 请假类型走 att_leave_type 外键（leave_type_id）而非字典值，不在映射内。
+ * 其余 type_code 无确证消费点，探测保持恒 false（全仓 grep 结论见交付报告）。</p>
  */
 @Service
 public class DictItemService {
 
     private static final Logger log = LoggerFactory.getLogger(DictItemService.class);
 
+    /**
+     * curated 引用映射：字典类型编码 → 业务表（可含 schema 前缀）.列。
+     * 仅收录经全仓 grep + information_schema 确证以「字典值」落库的列；
+     * 表/列名进入 DictRefProbeMapper 的 ${} 拼接前必经本白名单。
+     */
+    private static final Map<String, String[]> CURATED_REFS = Map.of(
+            "contract_type", new String[]{"emp_db.emp_contract", "type"},
+            "cert_type", new String[]{"emp_db.emp_employee", "cert_type"},
+            "id_type", new String[]{"emp_db.emp_employee", "cert_type"});
+
     private final SysDictItemMapper itemMapper;
     private final SysDictTypeMapper typeMapper;
+    private final DictRefProbeMapper refProbeMapper;
 
-    public DictItemService(SysDictItemMapper itemMapper, SysDictTypeMapper typeMapper) {
+    public DictItemService(SysDictItemMapper itemMapper, SysDictTypeMapper typeMapper,
+                           DictRefProbeMapper refProbeMapper) {
         this.itemMapper = itemMapper;
         this.typeMapper = typeMapper;
+        this.refProbeMapper = refProbeMapper;
     }
 
     /** 按字典类型编码查询字典项列表。 */
@@ -84,17 +102,35 @@ public class DictItemService {
     }
 
     private void assertNotReferenced(String typeCode, String value) {
-        // 跨服务引用计数接口未接入（platform 无 Feign），MVP 探测恒 false；接入后此处改为调只读计数接口。
-        boolean referenced = probeReferenced(typeCode, value);
-        if (referenced) {
-            throw new BizException(56001, "字典项已被业务数据引用，不可删除");
+        long count = probeReferenced(typeCode, value);
+        if (count > 0) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "字典项已被 " + count + " 条业务数据引用");
         }
     }
 
-    /** 引用探测扩展点：返回业务域引用计数 > 0 时为 true。MVP 恒 false。 */
-    private boolean probeReferenced(String typeCode, String value) {
-        log.debug("dict item reference probe skipped (no cross-service counter): type={}, value={}", typeCode, value);
-        return false;
+    /**
+     * 引用探测：type_code 命中 curated 映射时按映射查业务表 count（租户隔离）；
+     * 未命中映射的消费点保持恒 0。探测异常降级为 0 并告警（不阻断删除，逻辑删除兜底）。
+     */
+    private long probeReferenced(String typeCode, String value) {
+        String[] ref = CURATED_REFS.get(typeCode);
+        if (ref == null) {
+            log.debug("dict item reference probe: no curated mapping, type={}, value={}", typeCode, value);
+            return 0;
+        }
+        Long tenantId = TraceContext.getTenantId();
+        if (tenantId == null) {
+            log.warn("dict item reference probe skipped: missing tenant context, type={}, value={}",
+                    typeCode, value);
+            return 0;
+        }
+        try {
+            return refProbeMapper.countByValue(ref[0], ref[1], value, tenantId);
+        } catch (Exception e) {
+            log.warn("dict item reference probe failed (allow delete, logical-delete backstop): "
+                    + "type={}, value={}: {}", typeCode, value, e.getMessage());
+            return 0;
+        }
     }
 
     private void requireTypeExists(String typeCode) {

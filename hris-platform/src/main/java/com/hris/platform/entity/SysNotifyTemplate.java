@@ -14,8 +14,11 @@ public class SysNotifyTemplate extends BaseEntity {
     /** 模板编码（租户内唯一） */
     private String code;
 
-    /** 渠道：EMAIL/SMS/APP/WECOM */
+    /** 渠道：EMAIL/SMS/APP/WECOM/DINGTALK/WEBHOOK */
     private String channel;
+
+    /** webhook 机器人地址（DINGTALK/WECOM/WEBHOOK 渠道投递用） */
+    private String webhookUrl;
 
     /** 标题 */
     private String subject;
@@ -37,6 +40,14 @@ public class SysNotifyTemplate extends BaseEntity {
 
     public void setChannel(String channel) {
         this.channel = channel;
+    }
+
+    public String getWebhookUrl() {
+        return webhookUrl;
+    }
+
+    public void setWebhookUrl(String webhookUrl) {
+        this.webhookUrl = webhookUrl;
     }
 
     public String getSubject() {
