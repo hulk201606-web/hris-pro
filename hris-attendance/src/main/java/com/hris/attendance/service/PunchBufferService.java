@@ -75,6 +75,7 @@ public class PunchBufferService {
      * Spring 装配用构造器：读默认容量/批量/窗口并启动后台线程。
      * 指标同步注册，服务启动即在 /actuator/prometheus 可见。
      */
+    @org.springframework.beans.factory.annotation.Autowired
     public PunchBufferService(PunchRecordMapper punchMapper, MeterRegistry meterRegistry) {
         this(punchMapper, meterRegistry, DEFAULT_CAPACITY, DEFAULT_BATCH_SIZE,
                 DEFAULT_FLUSH_MILLIS, true);
