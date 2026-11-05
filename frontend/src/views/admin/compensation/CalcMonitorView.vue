@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * 管理端-算薪监控页（CMP-F-005/006）：选择核算批次后执行计算并监控。
- * 「执行计算」确认后调 calculate，每 3 秒轮询进度（上限 30 次）直至完成；
- * 任务展示区见 CalcMonitorPanel 组件。权限：cmp:payroll-run:read/write。
+ * 「执行计算」走缺省异步（批 8：calculate 无 mode 参数即异步，run 置 CALCULATING），
+ * 每 3 秒轮询进度（上限 30 次）直至完成；任务展示区见 CalcMonitorPanel 组件。
+ * 权限：cmp:payroll-run:read/write。
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { message, Modal } from 'ant-design-vue';
@@ -82,7 +83,7 @@ async function loadRuns() {
   }
 }
 
-/** 执行计算：确认弹窗后触发 calculate，随后进入 3 秒轮询 */
+/** 执行计算：确认弹窗后触发 calculate（缺省异步，后端 run 置 CALCULATING），随后进入 3 秒轮询 */
 function confirmCalculate() {
   if (!runId.value) {
     message.warning('请先选择核算批次');
@@ -90,12 +91,13 @@ function confirmCalculate() {
   }
   Modal.confirm({
     title: '确认执行计算',
-    content: `将对批次 #${runId.value} 逐员工触发算薪（同步执行），确认继续吗？`,
+    content: `将对批次 #${runId.value} 异步触发逐员工算薪（批次置为「计算中」），进度自动轮询刷新，确认继续吗？`,
     okText: '执行计算',
     cancelText: '取消',
     onOk: async () => {
       calculating.value = true;
       try {
+        // 异步快照响应：runId + CALCULATING 状态 + 全 0 进度，真实进度由轮询获取
         const resp = await calculatePayrollRun(runId.value as number);
         progress.value = {
           runId: resp.runId,
@@ -108,9 +110,9 @@ function confirmCalculate() {
               ? Math.round(((resp.success + resp.failed + resp.skipped) / resp.total) * 100)
               : 0,
         };
-        message.info(`计算已触发：共 ${resp.total} 人，成功 ${resp.success}，失败 ${resp.failed}，跳过 ${resp.skipped}`);
+        message.info(`计算已异步触发（批次状态 ${resp.status}），进度将自动刷新`);
         startPolling();
-        await loadTasks();
+        await Promise.all([loadTasks(), loadRuns()]);
       } catch (e) {
         message.error(errorText(e, '执行计算失败'));
       } finally {

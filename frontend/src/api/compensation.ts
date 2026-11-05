@@ -135,7 +135,7 @@ export function deletePayItem(id: number): Promise<void> {
 
 /* ---------------------------- 算薪执行与监控（二期批 3） ---------------------------- */
 
-/** 触发算薪（POST /cmp/payroll-runs/{id}/calculate，同步 MVP） */
+/** 触发算薪（POST /cmp/payroll-runs/{id}/calculate）：缺省异步（批 8），run 置 CALCULATING 后线程池计算，进度走 calc-progress 轮询 */
 export function calculatePayrollRun(id: number): Promise<CalcRunResponse> {
   return post<CalcRunResponse>(`/cmp/payroll-runs/${id}/calculate`);
 }

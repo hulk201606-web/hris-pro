@@ -36,7 +36,7 @@ export interface PayGroup {
 
 /* ============================ 算薪执行与监控（cmp） ============================ */
 
-/** 触发算薪响应（POST /cmp/payroll-runs/{id}/calculate，同步 MVP） */
+/** 触发算薪响应（POST /cmp/payroll-runs/{id}/calculate，缺省异步：返回 CALCULATING 快照，全 0 进度） */
 export interface CalcRunResponse {
   runId: number;
   status: string;

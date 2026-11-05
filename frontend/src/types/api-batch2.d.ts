@@ -5,8 +5,8 @@
 
 /* ============================ 简历解析（rcu） ============================ */
 
-/** 解析状态：OK 规则解析成功；RULE_LIMITED 命中规则上限，结果仅供参考 */
-export type ResumeParseStatus = 'OK' | 'RULE_LIMITED';
+/** 解析状态：OK 规则解析成功；RULE_LIMITED 命中规则上限，结果仅供参考；AI_PARSED 大模型解析成功（批 6） */
+export type ResumeParseStatus = 'OK' | 'RULE_LIMITED' | 'AI_PARSED';
 
 /** 解析出的教育经历条目 */
 export interface ResumeParseEducation {

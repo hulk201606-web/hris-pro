@@ -48,6 +48,8 @@ const MODULES: ModuleMeta[] = [
       { resource: 'candidate', route: '/admin/recruit/candidates', title: '候选人' },
       { resource: 'candidate', route: '/admin/recruit/candidate-dedup', title: '候选人查重' },
       { resource: 'offer', route: '/admin/recruit/offers', title: 'Offer 管理' },
+      // 站点域名（批 7 #13）：权限点 rcu:site:read/write，资源段为 site
+      { resource: 'site', route: '/admin/recruit/site-domains', title: '站点域名' },
     ],
   },
   {

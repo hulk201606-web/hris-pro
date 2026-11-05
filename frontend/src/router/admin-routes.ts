@@ -31,6 +31,12 @@ export const adminChildren: RouteRecordRaw[] = [
     meta: { title: 'Offer 管理' },
   },
   {
+    path: 'recruit/site-domains',
+    name: 'AdminSiteDomains',
+    component: () => import('../views/admin/recruit/SiteDomainListView.vue'),
+    meta: { title: '站点域名' },
+  },
+  {
     path: 'recruit/funnel',
     name: 'AdminFunnelReport',
     component: () => import('../views/admin/recruit/FunnelReportView.vue'),

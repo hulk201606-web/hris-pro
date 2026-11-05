@@ -3,10 +3,26 @@
 /**
  * 管理端-考勤组列表：简单 CRUD（考勤组名称 / 编码 / 组长），
  * 走 SimpleCrudPage 组件 + /att/groups 接口。
+ * 行操作「成员管理」（批 6 #10）：打开成员抽屉，员工多选保存走全量覆盖
+ * POST /att/groups/{id}/members。
  */
+import { computed, ref } from 'vue';
 import SimpleCrudPage from '../../../components/admin/SimpleCrudPage.vue';
+import GroupMemberDrawer from '../../../components/admin/GroupMemberDrawer.vue';
 import { createGroup, listGroups, updateGroup } from '../../../api/attendance';
-import type { CrudColumn, CrudField, SimpleCrudApi } from '../../../types/admin';
+import { useUserStore } from '../../../stores/user';
+import type { CrudColumn, CrudField, CrudRow, SimpleCrudApi } from '../../../types/admin';
+
+const userStore = useUserStore();
+// 成员保存走 att:group:write（与考勤组编辑同权限码）
+const canWrite = computed(() => userStore.hasPerm('att:group:write'));
+
+// 成员管理抽屉：记录点击行的考勤组
+const memberGroup = ref<{ id: number; name: string } | null>(null);
+
+function openMemberDrawer(record: CrudRow) {
+  memberGroup.value = { id: Number(record.id), name: String(record.name ?? '') };
+}
 
 const columns: CrudColumn[] = [
   { key: 'name', title: '班组名称', width: 180 },
@@ -36,5 +52,19 @@ const api: SimpleCrudApi = {
     :columns="columns"
     :fields="fields"
     :api="api"
+  >
+    <template #rowActions="{ record }">
+      <a-button type="link" size="small" @click="openMemberDrawer(record)">
+        成员管理
+      </a-button>
+    </template>
+  </SimpleCrudPage>
+
+  <GroupMemberDrawer
+    v-if="memberGroup"
+    :group-id="memberGroup.id"
+    :group-name="memberGroup.name"
+    :can-write="canWrite"
+    @close="memberGroup = null"
   />
 </template>

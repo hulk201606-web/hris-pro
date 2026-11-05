@@ -7,8 +7,8 @@
  */
 import { onMounted, ref } from 'vue';
 import { message } from 'ant-design-vue';
-import { getOvertimeReport } from '../../../api/attendance';
-import type { OvertimeStatItem } from '../../../api/attendance';
+import { getOvertimeReport } from '../../../api/attendance-report';
+import type { OvertimeStatItem } from '../../../api/attendance-report';
 
 function monthRange(): [string, string] {
   const now = new Date();

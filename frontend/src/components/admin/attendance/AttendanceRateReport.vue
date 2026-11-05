@@ -6,8 +6,8 @@
  */
 import { onMounted, ref } from 'vue';
 import { message } from 'ant-design-vue';
-import { getAttendanceRateReport } from '../../../api/attendance';
-import type { AttendanceRateItem } from '../../../api/attendance';
+import { getAttendanceRateReport } from '../../../api/attendance-report';
+import type { AttendanceRateItem } from '../../../api/attendance-report';
 
 function monthRange(): [string, string] {
   const now = new Date();

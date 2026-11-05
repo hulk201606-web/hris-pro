@@ -10,6 +10,7 @@ import type { PageResult } from '../types/api';
 import type { CandidateDedupResponse } from '../types/api';
 import type { Candidate, Offer, Requisition } from '../types/admin';
 import type { ResumeParseResult } from '../types/api-batch2';
+import type { CandidateResume, SiteDomain } from '../types/api-batch4';
 
 /* ---------------------------- 职位需求 ---------------------------- */
 
@@ -137,9 +138,46 @@ export function getResumeParse(resumeId: number): Promise<ResumeParseResult> {
   return get<ResumeParseResult>(`/rcu/resumes/${resumeId}/parse`);
 }
 
-/** 触发规则解析（POST /rcu/resumes/{id}/parse）：幂等重跑，返回最新解析结果 */
+/** 触发规则解析（POST /rcu/resumes/{id}/parse，缺省 mode=rule）：幂等重跑，返回最新解析结果 */
 export function parseResume(resumeId: number): Promise<ResumeParseResult> {
   return post<ResumeParseResult>(`/rcu/resumes/${resumeId}/parse`);
+}
+
+/** AI 解析（POST /rcu/resumes/{id}/parse?mode=ai，批 6 #8）：LLM 结构化抽取，parseStatus=AI_PARSED */
+export function parseResumeAi(resumeId: number): Promise<ResumeParseResult> {
+  return post<ResumeParseResult>(`/rcu/resumes/${resumeId}/parse?mode=ai`);
+}
+
+/** 候选人简历列表（GET /rcu/candidates/{id}/resumes，批 6 #8）：存在但无简历返回空数组 */
+export function listCandidateResumes(candidateId: number): Promise<CandidateResume[]> {
+  return get<CandidateResume[]>(`/rcu/candidates/${candidateId}/resumes`);
+}
+
+/** 候选人最新解析结果（GET /rcu/candidates/{id}/resume-parse）：无简历/无解析时后端 NOT_FOUND */
+export function getCandidateResumeParse(candidateId: number): Promise<ResumeParseResult> {
+  return get<ResumeParseResult>(`/rcu/candidates/${candidateId}/resume-parse`);
+}
+
+/* ---------------------------- 站点域名（批 7 #13） ---------------------------- */
+
+/** 分页查询站点域名映射（GET /rcu/site-domains，租户隔离） */
+export function listSiteDomains(page: number, size: number): Promise<PageResult<SiteDomain>> {
+  return get<PageResult<SiteDomain>>('/rcu/site-domains', { page, size });
+}
+
+/** 新建站点域名映射（POST /rcu/site-domains）：domain 全局唯一，冲突转参数错误 */
+export function createSiteDomain(data: Record<string, unknown>): Promise<SiteDomain> {
+  return post<SiteDomain>('/rcu/site-domains', data);
+}
+
+/** 更新站点域名映射（PUT /rcu/site-domains/{id}）：可改域名与状态，未传字段不更新 */
+export function updateSiteDomain(id: number, data: Record<string, unknown>): Promise<SiteDomain> {
+  return put<SiteDomain>(`/rcu/site-domains/${id}`, data);
+}
+
+/** 删除站点域名映射（DELETE /rcu/site-domains/{id}，逻辑删除） */
+export function deleteSiteDomain(id: number): Promise<void> {
+  return del<void>(`/rcu/site-domains/${id}`);
 }
 
 /** 人工修正解析结果（PUT /rcu/resumes/{id}/parse）：覆盖 parsed 三字段与教育/工作经历 */

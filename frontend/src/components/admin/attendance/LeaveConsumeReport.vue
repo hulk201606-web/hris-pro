@@ -7,8 +7,8 @@
  */
 import { onMounted, ref } from 'vue';
 import { message } from 'ant-design-vue';
-import { getLeaveConsumeReport } from '../../../api/attendance';
-import type { LeaveConsumeItem } from '../../../api/attendance';
+import { getLeaveConsumeReport } from '../../../api/attendance-report';
+import type { LeaveConsumeItem } from '../../../api/attendance-report';
 
 function currentPeriod(): string {
   const now = new Date();

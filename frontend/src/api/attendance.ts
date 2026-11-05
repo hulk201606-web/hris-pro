@@ -40,6 +40,18 @@ export function updateGroup(id: number, data: Record<string, unknown>): Promise<
   return put<AttGroup>(`/att/groups/${id}`, data);
 }
 
+/* ---------------------------- 考勤组成员（批 6 #10） ---------------------------- */
+
+/** 组成员列表（GET /att/groups/{id}/members）：返回员工 ID 数组 */
+export function listGroupMembers(groupId: number): Promise<number[]> {
+  return get<number[]>(`/att/groups/${groupId}/members`);
+}
+
+/** 批量设置组成员（POST /att/groups/{id}/members）：全量覆盖语义，empIds 即最终成员 */
+export function setGroupMembers(groupId: number, empIds: number[]): Promise<number[]> {
+  return post<number[]>(`/att/groups/${groupId}/members`, { empIds });
+}
+
 /* ---------------------------- 班次 ---------------------------- */
 
 /** 查询班次列表（GET /att/shifts） */
@@ -263,47 +275,4 @@ export function createTrip(data: TripCreateRequest): Promise<TripRequest> {
 }
 
 /* ---------------------------- 报表（ATT-F-025） ---------------------------- */
-/** 出勤率报表项：按员工汇总出勤天数与异常次数 */
-export interface AttendanceRateItem {
-  empId: number;
-  workDays: number;
-  normalDays: number;
-  lateDays: number;
-  earlyDays: number;
-  absentDays: number;
-  leaveDays: number;
-  /** 出勤率（0-1） */
-  attendanceRate: number;
-}
-
-/** 假期消耗报表项：按假种汇总额度与使用 */
-export interface LeaveConsumeItem {
-  leaveTypeId: number;
-  leaveTypeName: string;
-  totalQuota: number;
-  usedQuota: number;
-  /** 消耗率（0-1） */
-  consumeRate: number;
-}
-
-/** 加班统计报表项：按员工汇总次数与时长 */
-export interface OvertimeStatItem {
-  empId: number;
-  times: number;
-  totalHours: number;
-}
-
-/** 出勤率报表（GET /att/reports/attendance-rate） */
-export function getAttendanceRateReport(from: string, to: string): Promise<AttendanceRateItem[]> {
-  return get<AttendanceRateItem[]>('/att/reports/attendance-rate', { from, to });
-}
-
-/** 假期消耗报表（GET /att/reports/leave-consume） */
-export function getLeaveConsumeReport(period: string): Promise<LeaveConsumeItem[]> {
-  return get<LeaveConsumeItem[]>('/att/reports/leave-consume', { period });
-}
-
-/** 加班统计报表（GET /att/reports/overtime） */
-export function getOvertimeReport(from: string, to: string): Promise<OvertimeStatItem[]> {
-  return get<OvertimeStatItem[]>('/att/reports/overtime', { from, to });
-}
+/* 报表接口与行类型较多，拆分至 attendance-report.ts（ AttendanceRateItem 等同域类型） */
