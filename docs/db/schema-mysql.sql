@@ -554,6 +554,25 @@ CREATE TABLE emp_contract (
   KEY `idx_emp_contract_emp` (`tenant_id`, `emp_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='合同台账';
 
+-- 合同条款明细(EMP-F-014 深化: 试用/薪酬/保密/竞业/自定义条款)
+CREATE TABLE emp_contract_term (
+  `id`             BIGINT        NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`      BIGINT        NOT NULL COMMENT '租户ID',
+  `contract_id`    BIGINT        NOT NULL COMMENT '合同ID(逻辑外键 emp_contract.id)',
+  `term_type`      VARCHAR(32)   NOT NULL COMMENT '条款类型 PROBATION/SALARY/CONFIDENTIALITY/NON_COMPETE/CUSTOM',
+  `content`        VARCHAR(1000) NOT NULL COMMENT '条款内容',
+  `effective_from` DATE          NOT NULL COMMENT '生效日',
+  `effective_to`   DATE          DEFAULT NULL COMMENT '失效日(NULL=长期有效)',
+  `created_by`     BIGINT        NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`     BIGINT        NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`        TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`        INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_emp_contract_term` (`tenant_id`, `contract_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='合同条款明细';
+
 -- 生命周期单(入转调离)
 CREATE TABLE emp_lifecycle_case (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
@@ -1105,6 +1124,30 @@ CREATE TABLE rcu_resume (
   KEY `idx_rcu_resume_candidate` (`tenant_id`, `candidate_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='简历';
 
+-- 简历解析结果(RCS-F-007)
+CREATE TABLE rcu_resume_parse (
+  `id`              BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`       BIGINT       NOT NULL COMMENT '租户ID',
+  `resume_id`       BIGINT       NOT NULL COMMENT '简历ID(逻辑外键 rcu_resume.id)',
+  `candidate_id`    BIGINT       DEFAULT NULL COMMENT '候选人ID(逻辑外键 rcu_candidate.id)',
+  `parsed_name`     VARCHAR(64)  DEFAULT NULL COMMENT '解析姓名(启发式,需人工核对)',
+  `parsed_mobile`   VARCHAR(32)  DEFAULT NULL COMMENT '解析手机号(大陆11位)',
+  `parsed_email`    VARCHAR(128) DEFAULT NULL COMMENT '解析邮箱',
+  `education_json`  TEXT         DEFAULT NULL COMMENT '教育经历(json数组)',
+  `experience_json` TEXT         DEFAULT NULL COMMENT '工作/项目经历(json数组)',
+  `parse_status`    VARCHAR(16)  NOT NULL COMMENT '解析状态 OK/RULE_LIMITED(规则解析,需人工核对)',
+  `parse_error`     VARCHAR(255) DEFAULT NULL COMMENT '解析错误说明',
+  `created_by`      BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`      BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`         TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`         INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_rcu_resume_parse` (`tenant_id`, `resume_id`),
+  KEY `idx_rcu_resume_parse_candidate` (`tenant_id`, `candidate_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='简历解析结果';
+
 -- 投递
 CREATE TABLE rcu_application (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
@@ -1474,6 +1517,28 @@ CREATE TABLE cmp_exchange_rate (
   UNIQUE KEY `uk_cmp_exchange_rate` (`tenant_id`, `from_currency`, `to_currency`, `effective_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='汇率';
 
+-- 期间关账记录(CMP-F-020, 历史多锁并存, ACTIVE 至多一条由应用层保证)
+CREATE TABLE cmp_period_lock (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `period_code`   VARCHAR(16)  NOT NULL COMMENT '周期编码(如 2026-01)',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT '状态 ACTIVE/RELEASED',
+  `locked_by`     BIGINT       NOT NULL COMMENT '关账人ID',
+  `locked_at`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '关账时间(UTC)',
+  `released_by`   BIGINT       DEFAULT NULL COMMENT '解锁人ID(NULL=未解锁)',
+  `released_at`   DATETIME(3)  DEFAULT NULL COMMENT '解锁时间(UTC,NULL=未解锁)',
+  `unlock_reason` VARCHAR(255) DEFAULT NULL COMMENT '解锁理由(NULL=未解锁)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cmp_period_lock` (`tenant_id`, `period_code`, `locked_at`),
+  KEY `idx_cmp_period_lock_status` (`tenant_id`, `period_code`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='期间关账记录';
+
 -- =====================================================================
 -- 域 7: prf_db 绩效与培训
 -- =====================================================================
@@ -1659,6 +1724,31 @@ CREATE TABLE prf_appeal (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_prf_appeal_biz` (`tenant_id`, `biz_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='绩效申诉';
+
+-- 绩效面谈(含 PIP 跟踪)
+CREATE TABLE prf_interview (
+  `id`              BIGINT        NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`       BIGINT        NOT NULL COMMENT '租户ID',
+  `cycle_id`        BIGINT        NOT NULL COMMENT '周期ID(逻辑外键 prf_cycle.id)',
+  `emp_id`          BIGINT        NOT NULL COMMENT '员工ID(逻辑外键 emp_employee.id)',
+  `round`           INT           NOT NULL DEFAULT 1 COMMENT '面谈轮次(同周期同员工递增)',
+  `interview_date`  DATE          NOT NULL COMMENT '面谈日期',
+  `interviewer_emp_id` BIGINT     NOT NULL COMMENT '面谈人员工ID(逻辑外键 emp_employee.id)',
+  `summary`         VARCHAR(1000) DEFAULT NULL COMMENT '面谈纪要',
+  `conclusion`      VARCHAR(16)   NOT NULL COMMENT '结论 IMPROVE改进/KEEP维持/PROMOTE晋升建议/PIP绩效改善计划',
+  `pip_start_date`  DATE          DEFAULT NULL COMMENT 'PIP开始日(conclusion=PIP 时必填)',
+  `pip_end_date`    DATE          DEFAULT NULL COMMENT 'PIP结束日(conclusion=PIP 时必填且大于开始日)',
+  `pip_status`      VARCHAR(16)   DEFAULT NULL COMMENT 'PIP状态 ONGOING/PASSED/FAILED(仅 conclusion=PIP)',
+  `created_by`      BIGINT        NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`      BIGINT        NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`         TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`         INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_prf_interview` (`tenant_id`, `cycle_id`, `emp_id`, `round`),
+  KEY `idx_prf_interview_emp` (`tenant_id`, `emp_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='绩效面谈(含PIP跟踪)';
 
 -- 培训计划
 CREATE TABLE prf_train_plan (

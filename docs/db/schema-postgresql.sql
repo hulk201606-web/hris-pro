@@ -556,6 +556,25 @@ CREATE TABLE emp_contract (
 );
 CREATE INDEX idx_emp_contract_emp ON emp_contract (tenant_id, emp_id);
 
+-- 合同条款明细(EMP-F-014 深化: 试用/薪酬/保密/竞业/自定义条款)
+CREATE TABLE emp_contract_term (
+  id             BIGINT        NOT NULL,                        -- 主键: 雪花ID
+  tenant_id      BIGINT        NOT NULL,                        -- 租户ID
+  contract_id    BIGINT        NOT NULL,                        -- 合同ID(逻辑外键 emp_contract.id)
+  term_type      VARCHAR(32)   NOT NULL,                        -- 条款类型 PROBATION/SALARY/CONFIDENTIALITY/NON_COMPETE/CUSTOM
+  content        VARCHAR(1000) NOT NULL,                        -- 条款内容
+  effective_from DATE          NOT NULL,                        -- 生效日
+  effective_to   DATE,                                          -- 失效日(NULL=长期有效)
+  created_by     BIGINT        NOT NULL DEFAULT 0,              -- 创建人ID,0=系统
+  updated_by     BIGINT        NOT NULL DEFAULT 0,              -- 更新人ID
+  created_at     TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
+  updated_at     TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 更新时间(UTC,应用层维护)
+  deleted        SMALLINT      NOT NULL DEFAULT 0,              -- 逻辑删除 0=否 1=是
+  version        INTEGER       NOT NULL DEFAULT 0,              -- 乐观锁版本号
+  CONSTRAINT pk_emp_contract_term PRIMARY KEY (id)
+);
+CREATE INDEX idx_emp_contract_term ON emp_contract_term (tenant_id, contract_id);
+
 -- 生命周期单(入转调离)
 CREATE TABLE emp_lifecycle_case (
   id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
@@ -1105,6 +1124,30 @@ CREATE TABLE rcu_resume (
 );
 CREATE INDEX idx_rcu_resume_candidate ON rcu_resume (tenant_id, candidate_id);
 
+-- 简历解析结果(RCS-F-007)
+CREATE TABLE rcu_resume_parse (
+  id              BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id       BIGINT       NOT NULL,                            -- 租户ID
+  resume_id       BIGINT       NOT NULL,                            -- 简历ID(逻辑外键 rcu_resume.id)
+  candidate_id    BIGINT,                                           -- 候选人ID(逻辑外键 rcu_candidate.id)
+  parsed_name     VARCHAR(64),                                      -- 解析姓名(启发式,需人工核对)
+  parsed_mobile   VARCHAR(32),                                      -- 解析手机号(大陆11位)
+  parsed_email    VARCHAR(128),                                     -- 解析邮箱
+  education_json  TEXT,                                             -- 教育经历(json数组)
+  experience_json TEXT,                                             -- 工作/项目经历(json数组)
+  parse_status    VARCHAR(16)  NOT NULL,                            -- 解析状态 OK/RULE_LIMITED(规则解析,需人工核对)
+  parse_error     VARCHAR(255),                                     -- 解析错误说明
+  created_by      BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by      BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted         SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version         INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_rcu_resume_parse PRIMARY KEY (id),
+  CONSTRAINT uk_rcu_resume_parse UNIQUE (tenant_id, resume_id)
+);
+CREATE INDEX idx_rcu_resume_parse_candidate ON rcu_resume_parse (tenant_id, candidate_id);
+
 -- 投递
 CREATE TABLE rcu_application (
   id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
@@ -1474,6 +1517,28 @@ CREATE TABLE cmp_exchange_rate (
   CONSTRAINT uk_cmp_exchange_rate UNIQUE (tenant_id, from_currency, to_currency, effective_date)
 );
 
+-- 期间关账记录(CMP-F-020, 历史多锁并存, ACTIVE 至多一条由应用层保证)
+CREATE TABLE cmp_period_lock (
+  id             BIGINT       NOT NULL,                         -- 主键: 雪花ID
+  tenant_id      BIGINT       NOT NULL,                         -- 租户ID
+  period_code    VARCHAR(16)  NOT NULL,                         -- 周期编码(如 2026-01)
+  status         VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',        -- 状态 ACTIVE/RELEASED
+  locked_by      BIGINT       NOT NULL,                         -- 关账人ID
+  locked_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 关账时间(UTC)
+  released_by    BIGINT,                                        -- 解锁人ID(NULL=未解锁)
+  released_at    TIMESTAMP(3),                                  -- 解锁时间(UTC,NULL=未解锁)
+  unlock_reason  VARCHAR(255),                                  -- 解锁理由(NULL=未解锁)
+  created_by     BIGINT       NOT NULL DEFAULT 0,               -- 创建人ID,0=系统
+  updated_by     BIGINT       NOT NULL DEFAULT 0,               -- 更新人ID
+  created_at     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
+  updated_at     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 更新时间(UTC,应用层维护)
+  deleted        SMALLINT     NOT NULL DEFAULT 0,               -- 逻辑删除 0=否 1=是
+  version        INTEGER      NOT NULL DEFAULT 0,               -- 乐观锁版本号
+  CONSTRAINT pk_cmp_period_lock PRIMARY KEY (id),
+  CONSTRAINT uk_cmp_period_lock UNIQUE (tenant_id, period_code, locked_at)
+);
+CREATE INDEX idx_cmp_period_lock_status ON cmp_period_lock (tenant_id, period_code, status);
+
 -- =====================================================================
 -- 域 7: prf_db 绩效与培训
 -- =====================================================================
@@ -1659,6 +1724,32 @@ CREATE TABLE prf_appeal (
   CONSTRAINT pk_prf_appeal PRIMARY KEY (id),
   CONSTRAINT uk_prf_appeal_biz UNIQUE (tenant_id, biz_key)
 );
+
+-- 绩效面谈(含 PIP 跟踪)
+CREATE TABLE prf_interview (
+  id               BIGINT        NOT NULL,                            -- 主键: 雪花ID
+  tenant_id        BIGINT        NOT NULL,                            -- 租户ID
+  cycle_id         BIGINT        NOT NULL,                            -- 周期ID(逻辑外键 prf_cycle.id)
+  emp_id           BIGINT        NOT NULL,                            -- 员工ID(逻辑外键 emp_employee.id)
+  round            INTEGER       NOT NULL DEFAULT 1,                  -- 面谈轮次(同周期同员工递增)
+  interview_date   DATE          NOT NULL,                            -- 面谈日期
+  interviewer_emp_id BIGINT      NOT NULL,                            -- 面谈人员工ID(逻辑外键 emp_employee.id)
+  summary          VARCHAR(1000),                                     -- 面谈纪要
+  conclusion       VARCHAR(16)   NOT NULL,                            -- 结论 IMPROVE改进/KEEP维持/PROMOTE晋升建议/PIP绩效改善计划
+  pip_start_date   DATE,                                              -- PIP开始日(conclusion=PIP 时必填)
+  pip_end_date     DATE,                                              -- PIP结束日(conclusion=PIP 时必填且大于开始日)
+  pip_status       VARCHAR(16),                                       -- PIP状态 ONGOING/PASSED/FAILED(仅 conclusion=PIP)
+  created_by       BIGINT        NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by       BIGINT        NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at       TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at       TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted          SMALLINT      NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version          INTEGER       NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_prf_interview PRIMARY KEY (id),
+  CONSTRAINT uk_prf_interview UNIQUE (tenant_id, cycle_id, emp_id, round)
+);
+
+CREATE INDEX idx_prf_interview_emp ON prf_interview (tenant_id, emp_id);
 
 -- 培训计划
 CREATE TABLE prf_train_plan (
