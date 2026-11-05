@@ -139,6 +139,8 @@ public class HolidayService {
 
     private void apply(Holiday e, HolidayRequest req) {
         e.setHolidayDate(req.holidayDate());
+        // calendar_year 由服务端按日期派生（列 NOT NULL），不接受外部传入，避免年度与日期脱钩
+        e.setCalendarYear(req.holidayDate().getYear());
         e.setName(req.name());
         e.setDayType(req.dayType());
         e.setRemark(req.remark());
@@ -146,6 +148,6 @@ public class HolidayService {
 
     private HolidayResponse toResponse(Holiday e) {
         return new HolidayResponse(e.getId(), e.getHolidayDate(), e.getName(),
-                e.getDayType(), e.getRemark());
+                e.getDayType(), e.getCalendarYear(), e.getRemark());
     }
 }

@@ -674,6 +674,7 @@ CREATE TABLE att_group (
   name          VARCHAR(64)  NOT NULL,                            -- 班组名称
   code          VARCHAR(64)  NOT NULL,                            -- 班组编码
   leader_emp_id BIGINT,                                           -- 班组长员工ID(逻辑外键 emp_employee.id)
+  holiday_calendar_year INTEGER,                                 -- 绑定的节假日历年度(空=不绑定,日考勤按此年取att_holiday)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -683,6 +684,27 @@ CREATE TABLE att_group (
   CONSTRAINT pk_att_group PRIMARY KEY (id),
   CONSTRAINT uk_att_group_code UNIQUE (tenant_id, code)
 );
+
+-- 法定节假日与调班日
+CREATE TABLE att_holiday (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  calendar_year INTEGER      NOT NULL,                            -- 日历年度(=EXTRACT(YEAR FROM holiday_date),服务端派生)
+  holiday_date  DATE         NOT NULL,                            -- 日期
+  name          VARCHAR(64)  NOT NULL,                            -- 名称(如 春节/国庆调休)
+  day_type      VARCHAR(16)  NOT NULL,                            -- 日期类型: HOLIDAY=法定节假日(放假) WORKDAY=调班补班(上班)
+  remark        VARCHAR(255),                                     -- 备注
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_att_holiday PRIMARY KEY (id),
+  CONSTRAINT uk_att_holiday_date UNIQUE (tenant_id, holiday_date)
+);
+CREATE INDEX idx_att_holiday_year ON att_holiday (tenant_id, calendar_year);
+CREATE INDEX idx_att_holiday_type ON att_holiday (tenant_id, day_type);
 
 -- 班次
 CREATE TABLE att_shift (
@@ -884,6 +906,27 @@ CREATE TABLE att_trip_request (
   CONSTRAINT uk_att_trip_biz UNIQUE (tenant_id, biz_key)
 );
 
+-- 外出/居家办公申请(ATT-F-018,权限点直批,不走 Flowable)
+CREATE TABLE att_out_office (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  emp_id        BIGINT       NOT NULL,                            -- 员工ID(逻辑外键 emp_employee.id)
+  type          VARCHAR(8)   NOT NULL,                            -- 类型 OUT=外出 WFH=居家办公
+  start_time    TIMESTAMP(3) NOT NULL,                            -- 开始时间(UTC)
+  end_time      TIMESTAMP(3) NOT NULL,                            -- 结束时间(UTC)
+  reason        VARCHAR(255),                                     -- 事由
+  status        VARCHAR(16)  NOT NULL,                            -- 状态 PROCESSING/APPROVED/REJECTED
+  approver_id   BIGINT,                                           -- 审批人员工ID(审批通过/驳回时回填)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_att_out_office PRIMARY KEY (id)
+);
+CREATE INDEX idx_att_out_office_emp ON att_out_office (tenant_id, emp_id, start_time);
+
 -- 补卡单
 CREATE TABLE att_fix_request (
   id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
@@ -977,6 +1020,7 @@ CREATE TABLE rcu_requisition (
   headcount     INTEGER      NOT NULL DEFAULT 1,                  -- 招聘人数
   reason        VARCHAR(255),                                     -- 需求原因
   status        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',            -- 状态 DRAFT/APPROVING/OPEN/CLOSED
+  published     SMALLINT     NOT NULL DEFAULT 0,                  -- 官网发布 0=否 1=是(RCS-F-004,仅OPEN可发布)
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -1412,6 +1456,24 @@ CREATE TABLE cmp_import_batch (
   CONSTRAINT uk_cmp_import_batch UNIQUE (tenant_id, batch_no)
 );
 
+-- 汇率(CMP-F-023 多币种底座)
+CREATE TABLE cmp_exchange_rate (
+  id             NUMERIC(18,8) NOT NULL,                           -- 主键: 雪花ID
+  tenant_id      BIGINT        NOT NULL,                           -- 租户ID
+  from_currency  CHAR(3)       NOT NULL,                           -- 源币种(ISO 4217)
+  to_currency    CHAR(3)       NOT NULL,                           -- 目标币种(ISO 4217)
+  rate           NUMERIC(18,8) NOT NULL,                           -- 汇率: 1 from = rate to
+  effective_date DATE          NOT NULL,                           -- 生效日期
+  created_by     BIGINT        NOT NULL DEFAULT 0,                 -- 创建人ID,0=系统
+  updated_by     BIGINT        NOT NULL DEFAULT 0,                 -- 更新人ID
+  created_at     TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
+  updated_at     TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 更新时间(UTC,应用层维护)
+  deleted        SMALLINT      NOT NULL DEFAULT 0,                 -- 逻辑删除 0=否 1=是
+  version        INTEGER       NOT NULL DEFAULT 0,                 -- 乐观锁版本号
+  CONSTRAINT pk_cmp_exchange_rate PRIMARY KEY (id),
+  CONSTRAINT uk_cmp_exchange_rate UNIQUE (tenant_id, from_currency, to_currency, effective_date)
+);
+
 -- =====================================================================
 -- 域 7: prf_db 绩效与培训
 -- =====================================================================
@@ -1838,6 +1900,28 @@ CREATE TABLE flow_ext_cc (
   CONSTRAINT uk_flow_cc UNIQUE (tenant_id, proc_inst_id, cc_node, emp_id)
 );
 CREATE INDEX idx_flow_cc_emp ON flow_ext_cc (tenant_id, emp_id, created_at);
+
+-- 审批委托代理(FLW-F-009)
+CREATE TABLE flow_ext_delegate (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  from_user     BIGINT       NOT NULL,                            -- 委托发起人用户ID(网关透传userId,逻辑外键 auth_user.id)
+  to_user       BIGINT       NOT NULL,                            -- 被委托人用户ID(网关透传userId,逻辑外键 auth_user.id)
+  proc_def_key  VARCHAR(64),                                      -- 流程定义Key(NULL=全部流程)
+  start_at      TIMESTAMP(3) NOT NULL,                            -- 生效开始时间
+  end_at        TIMESTAMP(3) NOT NULL,                            -- 生效结束时间
+  status        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',           -- 状态 ACTIVE/ENDED
+  reason        VARCHAR(255),                                     -- 委托原因
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_flow_ext_delegate PRIMARY KEY (id)
+);
+CREATE INDEX idx_flow_delegate_from ON flow_ext_delegate (tenant_id, from_user, status);
+CREATE INDEX idx_flow_delegate_to ON flow_ext_delegate (tenant_id, to_user, status);
 
 -- =====================================================================
 -- 域 9: rag_db 知识库与问答
@@ -2286,4 +2370,23 @@ CREATE TABLE sys_outbox_message (
 );
 CREATE INDEX idx_sys_outbox_state ON sys_outbox_message (state, next_retry_at);
 
--- 文件结束: schema-postgresql.sql (共 114 张逻辑表, 不含 Flowable ACT_* 引擎表)
+-- 通知渠道偏好(PLT-F-004)
+CREATE TABLE sys_notify_preference (
+  id           BIGINT      NOT NULL,                              -- 主键: 雪花ID
+  tenant_id    BIGINT      NOT NULL,                              -- 租户ID
+  user_id      BIGINT      NOT NULL,                              -- 用户ID(网关透传userId,逻辑外键 auth_user.id)
+  channel      VARCHAR(16) NOT NULL,                              -- 渠道 DINGTALK/WECOM/WEBHOOK
+  enabled      SMALLINT    NOT NULL DEFAULT 1,                    -- 是否启用 0=禁用 1=启用
+  quiet_start  TIME,                                              -- 免打扰开始时间(NULL=不启用,支持跨午夜)
+  quiet_end    TIME,                                              -- 免打扰结束时间(NULL=不启用,支持跨午夜)
+  created_by   BIGINT      NOT NULL DEFAULT 0,                    -- 创建人ID,0=系统
+  updated_by   BIGINT      NOT NULL DEFAULT 0,                    -- 更新人ID
+  created_at   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- 创建时间(UTC)
+  updated_at   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- 更新时间(UTC,应用层维护)
+  deleted      SMALLINT    NOT NULL DEFAULT 0,                    -- 逻辑删除 0=否 1=是
+  version      INTEGER     NOT NULL DEFAULT 0,                    -- 乐观锁版本号
+  CONSTRAINT pk_sys_notify_preference PRIMARY KEY (id),
+  CONSTRAINT uk_sys_notify_pref UNIQUE (tenant_id, user_id, channel)
+);
+
+-- 文件结束: schema-postgresql.sql (共 117 张逻辑表, 不含 Flowable ACT_* 引擎表)

@@ -52,6 +52,7 @@ public class GroupService {
         group.setName(req.name().trim());
         group.setCode(code);
         group.setLeaderEmpId(req.leaderEmpId());
+        group.setHolidayCalendarYear(req.holidayCalendarYear());
         groupMapper.insert(group);
         return toResponse(group);
     }
@@ -71,6 +72,9 @@ public class GroupService {
         if (req.leaderEmpId() != null) {
             group.setLeaderEmpId(req.leaderEmpId());
         }
+        if (req.holidayCalendarYear() != null) {
+            group.setHolidayCalendarYear(req.holidayCalendarYear());
+        }
         if (groupMapper.updateById(group) == 0) {
             throw new BizException(ErrorCode.ATT_ERROR, "数据已被其他操作变更，请刷新后重试");
         }
@@ -86,6 +90,22 @@ public class GroupService {
         return group;
     }
 
+    /**
+     * 本租户绑定了节假日历的年度去重列表（B-5）。
+     *
+     * <p>供日考勤计算确定 att_holiday 的适用范围：返回空 = 租户未做年度绑定，
+     * 日历对全部年度生效（兼容既有行为）；非空 = 仅这些年度的日历配置参与判定，
+     * 其余年度回退星期推断。当前系统无员工-班组归属表，先按租户粒度取并集，
+     * 归属表落地后把调用方换成按员工所在组解析（见 OPEN-DECISIONS）。</p>
+     */
+    public List<Integer> boundCalendarYears() {
+        return groupMapper.selectList(new LambdaQueryWrapper<AttGroup>()
+                        .isNotNull(AttGroup::getHolidayCalendarYear)).stream()
+                .map(AttGroup::getHolidayCalendarYear)
+                .distinct()
+                .toList();
+    }
+
     private void ensureCodeAvailable(String code, Long excludeId) {
         LambdaQueryWrapper<AttGroup> qw = new LambdaQueryWrapper<AttGroup>().eq(AttGroup::getCode, code);
         if (excludeId != null) {
@@ -99,6 +119,6 @@ public class GroupService {
 
     private GroupResponse toResponse(AttGroup g) {
         return new GroupResponse(g.getId(), g.getName(), g.getCode(), g.getLeaderEmpId(),
-                g.getCreatedAt(), g.getUpdatedAt());
+                g.getHolidayCalendarYear(), g.getCreatedAt(), g.getUpdatedAt());
     }
 }

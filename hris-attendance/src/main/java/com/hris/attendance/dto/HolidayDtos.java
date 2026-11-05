@@ -27,9 +27,9 @@ public final class HolidayDtos {
             String remark) {
     }
 
-    /** 响应。 */
+    /** 响应。calendarYear 为服务端按日期派生的日历年度。 */
     public record HolidayResponse(Long id, LocalDate holidayDate, String name,
-                                  String dayType, String remark) {
+                                  String dayType, Integer calendarYear, String remark) {
     }
 
     /**

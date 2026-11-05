@@ -20,6 +20,20 @@ public class AttGroup extends BaseEntity {
     /** 班组长员工 ID（逻辑外键 emp_employee.id） */
     private Long leaderEmpId;
 
+    /**
+     * 绑定的节假日历年度（B-5）。空 = 不绑定，日考勤按全量日历判定；
+     * 绑定后仅该年度的 att_holiday 配置对本组生效，其余年度回退星期推断。
+     */
+    private Integer holidayCalendarYear;
+
+    public Integer getHolidayCalendarYear() {
+        return holidayCalendarYear;
+    }
+
+    public void setHolidayCalendarYear(Integer holidayCalendarYear) {
+        this.holidayCalendarYear = holidayCalendarYear;
+    }
+
     public String getName() {
         return name;
     }

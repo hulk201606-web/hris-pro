@@ -33,6 +33,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -69,6 +70,8 @@ class DailyAttendanceServiceTest {
     private PayrollCycleMapper cycleMapper;
     @Mock
     private MonthlyClosingMapper closingMapper;
+    @Mock
+    private GroupService groupService;
 
     private DailyAttendanceService service;
 
@@ -76,7 +79,9 @@ class DailyAttendanceServiceTest {
     void setUp() {
         service = new DailyAttendanceService(dailyMapper, assignmentMapper, punchService,
                 shiftService, leaveQueryService, overtimeService, calculator, holidayService,
-                cycleMapper, closingMapper);
+                groupService, cycleMapper, closingMapper);
+        // 默认租户未绑定日历年度（旧行为：日历对全部年度生效）；仅 ClosingLock 分支不触发该查询，用 lenient
+        lenient().when(groupService.boundCalendarYears()).thenReturn(List.of());
     }
 
     private void stubNoClosing() {
@@ -247,6 +252,77 @@ class DailyAttendanceServiceTest {
             assertEquals(1, result.lateCount());
             verify(calculator).resolveStatus(any(), any(), any(), any());
             assertEquals(0, result.newExceptionCount());
+        }
+    }
+
+    @Nested
+    @DisplayName("考勤组绑定节假日历年度（B-5）")
+    class CalendarYearBinding {
+
+        @Test
+        @DisplayName("组绑定 2026 年 + 工作日在 2026 年 + 日历配置 HOLIDAY → 法定节假日生效")
+        void holidayAppliesWithinBoundYear() {
+            stubNoClosing();
+            when(groupService.boundCalendarYears()).thenReturn(List.of(2026));
+            when(punchService.findByDate(EMP_ID, WORK_DATE)).thenReturn(List.of());
+            when(holidayService.isWorkday(WORK_DATE)).thenReturn(
+                    new WorkdayCheckResponse(WORK_DATE, false, "HOLIDAY"));
+            when(assignmentMapper.selectOne(any())).thenReturn(null);
+            stubBaseCalc();
+
+            service.compute(req());
+
+            ArgumentCaptor<DailyAttendance> captor = ArgumentCaptor.forClass(DailyAttendance.class);
+            verify(dailyMapper).insert(captor.capture());
+            assertEquals(AttendanceCalculator.STATUS_HOLIDAY, captor.getValue().getAttStatus());
+        }
+
+        @Test
+        @DisplayName("组绑定 2026 年 + 工作日在 2027 年 → 日历不适用，回退星期推断（不查节假日历）")
+        void calendarSkippedForUnboundYear() {
+            LocalDate workDate2027 = LocalDate.parse("2027-01-05");
+            stubNoClosing();
+            when(groupService.boundCalendarYears()).thenReturn(List.of(2026));
+            // 有打卡才不会被「无排班无打卡=休息日」短路，进而走到 resolveStatus 链路
+            PunchRecord punch = new PunchRecord();
+            punch.setEmpId(EMP_ID);
+            punch.setType(PunchService.TYPE_IN);
+            punch.setPunchTime(LocalDateTime.parse("2027-01-05T09:00:00"));
+            when(punchService.findByDate(EMP_ID, workDate2027)).thenReturn(List.of(punch));
+            when(assignmentMapper.selectOne(any())).thenReturn(null);
+            stubBaseCalcFor(workDate2027);
+            when(calculator.resolveStatus(any(), any(), any(), any()))
+                    .thenReturn(AttendanceCalculator.STATUS_NORMAL);
+
+            service.compute(new DailyComputeRequest(workDate2027, List.of(EMP_ID)));
+
+            verify(holidayService, never()).isWorkday(any());
+            verify(calculator).resolveStatus(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("调休补班日（source=WORKDAY）→ 不判节假日，走正常出勤判定链路")
+        void adjustedWorkdayGoesThroughNormalPath() {
+            stubNoClosing();
+            when(punchService.findByDate(EMP_ID, WORK_DATE)).thenReturn(List.of());
+            when(holidayService.isWorkday(WORK_DATE)).thenReturn(
+                    new WorkdayCheckResponse(WORK_DATE, true, "WORKDAY"));
+            stubShift();
+            stubBaseCalc();
+            when(calculator.resolveStatus(any(), any(), any(), any()))
+                    .thenReturn(AttendanceCalculator.STATUS_NORMAL);
+
+            DailyComputeResult result = service.compute(req());
+
+            assertEquals(1, result.normalCount());
+            verify(calculator).resolveStatus(any(), any(), any(), any());
+        }
+
+        private void stubBaseCalcFor(LocalDate workDate) {
+            when(leaveQueryService.leaveHoursOn(EMP_ID, workDate)).thenReturn(BigDecimal.ZERO);
+            when(overtimeService.overtimeHoursOn(EMP_ID, workDate)).thenReturn(BigDecimal.ZERO);
+            when(dailyMapper.selectOne(any())).thenReturn(null);
+            when(dailyMapper.insert(any(DailyAttendance.class))).thenReturn(1);
         }
     }
 }

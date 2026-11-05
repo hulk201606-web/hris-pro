@@ -3,9 +3,11 @@ package com.hris.employee.controller;
 import com.hris.common.api.R;
 import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackRequest;
 import com.hris.employee.dto.ApprovalDtos.ApprovalCallbackResponse;
+import com.hris.employee.dto.BlacklistCheckDtos.BlacklistCheckResponse;
 import com.hris.employee.dto.EmployeeDtos.ProbationReminderItem;
 import com.hris.employee.dto.PreCreateRequest;
 import com.hris.employee.dto.PreHireLinkResponse;
+import com.hris.employee.service.BlacklistCheckService;
 import com.hris.employee.service.EmployeeService;
 import com.hris.employee.service.LifecycleCaseService;
 import com.hris.employee.service.PendingTransactionService;
@@ -37,18 +39,21 @@ public class EmployeeInternalController {
     private final PendingTransactionService pendingTransactionService;
     private final ProbationReminderService probationReminderService;
     private final com.hris.employee.service.EmploymentService employmentService;
+    private final BlacklistCheckService blacklistCheckService;
 
     public EmployeeInternalController(EmployeeService employeeService, PreHireService preHireService,
                                       LifecycleCaseService lifecycleCaseService,
                                       PendingTransactionService pendingTransactionService,
                                       ProbationReminderService probationReminderService,
-                                      com.hris.employee.service.EmploymentService employmentService) {
+                                      com.hris.employee.service.EmploymentService employmentService,
+                                      BlacklistCheckService blacklistCheckService) {
         this.employeeService = employeeService;
         this.preHireService = preHireService;
         this.lifecycleCaseService = lifecycleCaseService;
         this.pendingTransactionService = pendingTransactionService;
         this.probationReminderService = probationReminderService;
         this.employmentService = employmentService;
+        this.blacklistCheckService = blacklistCheckService;
     }
 
     /** 员工档案简报（内部端点）：供 org 汇报线解析等跨域调用，返回姓名/工号/状态/部门/岗位/直属上级。 */
@@ -112,5 +117,17 @@ public class EmployeeInternalController {
     @GetMapping("/count-active-by-dept")
     public R<Long> countActiveByDept(@RequestParam Long deptId) {
         return R.ok(employmentService.countActiveByDept(deptId));
+    }
+
+    /**
+     * 黑名单校验（RCS-F-011 招聘域契约，Offer 录用/渠道导入前调用）：certNoHash
+     * （SHA-256 小写 hex）与 mobile 至少提供其一，命中 blacklisted=1 员工即
+     * blacklisted=true，reason 取 emp_status_log 最近一条或固定文案。
+     */
+    @GetMapping("/blacklist-check")
+    public R<BlacklistCheckResponse> blacklistCheck(
+            @RequestParam(required = false) String certNoHash,
+            @RequestParam(required = false) String mobile) {
+        return R.ok(blacklistCheckService.check(certNoHash, mobile));
     }
 }

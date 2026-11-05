@@ -674,6 +674,7 @@ CREATE TABLE att_group (
   `name`          VARCHAR(64)  NOT NULL COMMENT '班组名称',
   `code`          VARCHAR(64)  NOT NULL COMMENT '班组编码',
   `leader_emp_id` BIGINT       DEFAULT NULL COMMENT '班组长员工ID(逻辑外键 emp_employee.id)',
+  `holiday_calendar_year` INT  DEFAULT NULL COMMENT '绑定的节假日历年度(空=不绑定,日考勤按此年取att_holiday)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -687,6 +688,7 @@ CREATE TABLE att_group (
 CREATE TABLE att_holiday (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
   `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `calendar_year` INT          NOT NULL COMMENT '日历年度(=YEAR(holiday_date),服务端派生)',
   `holiday_date`  DATE         NOT NULL COMMENT '日期',
   `name`          VARCHAR(64)  NOT NULL COMMENT '名称(如 春节/国庆调休)',
   `day_type`      VARCHAR(16)  NOT NULL COMMENT '日期类型: HOLIDAY=法定节假日(放假) WORKDAY=调班补班(上班)',
@@ -699,6 +701,7 @@ CREATE TABLE att_holiday (
   `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_att_holiday_date` (`tenant_id`, `holiday_date`),
+  KEY `idx_att_holiday_year` (`tenant_id`, `calendar_year`),
   KEY `idx_att_holiday_type` (`tenant_id`, `day_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='法定节假日与调班日';
 
@@ -902,6 +905,27 @@ CREATE TABLE att_trip_request (
   UNIQUE KEY `uk_att_trip_biz` (`tenant_id`, `biz_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='出差单';
 
+-- 外出/居家办公申请(ATT-F-018,权限点直批,不走 Flowable)
+CREATE TABLE att_out_office (
+  `id`           BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`    BIGINT       NOT NULL COMMENT '租户ID',
+  `emp_id`       BIGINT       NOT NULL COMMENT '员工ID(逻辑外键 emp_employee.id)',
+  `type`         VARCHAR(8)   NOT NULL COMMENT '类型 OUT=外出 WFH=居家办公',
+  `start_time`   DATETIME(3)  NOT NULL COMMENT '开始时间(UTC)',
+  `end_time`     DATETIME(3)  NOT NULL COMMENT '结束时间(UTC)',
+  `reason`       VARCHAR(255) DEFAULT NULL COMMENT '事由',
+  `status`       VARCHAR(16)  NOT NULL COMMENT '状态 PROCESSING/APPROVED/REJECTED',
+  `approver_id`  BIGINT       DEFAULT NULL COMMENT '审批人员工ID(审批通过/驳回时回填)',
+  `created_by`   BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`   BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`      TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`      INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_att_out_office_emp` (`tenant_id`, `emp_id`, `start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='外出/居家办公申请';
+
 -- 补卡单
 CREATE TABLE att_fix_request (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
@@ -995,6 +1019,7 @@ CREATE TABLE rcu_requisition (
   `headcount`     INT          NOT NULL DEFAULT 1 COMMENT '招聘人数',
   `reason`        VARCHAR(255) DEFAULT NULL COMMENT '需求原因',
   `status`        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT '状态 DRAFT/APPROVING/OPEN/CLOSED',
+  `published`     TINYINT      NOT NULL DEFAULT 0 COMMENT '官网发布 0=否 1=是(RCS-F-004,仅OPEN可发布)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1431,6 +1456,24 @@ CREATE TABLE cmp_import_batch (
   UNIQUE KEY `uk_cmp_import_batch` (`tenant_id`, `batch_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='导入批次';
 
+-- 汇率(CMP-F-023 多币种底座)
+CREATE TABLE cmp_exchange_rate (
+  `id`              BIGINT        NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`       BIGINT        NOT NULL COMMENT '租户ID',
+  `from_currency`   CHAR(3)       NOT NULL COMMENT '源币种(ISO 4217)',
+  `to_currency`     CHAR(3)       NOT NULL COMMENT '目标币种(ISO 4217)',
+  `rate`            DECIMAL(18,8) NOT NULL COMMENT '汇率: 1 from = rate to',
+  `effective_date`  DATE          NOT NULL COMMENT '生效日期',
+  `created_by`      BIGINT        NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`      BIGINT        NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`      DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`         TINYINT       NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`         INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cmp_exchange_rate` (`tenant_id`, `from_currency`, `to_currency`, `effective_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='汇率';
+
 -- =====================================================================
 -- 域 7: prf_db 绩效与培训
 -- =====================================================================
@@ -1858,6 +1901,28 @@ CREATE TABLE flow_ext_cc (
   UNIQUE KEY `uk_flow_cc` (`tenant_id`, `proc_inst_id`, `cc_node`, `emp_id`),
   KEY `idx_flow_cc_emp` (`tenant_id`, `emp_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='审批抄送记录';
+
+-- 审批委托代理(FLW-F-009)
+CREATE TABLE flow_ext_delegate (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `from_user`     BIGINT       NOT NULL COMMENT '委托发起人用户ID(网关透传userId,逻辑外键 auth_user.id)',
+  `to_user`       BIGINT       NOT NULL COMMENT '被委托人用户ID(网关透传userId,逻辑外键 auth_user.id)',
+  `proc_def_key`  VARCHAR(64)  DEFAULT NULL COMMENT '流程定义Key(NULL=全部流程)',
+  `start_at`      DATETIME(3)  NOT NULL COMMENT '生效开始时间',
+  `end_at`        DATETIME(3)  NOT NULL COMMENT '生效结束时间',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT '状态 ACTIVE/ENDED',
+  `reason`        VARCHAR(255) DEFAULT NULL COMMENT '委托原因',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_flow_delegate_from` (`tenant_id`, `from_user`, `status`),
+  KEY `idx_flow_delegate_to` (`tenant_id`, `to_user`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='审批委托代理';
 
 -- =====================================================================
 -- 域 9: rag_db 知识库与问答
@@ -2328,4 +2393,23 @@ CREATE TABLE sys_outbox_message (
   KEY `idx_sys_outbox_state` (`state`, `next_retry_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='全局事件表';
 
--- 文件结束: schema-mysql.sql (共 114 张逻辑表, 不含 Flowable ACT_* 引擎表)
+-- 通知渠道偏好(PLT-F-004)
+CREATE TABLE sys_notify_preference (
+  `id`           BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`    BIGINT       NOT NULL COMMENT '租户ID',
+  `user_id`      BIGINT       NOT NULL COMMENT '用户ID(网关透传userId,逻辑外键 auth_user.id)',
+  `channel`      VARCHAR(16)  NOT NULL COMMENT '渠道 DINGTALK/WECOM/WEBHOOK',
+  `enabled`      TINYINT      NOT NULL DEFAULT 1 COMMENT '是否启用 0=禁用 1=启用',
+  `quiet_start`  TIME         DEFAULT NULL COMMENT '免打扰开始时间(NULL=不启用,支持跨午夜)',
+  `quiet_end`    TIME         DEFAULT NULL COMMENT '免打扰结束时间(NULL=不启用,支持跨午夜)',
+  `created_by`   BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`   BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`      TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`      INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_notify_pref` (`tenant_id`, `user_id`, `channel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='通知渠道偏好';
+
+-- 文件结束: schema-mysql.sql (共 117 张逻辑表, 不含 Flowable ACT_* 引擎表)

@@ -12,15 +12,20 @@ public final class GroupDtos {
     private GroupDtos() {
     }
 
-    /** 班组创建/更新请求。name 必填，code 留空由服务端按前缀生成。 */
+    /**
+     * 班组创建/更新请求。name 必填，code 留空由服务端按前缀生成；
+     * holidayCalendarYear 绑定节假日历年度（空 = 不绑定）。
+     */
     public record GroupRequest(
             @NotBlank(message = "班组名称不能为空") String name,
             String code,
-            Long leaderEmpId) {
+            Long leaderEmpId,
+            Integer holidayCalendarYear) {
     }
 
     /** 班组响应。 */
     public record GroupResponse(Long id, String name, String code, Long leaderEmpId,
+                                Integer holidayCalendarYear,
                                 LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 }

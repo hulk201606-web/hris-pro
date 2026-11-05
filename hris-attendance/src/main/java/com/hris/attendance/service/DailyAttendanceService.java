@@ -49,6 +49,7 @@ public class DailyAttendanceService {
     private final OvertimeService overtimeService;
     private final AttendanceCalculator calculator;
     private final HolidayService holidayService;
+    private final GroupService groupService;
     private final PayrollCycleMapper cycleMapper;
     private final MonthlyClosingMapper closingMapper;
 
@@ -60,6 +61,7 @@ public class DailyAttendanceService {
                                   OvertimeService overtimeService,
                                   AttendanceCalculator calculator,
                                   HolidayService holidayService,
+                                  GroupService groupService,
                                   PayrollCycleMapper cycleMapper,
                                   MonthlyClosingMapper closingMapper) {
         this.dailyMapper = dailyMapper;
@@ -70,6 +72,7 @@ public class DailyAttendanceService {
         this.overtimeService = overtimeService;
         this.calculator = calculator;
         this.holidayService = holidayService;
+        this.groupService = groupService;
         this.cycleMapper = cycleMapper;
         this.closingMapper = closingMapper;
     }
@@ -195,8 +198,18 @@ public class DailyAttendanceService {
                 status), shift);
     }
 
-    /** 法定节假日判定：按租户查 att_holiday，日历配置优先于星期推断。 */
+    /**
+     * 法定节假日判定：按租户查 att_holiday，日历配置优先于星期推断。
+     *
+     * <p>年度适用范围（B-5）：考勤组绑定了节假日历年度时，仅绑定年度的日历
+     * 配置参与判定；工作日期不在绑定年度内则回退星期推断（日历未覆盖该年）。
+     * 未绑定任何年度时日历对全部年度生效，与既有行为一致。</p>
+     */
     private boolean isLegalHoliday(LocalDate workDate) {
+        List<Integer> boundYears = groupService.boundCalendarYears();
+        if (!boundYears.isEmpty() && !boundYears.contains(workDate.getYear())) {
+            return false;
+        }
         return HolidayService.TYPE_HOLIDAY.equals(holidayService.isWorkday(workDate).source());
     }
 

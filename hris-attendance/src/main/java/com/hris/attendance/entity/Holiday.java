@@ -25,6 +25,9 @@ public class Holiday extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
 
+    /** 日历年度（= holiday_date 的年份，服务端派生，供考勤组按年绑定日历） */
+    private Integer calendarYear;
+
     /** 日期 */
     private LocalDate holidayDate;
 
@@ -36,6 +39,14 @@ public class Holiday extends BaseEntity {
 
     /** 备注 */
     private String remark;
+
+    public Integer getCalendarYear() {
+        return calendarYear;
+    }
+
+    public void setCalendarYear(Integer calendarYear) {
+        this.calendarYear = calendarYear;
+    }
 
     public LocalDate getHolidayDate() {
         return holidayDate;
