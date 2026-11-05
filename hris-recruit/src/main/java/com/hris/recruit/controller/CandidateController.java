@@ -3,7 +3,10 @@ package com.hris.recruit.controller;
 import com.hris.recruit.dto.CandidateDtos.CandidateCreateRequest;
 import com.hris.recruit.dto.CandidateDtos.CandidateResponse;
 import com.hris.recruit.dto.CandidateDtos.CandidateUpdateRequest;
+import com.hris.recruit.dto.ResumeDtos.ResumeResponse;
+import com.hris.recruit.dto.ResumeParseDtos.ResumeParseResponse;
 import com.hris.recruit.entity.Candidate;
+import com.hris.recruit.service.CandidateResumeQueryService;
 import com.hris.recruit.service.CandidateService;
 import com.hris.common.api.R;
 import com.hris.common.dto.PageResult;
@@ -19,8 +22,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
- * 候选人主档端点：人才库 CRUD，权限点 rcu:candidate:read/write。
+ * 候选人主档端点：人才库 CRUD + 简历联动查询，权限点 rcu:candidate:read/write。
  *
  * <p>业务域：招聘流程（recruit）；分层：Controller。</p>
  */
@@ -29,9 +34,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CandidateController {
 
     private final CandidateService service;
+    private final CandidateResumeQueryService resumeQueryService;
 
-    public CandidateController(CandidateService service) {
+    public CandidateController(CandidateService service, CandidateResumeQueryService resumeQueryService) {
         this.service = service;
+        this.resumeQueryService = resumeQueryService;
     }
 
     /** 分页查询列表（读权限）。 */
@@ -70,5 +77,19 @@ public class CandidateController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    /** 候选人简历列表（读权限）：存在但无简历返回空数组；候选人不存在 NOT_FOUND。 */
+    @RequirePerm("rcu:candidate:read")
+    @GetMapping("/{id}/resumes")
+    public R<List<ResumeResponse>> resumes(@PathVariable Long id) {
+        return R.ok(resumeQueryService.resumes(id));
+    }
+
+    /** 候选人最新解析结果（读权限，经 resume 关联取 updated_at 最新）；无简历/无解析 NOT_FOUND。 */
+    @RequirePerm("rcu:candidate:read")
+    @GetMapping("/{id}/resume-parse")
+    public R<ResumeParseResponse> resumeParse(@PathVariable Long id) {
+        return R.ok(resumeQueryService.latestParse(id));
     }
 }

@@ -1,5 +1,6 @@
 package com.hris.recruit.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hris.common.entity.BaseEntity;
 
@@ -7,7 +8,7 @@ import com.hris.common.entity.BaseEntity;
 /**
  * rcu_candidate（由 DDL 自动生成）
  */
-@TableName("rcu_candidate")
+@TableName(value = "rcu_candidate", autoResultMap = true)
 public class Candidate extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -20,6 +21,7 @@ public class Candidate extends BaseEntity {
     public void setName(String name) {
         this.name = name;
     }
+    @TableField(typeHandler = com.hris.common.crypto.CipherTypeHandler.RcuCandidateMobile.class)
     private String mobileCipher;  // 手机号密文(逻辑列 mobile)
 
     public String getMobileCipher() {

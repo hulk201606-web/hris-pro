@@ -390,6 +390,61 @@ CREATE TABLE org_dept_history (
 );
 CREATE INDEX idx_org_dept_history ON org_dept_history (tenant_id, dept_id, snapshot_date);
 
+-- 组织调整申请单快照(独立表, 根治 org_dept_history 快照污染 §10.5-B7)
+CREATE TABLE org_adjustment_snapshot (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  adjustment_id BIGINT       NOT NULL,                            -- 调整申请ID(雪花ID, 对应流程业务键 bizKey=ORG_ADJUST:{adjustment_id})
+  dept_id       BIGINT       NOT NULL,                            -- 部门ID(逻辑外键 org_dept.id, CREATE 类申请为 0)
+  snapshot_json JSONB        NOT NULL,                            -- 调整申请单 JSON(kind=ORG_ADJUST_REQUEST, 含状态/载荷/审批意见)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_org_adjustment_snapshot PRIMARY KEY (id),
+  CONSTRAINT uk_org_adjustment_snapshot UNIQUE (tenant_id, adjustment_id, dept_id)
+);
+
+-- 组织版本-岗位快照(批8#16 MVP: 组织版本扩展到岗位)
+CREATE TABLE org_position_version (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  version_no    VARCHAR(64)  NOT NULL,                            -- 组织版本号(同批次快照共享, 如 V+雪花ID)
+  position_id   BIGINT       NOT NULL,                            -- 岗位ID(逻辑外键 org_position.id)
+  snapshot_date DATE         NOT NULL,                            -- 快照日期
+  snapshot      JSONB        NOT NULL,                            -- 岗位快照(主数据+挂靠部门, 不含员工归属)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_org_position_version PRIMARY KEY (id),
+  CONSTRAINT uk_org_position_version UNIQUE (tenant_id, version_no, position_id)
+);
+CREATE INDEX idx_org_position_version_date ON org_position_version (tenant_id, position_id, snapshot_date);
+
+-- 组织版本-职级快照(批8#16 MVP: 组织版本扩展到职级)
+CREATE TABLE org_grade_version (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  version_no    VARCHAR(64)  NOT NULL,                            -- 组织版本号(同批次快照共享, 如 V+雪花ID)
+  grade_id      BIGINT       NOT NULL,                            -- 职级ID(逻辑外键 org_grade.id)
+  snapshot_date DATE         NOT NULL,                            -- 快照日期
+  snapshot      JSONB        NOT NULL,                            -- 职级快照(主数据)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_org_grade_version PRIMARY KEY (id),
+  CONSTRAINT uk_org_grade_version UNIQUE (tenant_id, version_no, grade_id)
+);
+CREATE INDEX idx_org_grade_version_date ON org_grade_version (tenant_id, grade_id, snapshot_date);
+
 -- =====================================================================
 -- 域 3: emp_db 员工 (全表按 tenant_id 分片, 绑定表组)
 -- =====================================================================
@@ -704,6 +759,23 @@ CREATE TABLE att_group (
   CONSTRAINT uk_att_group_code UNIQUE (tenant_id, code)
 );
 
+-- 考勤组成员(员工与班组归属, 批6#10; 全量覆盖语义维护, 物理删除避免逻辑删残留占唯一键)
+CREATE TABLE att_group_member (
+  id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id     BIGINT       NOT NULL,                            -- 租户ID
+  group_id      BIGINT       NOT NULL,                            -- 班组ID(逻辑外键 att_group.id)
+  emp_id        BIGINT       NOT NULL,                            -- 员工ID(逻辑外键 emp_employee.id)
+  created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted       SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version       INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_att_group_member PRIMARY KEY (id),
+  CONSTRAINT uk_att_group_member UNIQUE (tenant_id, group_id, emp_id)
+);
+CREATE INDEX idx_att_group_member_emp ON att_group_member (tenant_id, emp_id);
+
 -- 法定节假日与调班日
 CREATE TABLE att_holiday (
   id            BIGINT       NOT NULL,                            -- 主键: 雪花ID
@@ -734,6 +806,7 @@ CREATE TABLE att_shift (
   start_time    TIME         NOT NULL,                            -- 上班时间
   end_time      TIME         NOT NULL,                            -- 下班时间
   flexible      SMALLINT     NOT NULL DEFAULT 0,                  -- 是否弹性 1=是 0=否
+  cross_day     SMALLINT     NOT NULL DEFAULT 0,                  -- 是否跨天班次 1=是(下班时间为次日) 0=否
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
   updated_by    BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
   created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
@@ -1261,6 +1334,23 @@ CREATE TABLE rcu_talent_pool_tag (
   CONSTRAINT uk_rcu_talent_tag UNIQUE (tenant_id, candidate_id, tag)
 );
 
+-- 官网租户域名映射(批 7 #13)：域名命中自动定租户（PublicController X-Site-Domain/Host 头）
+CREATE TABLE rcu_site_domain (
+  id          BIGINT       NOT NULL,                            -- 主键: 雪花ID
+  tenant_id   BIGINT       NOT NULL,                            -- 租户ID
+  domain      VARCHAR(128) NOT NULL,                            -- 站点域名(小写,不含协议与端口)
+  status      VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',          -- 状态 ENABLED/DISABLED
+  created_by  BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统
+  updated_by  BIGINT       NOT NULL DEFAULT 0,                  -- 更新人ID
+  created_at  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 创建时间(UTC)
+  updated_at  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 更新时间(UTC,应用层维护)
+  deleted     SMALLINT     NOT NULL DEFAULT 0,                  -- 逻辑删除 0=否 1=是
+  version     INTEGER      NOT NULL DEFAULT 0,                  -- 乐观锁版本号
+  CONSTRAINT pk_rcu_site_domain PRIMARY KEY (id),
+  CONSTRAINT uk_rcu_site_domain UNIQUE (domain)
+);
+CREATE INDEX idx_rcu_site_domain_tenant ON rcu_site_domain (tenant_id);
+
 -- =====================================================================
 -- 域 6: cmp_db 薪酬
 -- =====================================================================
@@ -1410,7 +1500,7 @@ CREATE TABLE cmp_payroll_run (
   tenant_id     BIGINT       NOT NULL,                            -- 租户ID
   period_code   VARCHAR(16)  NOT NULL,                            -- 周期编码(如 2026-01)
   pay_group_id  BIGINT       NOT NULL,                            -- 薪资组ID(逻辑外键 cmp_pay_group.id)
-  status        VARCHAR(16)  NOT NULL DEFAULT 'INIT',             -- 状态 INIT/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK
+  status        VARCHAR(16)  NOT NULL DEFAULT 'INIT',             -- 状态 INIT/CALCULATING/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK
   calc_by       BIGINT,                                           -- 计算人ID
   review_by     BIGINT,                                           -- 复核人ID
   created_by    BIGINT       NOT NULL DEFAULT 0,                  -- 创建人ID,0=系统

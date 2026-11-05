@@ -80,8 +80,9 @@ class DailyAttendanceServiceTest {
         service = new DailyAttendanceService(dailyMapper, assignmentMapper, punchService,
                 shiftService, leaveQueryService, overtimeService, calculator, holidayService,
                 groupService, cycleMapper, closingMapper);
-        // 默认租户未绑定日历年度（旧行为：日历对全部年度生效）；仅 ClosingLock 分支不触发该查询，用 lenient
-        lenient().when(groupService.boundCalendarYears()).thenReturn(List.of());
+        // 默认员工未加入考勤组 → 降级租户并集（旧行为：日历对全部年度生效）；
+        // 仅 ClosingLock 分支不触发该查询，用 lenient
+        lenient().when(groupService.boundCalendarYearsForEmp(EMP_ID)).thenReturn(List.of());
     }
 
     private void stubNoClosing() {
@@ -263,7 +264,7 @@ class DailyAttendanceServiceTest {
         @DisplayName("组绑定 2026 年 + 工作日在 2026 年 + 日历配置 HOLIDAY → 法定节假日生效")
         void holidayAppliesWithinBoundYear() {
             stubNoClosing();
-            when(groupService.boundCalendarYears()).thenReturn(List.of(2026));
+            when(groupService.boundCalendarYearsForEmp(EMP_ID)).thenReturn(List.of(2026));
             when(punchService.findByDate(EMP_ID, WORK_DATE)).thenReturn(List.of());
             when(holidayService.isWorkday(WORK_DATE)).thenReturn(
                     new WorkdayCheckResponse(WORK_DATE, false, "HOLIDAY"));
@@ -282,7 +283,7 @@ class DailyAttendanceServiceTest {
         void calendarSkippedForUnboundYear() {
             LocalDate workDate2027 = LocalDate.parse("2027-01-05");
             stubNoClosing();
-            when(groupService.boundCalendarYears()).thenReturn(List.of(2026));
+            when(groupService.boundCalendarYearsForEmp(EMP_ID)).thenReturn(List.of(2026));
             // 有打卡才不会被「无排班无打卡=休息日」短路，进而走到 resolveStatus 链路
             PunchRecord punch = new PunchRecord();
             punch.setEmpId(EMP_ID);

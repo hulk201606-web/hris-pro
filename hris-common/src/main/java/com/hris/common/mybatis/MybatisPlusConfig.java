@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInt
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
+import com.hris.common.crypto.CipherHashFiller;
 import com.hris.common.trace.TraceContext;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
@@ -86,6 +87,8 @@ public class MybatisPlusConfig {
                 strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
                 strictInsertFill(metaObject, "createdBy", Long.class, userId);
                 strictInsertFill(metaObject, "updatedBy", Long.class, userId);
+                // ADR-007：cipher/hash 属性对的 hash 缺失回填（SHA-256(明文)）
+                CipherHashFiller.fill(metaObject);
             }
 
             @Override
@@ -93,6 +96,8 @@ public class MybatisPlusConfig {
                 Long userId = TraceContext.getUserId() == null ? 0L : TraceContext.getUserId();
                 strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
                 strictUpdateFill(metaObject, "updatedBy", Long.class, userId);
+                // ADR-007：同 insert，防业务侧漏填 hash
+                CipherHashFiller.fill(metaObject);
             }
         };
     }

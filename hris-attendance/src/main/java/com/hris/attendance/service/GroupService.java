@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.hris.attendance.dto.GroupDtos.GroupRequest;
 import com.hris.attendance.dto.GroupDtos.GroupResponse;
 import com.hris.attendance.entity.AttGroup;
+import com.hris.attendance.entity.AttGroupMember;
 import com.hris.attendance.mapper.AttGroupMapper;
+import com.hris.attendance.mapper.AttGroupMemberMapper;
 import com.hris.attendance.util.CodeUtil;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
@@ -21,9 +23,11 @@ import java.util.List;
 public class GroupService {
 
     private final AttGroupMapper groupMapper;
+    private final AttGroupMemberMapper memberMapper;
 
-    public GroupService(AttGroupMapper groupMapper) {
+    public GroupService(AttGroupMapper groupMapper, AttGroupMemberMapper memberMapper) {
         this.groupMapper = groupMapper;
+        this.memberMapper = memberMapper;
     }
 
     /** 班组列表（按编码排序）。 */
@@ -91,12 +95,8 @@ public class GroupService {
     }
 
     /**
-     * 本租户绑定了节假日历的年度去重列表（B-5）。
-     *
-     * <p>供日考勤计算确定 att_holiday 的适用范围：返回空 = 租户未做年度绑定，
-     * 日历对全部年度生效（兼容既有行为）；非空 = 仅这些年度的日历配置参与判定，
-     * 其余年度回退星期推断。当前系统无员工-班组归属表，先按租户粒度取并集，
-     * 归属表落地后把调用方换成按员工所在组解析（见 OPEN-DECISIONS）。</p>
+     * 本租户绑定了节假日历的年度去重列表（B-5）：租户粒度并集，现作为
+     * {@link #boundCalendarYearsForEmp} 的降级兜底（员工未加入任何组时保持既有行为）。
      */
     public List<Integer> boundCalendarYears() {
         return groupMapper.selectList(new LambdaQueryWrapper<AttGroup>()
@@ -104,6 +104,26 @@ public class GroupService {
                 .map(AttGroup::getHolidayCalendarYear)
                 .distinct()
                 .toList();
+    }
+
+    /**
+     * 某员工适用的节假日历年度并集（批6#10：判定范围从租户并集收敛为组成员并集）。
+     *
+     * <p>按员工所在考勤组（att_group_member）取绑定年度并集；员工未加入任何组、
+     * 或所在组均未绑定年度时，降级为租户并集（{@link #boundCalendarYears}），保持兼容。</p>
+     */
+    public List<Integer> boundCalendarYearsForEmp(Long empId) {
+        List<Long> groupIds = memberMapper.selectList(new LambdaQueryWrapper<AttGroupMember>()
+                        .eq(AttGroupMember::getEmpId, empId))
+                .stream().map(AttGroupMember::getGroupId).distinct().toList();
+        if (groupIds.isEmpty()) {
+            return boundCalendarYears();
+        }
+        List<Integer> years = groupMapper.selectList(new LambdaQueryWrapper<AttGroup>()
+                        .in(AttGroup::getId, groupIds)
+                        .isNotNull(AttGroup::getHolidayCalendarYear))
+                .stream().map(AttGroup::getHolidayCalendarYear).distinct().toList();
+        return years.isEmpty() ? boundCalendarYears() : years;
     }
 
     private void ensureCodeAvailable(String code, Long excludeId) {

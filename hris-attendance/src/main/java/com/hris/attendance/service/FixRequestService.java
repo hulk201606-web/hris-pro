@@ -3,6 +3,7 @@ package com.hris.attendance.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hris.attendance.client.EmpClient;
 import com.hris.attendance.dto.FixDtos.FixActionRequest;
 import com.hris.attendance.dto.FixDtos.FixCreateRequest;
 import com.hris.attendance.dto.FixDtos.FixResponse;
@@ -29,6 +30,10 @@ import java.util.Map;
  * <p>状态机：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED。
  * 月度上限见 {@link #MONTHLY_LIMIT}，按 work_date 所在自然月统计
  * PROCESSING + APPROVED 两种占用态。</p>
+ *
+ * <p>审批身份（B-6）：直批路径校验审批人是申请人直属上级（经 emp 内部端点
+ * profile-brief 查现行雇佣关系汇报线）；flow 回调路径跳过——审批人已由 flow 侧
+ * AssigneeResolver 按 payload.supervisorEmpId 解析。</p>
  */
 @Service
 public class FixRequestService {
@@ -51,12 +56,14 @@ public class FixRequestService {
     private final FixRequestMapper fixMapper;
     private final PunchRecordMapper punchMapper;
     private final FlowIntegration flowIntegration;
+    private final EmpClient empClient;
 
     public FixRequestService(FixRequestMapper fixMapper, PunchRecordMapper punchMapper,
-                             FlowIntegration flowIntegration) {
+                             FlowIntegration flowIntegration, EmpClient empClient) {
         this.fixMapper = fixMapper;
         this.punchMapper = punchMapper;
         this.flowIntegration = flowIntegration;
+        this.empClient = empClient;
     }
 
     /** 提交补卡单：校验月度次数后落单并发起审批。 */
@@ -82,11 +89,18 @@ public class FixRequestService {
         return toResponse(fix);
     }
 
-    /** 审批通过：状态置 APPROVED 并补写一条打卡记录。 */
+    /** 审批通过：状态置 APPROVED 并补写一条打卡记录。approverEmpId 传 null 表示 flow 回调路径。 */
     @Transactional(rollbackFor = Exception.class)
     public FixResponse approve(Long id, FixActionRequest req) {
+        return approve(id, req, null);
+    }
+
+    /** 审批通过（直批入口，校验审批人是申请人直属上级）。 */
+    @Transactional(rollbackFor = Exception.class)
+    public FixResponse approve(Long id, FixActionRequest req, Long approverEmpId) {
         FixRequest fix = require(id);
         ensureProcessing(fix);
+        ensureSupervisor(fix, approverEmpId);
         fix.setStatus(STATUS_APPROVED);
         fix.setReason(appendRemark(fix.getReason(), req.remark()));
         if (fixMapper.updateById(fix) == 0) {
@@ -96,11 +110,18 @@ public class FixRequestService {
         return toResponse(fix);
     }
 
-    /** 审批驳回。 */
+    /** 审批驳回。approverEmpId 传 null 表示 flow 回调路径。 */
     @Transactional(rollbackFor = Exception.class)
     public FixResponse reject(Long id, FixActionRequest req) {
+        return reject(id, req, null);
+    }
+
+    /** 审批驳回（直批入口，校验审批人是申请人直属上级）。 */
+    @Transactional(rollbackFor = Exception.class)
+    public FixResponse reject(Long id, FixActionRequest req, Long approverEmpId) {
         FixRequest fix = require(id);
         ensureProcessing(fix);
+        ensureSupervisor(fix, approverEmpId);
         fix.setStatus(STATUS_REJECTED);
         fix.setReason(appendRemark(fix.getReason(), req.remark()));
         if (fixMapper.updateById(fix) == 0) {
@@ -169,6 +190,25 @@ public class FixRequestService {
         record.setSource("FIX");
         record.setStatus(PunchService.STATUS_NORMAL);
         punchMapper.insert(record);
+    }
+
+    /**
+     * 补卡审批身份校验（B-6）：直批路径（approverEmpId 非空）必须由申请人直属上级审批。
+     * 直属上级经 emp 内部端点查询；查不到汇报线（服务不可达/员工无上级）时明确拒绝，
+     * 不放宽到任意持有 att:fix:approve 权限者。
+     */
+    private void ensureSupervisor(FixRequest fix, Long approverEmpId) {
+        if (approverEmpId == null) {
+            return;
+        }
+        Long supervisorEmpId = empClient.findSupervisorEmpId(fix.getEmpId());
+        if (supervisorEmpId == null) {
+            throw new BizException(ErrorCode.ATT_ERROR,
+                    "无法确认申请人直属上级，补卡单不可直批");
+        }
+        if (!supervisorEmpId.equals(approverEmpId)) {
+            throw new BizException(ErrorCode.ATT_ERROR, "仅申请人直属上级可审批补卡单");
+        }
     }
 
     private Map<String, Object> payload(FixRequest fix) {

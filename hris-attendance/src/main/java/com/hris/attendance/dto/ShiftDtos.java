@@ -17,17 +17,18 @@ public final class ShiftDtos {
     /**
      * 班次创建/更新请求。
      * flexible=1 表示弹性班次（只校验总时长，不卡上下班时刻）。
-     * 跨天班次以 end_time 小于或等于 start_time 表达。
+     * crossDay=1 显式声明跨天班次（下班时间为次日，B-5）；留空时按 end_time<=start_time 派生。
      */
     public record ShiftRequest(
             @NotBlank(message = "班次名称不能为空") String name,
             String code,
             @NotNull(message = "上班时间不能为空") LocalTime startTime,
             @NotNull(message = "下班时间不能为空") LocalTime endTime,
-            Integer flexible) {
+            Integer flexible,
+            Integer crossDay) {
     }
 
-    /** 班次响应。crossDay 由 end_time ≤ start_time 派生，便于前端展示。 */
+    /** 班次响应。crossDay 取持久化标志，历史数据由 end_time<=start_time 派生兜底。 */
     public record ShiftResponse(Long id, String name, String code, LocalTime startTime,
                                 LocalTime endTime, Integer flexible, boolean crossDay,
                                 LocalDateTime createdAt, LocalDateTime updatedAt) {

@@ -34,6 +34,20 @@ public class AttendanceCalculator {
     /** 迟到重度阈值分钟：超过该值按旷工半天口径描述并升级预警 */
     public static final int LATE_SEVERE_MINUTES = 60;
 
+    /**
+     * 跨天班次判定（B-5）。显式 cross_day=1 优先；历史数据（无标志列值）由
+     * end_time&lt;=start_time 派生兜底。判定结果供早退比较与班次响应共用。
+     */
+    public static boolean isCrossDay(Shift shift) {
+        if (shift == null || shift.getStartTime() == null || shift.getEndTime() == null) {
+            return false;
+        }
+        if (shift.getCrossDay() != null && shift.getCrossDay() == 1) {
+            return true;
+        }
+        return !shift.getEndTime().isAfter(shift.getStartTime());
+    }
+
     /** 出勤状态：正常 */
     public static final String STATUS_NORMAL = "NORMAL";
     /** 出勤状态：迟到 */
@@ -88,10 +102,23 @@ public class AttendanceCalculator {
         if (punchIn != null && punchIn.toLocalTime().isAfter(lateLine)) {
             return STATUS_LATE;
         }
-        if (punchOut != null && punchOut.toLocalTime().isBefore(shift.getEndTime())) {
+        if (punchOut != null && isEarlyLeave(shift, punchOut)) {
             return STATUS_EARLY;
         }
         return STATUS_NORMAL;
+    }
+
+    /**
+     * 早退判定（B-5）：普通班次按 LocalTime 直接比较；跨天班次的下班时间按
+     * 「次日」语义比较——打卡时刻落在当晚（&gt;= 上班时间）即尚未到次日语义，必为早退；
+     * 凌晨时刻（&lt; 上班时间）与下班时间直接比较。
+     */
+    private boolean isEarlyLeave(Shift shift, LocalDateTime punchOut) {
+        LocalTime out = punchOut.toLocalTime();
+        if (!isCrossDay(shift)) {
+            return out.isBefore(shift.getEndTime());
+        }
+        return out.compareTo(shift.getStartTime()) >= 0 || out.isBefore(shift.getEndTime());
     }
 
     /** 依据日考勤结果与班次生成异常单，返回本次新增条数。 */

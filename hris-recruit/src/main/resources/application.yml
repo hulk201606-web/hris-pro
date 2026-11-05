@@ -14,6 +14,25 @@ spring:
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD}
     driver-class-name: ${DB_DRIVER:com.mysql.cj.jdbc.Driver}
+  data:
+    redis:
+      # 官网 IP 限流计数（批 7 #12）：多实例共享；Redis 不可用时限流器 fail-open 放行
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+
+hris:
+  recruit:
+    blacklist:
+      # BlacklistGuard 降级开关（批 7 #14）：true=emp 不可用时放行（现状 fail-open）；
+      # false=不可用时拒绝投递/建档（fail-closed，通用文案不透露内部原因）
+      fail-open: ${HRIS_RECRUIT_BLACKLIST_FAIL_OPEN:true}
+    ai:
+      dashscope:
+        # 简历 AI 解析（批 6 #9）：DashScope OpenAI 兼容端点；api-key 从环境变量注入，勿写死
+        base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+        api-key: ${DASHSCOPE_API_KEY:}
+        chat-model: ${DASHSCOPE_CHAT_MODEL:qwen3.8-27b}
+        timeout-seconds: 30
 
 mybatis-plus:
   configuration:

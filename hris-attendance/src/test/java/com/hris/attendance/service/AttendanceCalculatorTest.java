@@ -126,6 +126,73 @@ class AttendanceCalculatorTest {
     }
 
     @Nested
+    @DisplayName("跨天班次判定（B-5）")
+    class CrossDayShift {
+
+        private Shift crossDayShift() {
+            Shift s = shift("22:00", "06:00");
+            s.setCrossDay(1);
+            return s;
+        }
+
+        @Test
+        @DisplayName("跨天班次 22:00-06:00：次日凌晨 06:00 下班打卡不算早退 → NORMAL")
+        void earlyMorningPunchOutIsNotEarlyLeave() {
+            assertEquals(AttendanceCalculator.STATUS_NORMAL,
+                    newCalculator().resolveStatus(crossDayShift(),
+                            LocalDateTime.parse("2026-10-16T22:00:00"),
+                            LocalDateTime.parse("2026-10-17T06:00:00"), BigDecimal.ZERO));
+        }
+
+        @Test
+        @DisplayName("跨天班次：次日凌晨 06:30 下班打卡（略超班次结束）→ NORMAL")
+        void earlyMorningPunchOutAfterEndIsNormal() {
+            assertEquals(AttendanceCalculator.STATUS_NORMAL,
+                    newCalculator().resolveStatus(crossDayShift(),
+                            LocalDateTime.parse("2026-10-16T22:00:00"),
+                            LocalDateTime.parse("2026-10-17T06:30:00"), BigDecimal.ZERO));
+        }
+
+        @Test
+        @DisplayName("跨天班次：当晚 23:00 下班打卡（未到次日）→ EARLY")
+        void sameEveningPunchOutIsEarlyLeave() {
+            assertEquals(AttendanceCalculator.STATUS_EARLY,
+                    newCalculator().resolveStatus(crossDayShift(),
+                            LocalDateTime.parse("2026-10-16T22:00:00"),
+                            LocalDateTime.parse("2026-10-16T23:00:00"), BigDecimal.ZERO));
+        }
+
+        @Test
+        @DisplayName("跨天班次：凌晨 05:00 下班打卡（早于次日下班时间）→ EARLY")
+        void earlyMorningBeforeEndIsEarlyLeave() {
+            assertEquals(AttendanceCalculator.STATUS_EARLY,
+                    newCalculator().resolveStatus(crossDayShift(),
+                            LocalDateTime.parse("2026-10-16T22:00:00"),
+                            LocalDateTime.parse("2026-10-17T05:00:00"), BigDecimal.ZERO));
+        }
+
+        @Test
+        @DisplayName("历史数据无 cross_day 标志：end<=start 派生兜底，凌晨打卡同样不算早退")
+        void derivedFallbackWithoutFlag() {
+            Shift legacy = shift("22:00", "06:00");
+            assertEquals(AttendanceCalculator.STATUS_NORMAL,
+                    newCalculator().resolveStatus(legacy,
+                            LocalDateTime.parse("2026-10-16T22:00:00"),
+                            LocalDateTime.parse("2026-10-17T06:00:00"), BigDecimal.ZERO));
+        }
+
+        @Test
+        @DisplayName("普通班次（cross_day=0）早退语义不受影响：17:59 → EARLY")
+        void normalShiftUnaffected() {
+            Shift normal = shift("09:00", "18:00");
+            normal.setCrossDay(0);
+            assertEquals(AttendanceCalculator.STATUS_EARLY,
+                    newCalculator().resolveStatus(normal,
+                            at("09:00"), at("17:59"), BigDecimal.ZERO));
+        }
+    }
+
+    @Nested
     @DisplayName("异常单生成与去重")
     class RaiseExceptions {
 

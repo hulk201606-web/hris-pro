@@ -36,4 +36,11 @@ public final class DailyDtos {
                                      int lateCount, int earlyCount, int absentCount, int leaveCount,
                                      int newExceptionCount) {
     }
+
+    /**
+     * 考勤简报项（批6#10 跨 agent 契约，供 cmp 算薪消费）。
+     * 字段名与签名跨域对齐，勿改名：empId / lateCount / absentDays。
+     */
+    public record DailyAttendanceBriefItem(Long empId, long lateCount, long absentDays) {
+    }
 }

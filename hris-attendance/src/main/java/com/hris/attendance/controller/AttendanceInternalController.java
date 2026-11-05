@@ -3,6 +3,7 @@ package com.hris.attendance.controller;
 import com.hris.attendance.dto.ApprovalDtos.ApprovalCallbackRequest;
 import com.hris.attendance.dto.ApprovalDtos.ApprovalCallbackResponse;
 import com.hris.attendance.dto.ClosingDtos.ClosingDetailResponse;
+import com.hris.attendance.dto.DailyDtos.DailyAttendanceBriefItem;
 import com.hris.attendance.dto.DailyDtos.DailyAttendanceResponse;
 import com.hris.attendance.service.ApprovalService;
 import com.hris.attendance.service.DailyAttendanceService;
@@ -55,6 +56,20 @@ public class AttendanceInternalController {
                         d.getLeaveHours(), d.getOvertimeHours(), d.getUpdatedAt()))
                 .toList();
         return R.ok(records);
+    }
+
+    /**
+     * 考勤简报（批6#10 跨 agent 契约，供 cmp 算薪消费）：
+     * GET /internal/att/attendance-brief?empIds=1,2&periodStart=2026-10-01&periodEnd=2026-10-31
+     * 按员工聚合周期内迟到次数（lateCount）与全天缺勤天数（absentDays）；
+     * 无记录员工返回 0 值项。租户上下文经 X-Tenant-Id 透传（照现有 internal 范式）。
+     */
+    @GetMapping("/attendance-brief")
+    public R<List<DailyAttendanceBriefItem>> attendanceBrief(
+            @RequestParam List<Long> empIds,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+        return R.ok(dailyAttendanceService.attendanceBrief(empIds, periodStart, periodEnd));
     }
 
     /** 月结结果集（按周期），供薪酬域取汇总。 */

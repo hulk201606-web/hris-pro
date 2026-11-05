@@ -21,37 +21,75 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * 简历解析（RCS-F-007）：规则解析（正则 + 启发式）简历文本，落库 rcu_resume_parse，
- * 幂等（uk tenant_id+resume_id 一简历一份最新解析，重复 parse 覆盖旧结果），
+ * 简历解析（RCS-F-007）：规则解析（正则 + 启发式）与 AI 解析（DashScope LLM）双模式，
+ * 落库 rcu_resume_parse，幂等（uk tenant_id+resume_id 一简历一份最新解析，重复 parse 覆盖旧结果），
  * 并回填 candidate 空缺字段（不覆盖人工数据）。
  *
- * <p>诚实约束：本项目无 OCR/NLP 引擎且不依赖外部 API，MVP 规则解析一律
- * parse_status=RULE_LIMITED（姓名为启发式抽取，需人工核对）。</p>
+ * <p>模式语义（POST /rcu/resumes/{id}/parse?mode=rule|ai，缺省 rule 兼容）：
+ * rule → parse_status=RULE_LIMITED（姓名为启发式抽取，需人工核对）；
+ * ai → 结构化抽取（姓名/手机/邮箱/教育数组/工作经历数组），parse_status=AI_PARSED；
+ * LLM 调用失败/超时直接报错（AI 解析失败：原因），旧解析结果保持不变，不静默降级。</p>
  */
 @Service
 public class ResumeParseService {
 
     static final String STATUS_RULE_LIMITED = "RULE_LIMITED";
+    static final String STATUS_AI_PARSED = "AI_PARSED";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ResumeMapper resumeMapper;
     private final ResumeParseMapper parseMapper;
     private final CandidateMapper candidateMapper;
+    private final DashScopeResumeAiClient aiClient;
 
     public ResumeParseService(ResumeMapper resumeMapper, ResumeParseMapper parseMapper,
-                              CandidateMapper candidateMapper) {
+                              CandidateMapper candidateMapper, DashScopeResumeAiClient aiClient) {
         this.resumeMapper = resumeMapper;
         this.parseMapper = parseMapper;
         this.candidateMapper = candidateMapper;
+        this.aiClient = aiClient;
+    }
+
+    /** 解析入口：mode=ai 走 LLM 抽取，其余（含缺省）走规则解析。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ResumeParseResponse parse(Long resumeId, String mode, ResumeParseRequest req) {
+        if ("ai".equalsIgnoreCase(mode)) {
+            return parseAi(resumeId, req);
+        }
+        return parseRule(resumeId, req);
+    }
+
+    /** 触发规则解析（POST /rcu/resumes/{id}/parse，mode 缺省）：兼容旧签名。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ResumeParseResponse parse(Long resumeId, ResumeParseRequest req) {
+        return parseRule(resumeId, req);
     }
 
     /**
-     * 触发解析（POST /rcu/resumes/{id}/parse）：取简历文本做规则抽取，uk 幂等覆盖旧结果。
+     * 规则解析：取简历文本做规则抽取，uk 幂等覆盖旧结果。
      * 简历以文件引用存储（rcu_resume 仅 file_id），解析输入为请求体携带的纯文本。
      */
-    @Transactional(rollbackFor = Exception.class)
-    public ResumeParseResponse parse(Long resumeId, ResumeParseRequest req) {
+    private ResumeParseResponse parseRule(Long resumeId, ResumeParseRequest req) {
+        Resume resume = requireResumeAndText(resumeId, req);
+        ResumeTextExtractor.ExtractResult r = ResumeTextExtractor.extract(req.text());
+        return upsert(resume, new Payload(r.name(), r.mobile(), r.email(),
+                toJson(r.educationLines()), toJson(r.experienceLines()), STATUS_RULE_LIMITED));
+    }
+
+    /**
+     * AI 解析：DashScope LLM 结构化抽取，parse_status=AI_PARSED。
+     * LLM 失败抛 BizException（错误信息注明 AI 解析失败原因），旧解析结果保持不变。
+     */
+    private ResumeParseResponse parseAi(Long resumeId, ResumeParseRequest req) {
+        Resume resume = requireResumeAndText(resumeId, req);
+        DashScopeResumeAiClient.AiExtraction ai = aiClient.extract(req.text());
+        return upsert(resume, new Payload(ai.name(), ai.mobile(), ai.email(),
+                ai.educationJson(), ai.experienceJson(), STATUS_AI_PARSED));
+    }
+
+    /** 校验简历存在且文本非空（规则/AI 共用前置）。 */
+    private Resume requireResumeAndText(Long resumeId, ResumeParseRequest req) {
         Resume resume = resumeMapper.selectById(resumeId);
         if (resume == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "Resume 不存在");
@@ -61,22 +99,23 @@ public class ResumeParseService {
             throw new BizException(ErrorCode.PARAM_INVALID,
                     "简历文本缺失：简历以附件文件引用存储，解析输入需在请求体 text 提供纯文本");
         }
+        return resume;
+    }
 
-        ResumeTextExtractor.ExtractResult r = ResumeTextExtractor.extract(text);
-        String educationJson = toJson(r.educationLines());
-        String experienceJson = toJson(r.experienceLines());
-
+    /** uk 幂等落库：存在则覆盖，否则插入（并发冲突转更新）；随后回填 candidate 空缺字段。 */
+    private ResumeParseResponse upsert(Resume resume, Payload payload) {
+        Long resumeId = resume.getId();
         ResumeParse exist = findByResumeId(resumeId);
         if (exist != null) {
-            fillParsed(exist, resume.getCandidateId(), r, educationJson, experienceJson);
+            fillParsed(exist, resume.getCandidateId(), payload);
             parseMapper.updateById(exist);
-            backfillCandidate(resume.getCandidateId(), r);
+            backfillCandidate(resume.getCandidateId(), payload);
             return toResponse(exist);
         }
 
         ResumeParse e = new ResumeParse();
         e.setResumeId(resumeId);
-        fillParsed(e, resume.getCandidateId(), r, educationJson, experienceJson);
+        fillParsed(e, resume.getCandidateId(), payload);
         try {
             parseMapper.insert(e);
         } catch (DuplicateKeyException dup) {
@@ -85,12 +124,12 @@ public class ResumeParseService {
             if (winner == null) {
                 throw dup;
             }
-            fillParsed(winner, resume.getCandidateId(), r, educationJson, experienceJson);
+            fillParsed(winner, resume.getCandidateId(), payload);
             parseMapper.updateById(winner);
-            backfillCandidate(resume.getCandidateId(), r);
+            backfillCandidate(resume.getCandidateId(), payload);
             return toResponse(winner);
         }
-        backfillCandidate(resume.getCandidateId(), r);
+        backfillCandidate(resume.getCandidateId(), payload);
         return toResponse(e);
     }
 
@@ -137,16 +176,14 @@ public class ResumeParseService {
                 .last("LIMIT 1"));
     }
 
-    private void fillParsed(ResumeParse e, Long candidateId,
-                            ResumeTextExtractor.ExtractResult r,
-                            String educationJson, String experienceJson) {
+    private void fillParsed(ResumeParse e, Long candidateId, Payload p) {
         e.setCandidateId(candidateId);
-        e.setParsedName(r.name());
-        e.setParsedMobile(r.mobile());
-        e.setParsedEmail(r.email());
-        e.setEducationJson(educationJson);
-        e.setExperienceJson(experienceJson);
-        e.setParseStatus(STATUS_RULE_LIMITED);
+        e.setParsedName(p.name());
+        e.setParsedMobile(p.mobile());
+        e.setParsedEmail(p.email());
+        e.setEducationJson(p.educationJson());
+        e.setExperienceJson(p.experienceJson());
+        e.setParseStatus(p.status());
         e.setParseError(null);
     }
 
@@ -154,7 +191,7 @@ public class ResumeParseService {
      * 回填 candidate：仅当对应字段为空时写入解析值，不覆盖人工数据。
      * mobile 同步生成掩码影子列（语义与 CandidateService.create 一致）。
      */
-    private void backfillCandidate(Long candidateId, ResumeTextExtractor.ExtractResult r) {
+    private void backfillCandidate(Long candidateId, Payload p) {
         if (candidateId == null) {
             return;
         }
@@ -163,17 +200,17 @@ public class ResumeParseService {
             return;
         }
         boolean changed = false;
-        if (isBlank(c.getName()) && r.name() != null) {
-            c.setName(r.name());
+        if (isBlank(c.getName()) && p.name() != null) {
+            c.setName(p.name());
             changed = true;
         }
-        if (isBlank(c.getMobileCipher()) && r.mobile() != null) {
-            c.setMobileCipher(r.mobile());
-            c.setMobileMask(MaskUtil.maskMobile(r.mobile()));
+        if (isBlank(c.getMobileCipher()) && p.mobile() != null) {
+            c.setMobileCipher(p.mobile());
+            c.setMobileMask(MaskUtil.maskMobile(p.mobile()));
             changed = true;
         }
-        if (isBlank(c.getEmail()) && r.email() != null) {
-            c.setEmail(r.email());
+        if (isBlank(c.getEmail()) && p.email() != null) {
+            c.setEmail(p.email());
             changed = true;
         }
         if (changed) {
@@ -194,6 +231,11 @@ public class ResumeParseService {
         } catch (Exception ex) {
             throw new BizException(ErrorCode.RCS_ERROR, "解析结果序列化失败");
         }
+    }
+
+    /** 解析载荷（规则/AI 统一载体）。 */
+    private record Payload(String name, String mobile, String email,
+                           String educationJson, String experienceJson, String status) {
     }
 
     private ResumeParseResponse toResponse(ResumeParse e) {

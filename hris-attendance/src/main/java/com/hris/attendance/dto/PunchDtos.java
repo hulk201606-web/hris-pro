@@ -16,7 +16,7 @@ public final class PunchDtos {
 
     /**
      * 打卡请求。punch_time 为客户端采集的 UTC 时刻，
-     * 幂等键为 uk(tenant_id, emp_id, punch_time)。
+     * 幂等键为 emp_id + 考勤日 + punch_type（B-4 修正，非秒级 punch_time）。
      */
     public record PunchCreateRequest(
             @NotNull(message = "员工 ID 不能为空") Long empId,

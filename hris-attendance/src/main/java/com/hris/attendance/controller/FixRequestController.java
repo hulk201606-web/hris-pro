@@ -6,6 +6,9 @@ import com.hris.attendance.dto.FixDtos.FixResponse;
 import com.hris.attendance.dto.PageResult;
 import com.hris.attendance.service.FixRequestService;
 import com.hris.common.api.R;
+import com.hris.common.exception.BizException;
+import com.hris.common.exception.ErrorCode;
+import com.hris.common.security.AuthContextHolder;
 import com.hris.common.security.RequirePerm;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -61,13 +64,24 @@ public class FixRequestController {
     @PostMapping("/{id}/approve")
     public R<FixResponse> approve(@PathVariable Long id,
                                   @RequestBody(required = false) FixActionRequest req) {
-        return R.ok(fixRequestService.approve(id, req == null ? new FixActionRequest(null) : req));
+        return R.ok(fixRequestService.approve(id,
+                req == null ? new FixActionRequest(null) : req, currentEmpId()));
     }
 
     @RequirePerm("att:fix:approve")
     @PostMapping("/{id}/reject")
     public R<FixResponse> reject(@PathVariable Long id,
                                  @RequestBody(required = false) FixActionRequest req) {
-        return R.ok(fixRequestService.reject(id, req == null ? new FixActionRequest(null) : req));
+        return R.ok(fixRequestService.reject(id,
+                req == null ? new FixActionRequest(null) : req, currentEmpId()));
+    }
+
+    /** userId→empId 解析范式（照 out-offices）：MVP 两个 ID 同源。 */
+    private Long currentEmpId() {
+        Long userId = AuthContextHolder.getUserId();
+        if (userId == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED, "无法识别当前员工身份");
+        }
+        return userId;
     }
 }

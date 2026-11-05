@@ -18,7 +18,7 @@ import java.util.Map;
  * <p>fail-open 语义在 {@code BlacklistGuard} 收敛：emp 不可用时 log.warn 放行，
  * 可用性优先于黑名单拦截（招聘漏斗数据完整性优先，风险由人工复核兜底）。</p>
  */
-@FeignClient(name = "hris-employee", path = "/internal/emp")
+@FeignClient(name = "hris-employee", contextId = "empCheckClient", path = "/internal/emp")
 public interface EmpCheckClient {
 
     /** 黑名单校验：任一维度命中即返回 blacklisted=true。 */

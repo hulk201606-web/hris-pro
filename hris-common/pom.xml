@@ -56,6 +56,31 @@
             <artifactId>spring-cloud-starter-openfeign</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Jackson（可选：AuthContextFilter 解析 JSON 数组格式的 X-User-Perms 头，兼容旧逗号串） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 分布式追踪（docs/21 批 5 D-10）：Micrometer → OpenTelemetry 桥 + OTLP 导出器。
+             version 省略：由 spring-boot-starter-parent:4.0.6 BOM 管理（micrometer-tracing 与
+             opentelemetry-bom 均在 BOM 内），显式写版本会脱离 BOM 管理。
+             未配置 OTEL_EXPORTER_OTLP_ENDPOINT 时不注册导出器（见 OtlpTraceConfig），
+             仅内存 span，无 collector 也不报错。 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <!-- Boot 4 的 OTel tracing 自动配置（SdkTracerProvider 装配 + 收集 SpanExporter Bean），
+             actuator 4.0 起不再内含 tracing 自动配置，须显式引入 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

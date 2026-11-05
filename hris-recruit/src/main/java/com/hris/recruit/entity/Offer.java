@@ -1,5 +1,6 @@
 package com.hris.recruit.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hris.common.entity.BaseEntity;
 
@@ -7,7 +8,7 @@ import com.hris.common.entity.BaseEntity;
 /**
  * rcu_offer（由 DDL 自动生成）
  */
-@TableName("rcu_offer")
+@TableName(value = "rcu_offer", autoResultMap = true)
 public class Offer extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
@@ -38,6 +39,7 @@ public class Offer extends BaseEntity {
     public void setSalaryBandCheck(Integer salaryBandCheck) {
         this.salaryBandCheck = salaryBandCheck;
     }
+    @TableField(typeHandler = com.hris.common.crypto.CipherTypeHandler.RcuOfferSalary.class)
     private String salaryAmountCipher;  // Offer薪资密文(逻辑列 salary_amount)
 
     public String getSalaryAmountCipher() {

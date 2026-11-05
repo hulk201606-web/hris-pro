@@ -3,6 +3,7 @@ package com.hris.attendance.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hris.attendance.dto.DailyDtos.DailyAttendanceBriefItem;
 import com.hris.attendance.dto.DailyDtos.DailyAttendanceResponse;
 import com.hris.attendance.dto.DailyDtos.DailyComputeRequest;
 import com.hris.attendance.dto.DailyDtos.DailyComputeResult;
@@ -171,7 +172,7 @@ public class DailyAttendanceService {
     /** 单员工单日计算，返回落库后的日考勤结果；休息日（无排班且无打卡）返回 null。 */
     private Computed computeOne(Long empId, LocalDate workDate) {
         List<PunchRecord> punches = punchService.findByDate(empId, workDate);
-        boolean legalHoliday = isLegalHoliday(workDate);
+        boolean legalHoliday = isLegalHoliday(empId, workDate);
         Shift shift = resolveShift(empId, workDate);
         if (!legalHoliday && shift == null && punches.isEmpty()) {
             return null;
@@ -201,16 +202,50 @@ public class DailyAttendanceService {
     /**
      * 法定节假日判定：按租户查 att_holiday，日历配置优先于星期推断。
      *
-     * <p>年度适用范围（B-5）：考勤组绑定了节假日历年度时，仅绑定年度的日历
-     * 配置参与判定；工作日期不在绑定年度内则回退星期推断（日历未覆盖该年）。
-     * 未绑定任何年度时日历对全部年度生效，与既有行为一致。</p>
+     * <p>年度适用范围：批6#10 收敛为「员工所在考勤组」的绑定年度并集
+     * （组无成员/未绑定时降级租户并集，见 GroupService#boundCalendarYearsForEmp）；
+     * 工作日期不在绑定年度内则回退星期推断（日历未覆盖该年）。</p>
      */
-    private boolean isLegalHoliday(LocalDate workDate) {
-        List<Integer> boundYears = groupService.boundCalendarYears();
+    private boolean isLegalHoliday(Long empId, LocalDate workDate) {
+        List<Integer> boundYears = groupService.boundCalendarYearsForEmp(empId);
         if (!boundYears.isEmpty() && !boundYears.contains(workDate.getYear())) {
             return false;
         }
         return HolidayService.TYPE_HOLIDAY.equals(holidayService.isWorkday(workDate).source());
+    }
+
+    /**
+     * 考勤简报聚合（批6#10 跨域契约，供 cmp 算薪消费）：按员工聚合周期内
+     * 迟到次数（LATE）与全天缺勤天数（ABSENT）；无任何日考勤记录的员工返回 0 值项。
+     */
+    public List<DailyAttendanceBriefItem> attendanceBrief(List<Long> empIds,
+                                                          LocalDate periodStart,
+                                                          LocalDate periodEnd) {
+        List<Long> ids = empIds == null ? List.of()
+                : empIds.stream().distinct().toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        List<DailyAttendance> rows = dailyMapper.selectList(new LambdaQueryWrapper<DailyAttendance>()
+                .in(DailyAttendance::getEmpId, ids)
+                .ge(DailyAttendance::getWorkDate, periodStart)
+                .le(DailyAttendance::getWorkDate, periodEnd));
+        Map<Long, long[]> agg = new LinkedHashMap<>();
+        for (DailyAttendance row : rows) {
+            long[] counts = agg.computeIfAbsent(row.getEmpId(), k -> new long[2]);
+            if (AttendanceCalculator.STATUS_LATE.equals(row.getAttStatus())) {
+                counts[0]++;
+            }
+            if (AttendanceCalculator.STATUS_ABSENT.equals(row.getAttStatus())) {
+                counts[1]++;
+            }
+        }
+        return ids.stream()
+                .map(id -> {
+                    long[] counts = agg.getOrDefault(id, new long[2]);
+                    return new DailyAttendanceBriefItem(id, counts[0], counts[1]);
+                })
+                .toList();
     }
 
     /**

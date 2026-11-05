@@ -387,6 +387,61 @@ CREATE TABLE org_dept_history (
   KEY `idx_org_dept_history` (`tenant_id`, `dept_id`, `snapshot_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='部门历史快照';
 
+-- 组织调整申请单快照(独立表, 根治 org_dept_history 快照污染 §10.5-B7)
+CREATE TABLE org_adjustment_snapshot (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `adjustment_id` BIGINT       NOT NULL COMMENT '调整申请ID(雪花ID, 对应流程业务键 bizKey=ORG_ADJUST:{adjustment_id})',
+  `dept_id`       BIGINT       NOT NULL COMMENT '部门ID(逻辑外键 org_dept.id, CREATE 类申请为 0)',
+  `snapshot_json` JSON         NOT NULL COMMENT '调整申请单 JSON(kind=ORG_ADJUST_REQUEST, 含状态/载荷/审批意见)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_org_adjustment_snapshot` (`tenant_id`, `adjustment_id`, `dept_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='组织调整申请单快照';
+
+-- 组织版本-岗位快照(批8#16 MVP: 组织版本扩展到岗位)
+CREATE TABLE org_position_version (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `version_no`    VARCHAR(64)  NOT NULL COMMENT '组织版本号(同批次快照共享, 如 V+雪花ID)',
+  `position_id`   BIGINT       NOT NULL COMMENT '岗位ID(逻辑外键 org_position.id)',
+  `snapshot_date` DATE         NOT NULL COMMENT '快照日期',
+  `snapshot`      JSON         NOT NULL COMMENT '岗位快照(主数据+挂靠部门, 不含员工归属)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_org_position_version` (`tenant_id`, `version_no`, `position_id`),
+  KEY `idx_org_position_version_date` (`tenant_id`, `position_id`, `snapshot_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='组织版本-岗位快照';
+
+-- 组织版本-职级快照(批8#16 MVP: 组织版本扩展到职级)
+CREATE TABLE org_grade_version (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `version_no`    VARCHAR(64)  NOT NULL COMMENT '组织版本号(同批次快照共享, 如 V+雪花ID)',
+  `grade_id`      BIGINT       NOT NULL COMMENT '职级ID(逻辑外键 org_grade.id)',
+  `snapshot_date` DATE         NOT NULL COMMENT '快照日期',
+  `snapshot`      JSON         NOT NULL COMMENT '职级快照(主数据)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_org_grade_version` (`tenant_id`, `version_no`, `grade_id`),
+  KEY `idx_org_grade_version_date` (`tenant_id`, `grade_id`, `snapshot_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='组织版本-职级快照';
+
 -- =====================================================================
 -- 域 3: emp_db 员工 (全表按 tenant_id 分片, 绑定表组)
 -- =====================================================================
@@ -704,6 +759,23 @@ CREATE TABLE att_group (
   UNIQUE KEY `uk_att_group_code` (`tenant_id`, `code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='班组';
 
+-- 考勤组成员(员工与班组归属, 批6#10; 全量覆盖语义维护, 物理删除避免逻辑删残留占唯一键)
+CREATE TABLE att_group_member (
+  `id`          BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`   BIGINT       NOT NULL COMMENT '租户ID',
+  `group_id`    BIGINT       NOT NULL COMMENT '班组ID(逻辑外键 att_group.id)',
+  `emp_id`      BIGINT       NOT NULL COMMENT '员工ID(逻辑外键 emp_employee.id)',
+  `created_by`  BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`  BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`     TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`     INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_att_group_member` (`tenant_id`, `group_id`, `emp_id`),
+  KEY `idx_att_group_member_emp` (`tenant_id`, `emp_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤组成员';
+
 CREATE TABLE att_holiday (
   `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
   `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
@@ -733,6 +805,7 @@ CREATE TABLE att_shift (
   `start_time`    TIME         NOT NULL COMMENT '上班时间',
   `end_time`      TIME         NOT NULL COMMENT '下班时间',
   `flexible`      TINYINT      NOT NULL DEFAULT 0 COMMENT '是否弹性 1=是 0=否',
+  `cross_day`     TINYINT      NOT NULL DEFAULT 0 COMMENT '是否跨天班次 1=是(下班时间为次日) 0=否',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1261,6 +1334,23 @@ CREATE TABLE rcu_talent_pool_tag (
   UNIQUE KEY `uk_rcu_talent_tag` (`tenant_id`, `candidate_id`, `tag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='人才库标签';
 
+-- 官网租户域名映射(批 7 #13)：域名命中自动定租户（PublicController X-Site-Domain/Host 头）
+CREATE TABLE rcu_site_domain (
+  `id`         BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`  BIGINT       NOT NULL COMMENT '租户ID',
+  `domain`     VARCHAR(128) NOT NULL COMMENT '站点域名(小写,不含协议与端口)',
+  `status`     VARCHAR(16)  NOT NULL DEFAULT 'ENABLED' COMMENT '状态 ENABLED/DISABLED',
+  `created_by` BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by` BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`    TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`    INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_rcu_site_domain` (`domain`),
+  KEY `idx_rcu_site_domain_tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='官网租户域名映射';
+
 -- =====================================================================
 -- 域 6: cmp_db 薪酬
 -- =====================================================================
@@ -1410,7 +1500,7 @@ CREATE TABLE cmp_payroll_run (
   `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
   `period_code`   VARCHAR(16)  NOT NULL COMMENT '周期编码(如 2026-01)',
   `pay_group_id`  BIGINT       NOT NULL COMMENT '薪资组ID(逻辑外键 cmp_pay_group.id)',
-  `status`        VARCHAR(16)  NOT NULL DEFAULT 'INIT' COMMENT '状态 INIT/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'INIT' COMMENT '状态 INIT/CALCULATING/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK',
   `calc_by`       BIGINT       DEFAULT NULL COMMENT '计算人ID',
   `review_by`     BIGINT       DEFAULT NULL COMMENT '复核人ID',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',

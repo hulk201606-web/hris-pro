@@ -50,6 +50,8 @@ class ResumeParseServiceTest {
     private ResumeParseMapper parseMapper;
     @Mock
     private CandidateMapper candidateMapper;
+    @Mock
+    private DashScopeResumeAiClient aiClient;
 
     private ResumeParseService service;
     private Resume resume;
@@ -57,7 +59,7 @@ class ResumeParseServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ResumeParseService(resumeMapper, parseMapper, candidateMapper);
+        service = new ResumeParseService(resumeMapper, parseMapper, candidateMapper, aiClient);
         resume = new Resume();
         resume.setId(RESUME_ID);
         resume.setCandidateId(CANDIDATE_ID);

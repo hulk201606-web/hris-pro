@@ -28,4 +28,11 @@ public final class GroupDtos {
                                 Integer holidayCalendarYear,
                                 LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
+
+    /**
+     * 组成员批量设置请求（批6#10，全量覆盖语义）：empIds 去重后即为该组最终成员，
+     * 空列表表示清空组成员（节假日判定随之降级到租户并集）。
+     */
+    public record GroupMemberSetRequest(java.util.List<Long> empIds) {
+    }
 }

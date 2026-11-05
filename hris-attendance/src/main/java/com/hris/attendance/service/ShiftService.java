@@ -15,7 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * 班次（ATT-F-002）。固定/弹性/跨天班次，跨天以 end_time 小于或等于 start_time 表达。
+ * 班次（ATT-F-002）。固定/弹性/跨天班次。
+ *
+ * <p>跨天语义（B-5）：att_shift.cross_day 显式标志（1=下班时间为次日）；
+ * 未传时按 end_time&lt;=start_time 派生兜底，兼容历史数据与旧调用方。</p>
  */
 @Service
 public class ShiftService {
@@ -54,6 +57,7 @@ public class ShiftService {
         shift.setStartTime(req.startTime());
         shift.setEndTime(req.endTime());
         shift.setFlexible(req.flexible() == null ? 0 : req.flexible());
+        shift.setCrossDay(resolveCrossDay(req.crossDay(), req.startTime(), req.endTime()));
         shiftMapper.insert(shift);
         return toResponse(shift);
     }
@@ -70,14 +74,22 @@ public class ShiftService {
             ensureCodeAvailable(code, id);
             shift.setCode(code);
         }
+        boolean timeChanged = false;
         if (req.startTime() != null) {
             shift.setStartTime(req.startTime());
+            timeChanged = true;
         }
         if (req.endTime() != null) {
             shift.setEndTime(req.endTime());
+            timeChanged = true;
         }
         if (req.flexible() != null) {
             shift.setFlexible(req.flexible());
+        }
+        if (req.crossDay() != null) {
+            shift.setCrossDay(req.crossDay());
+        } else if (timeChanged) {
+            shift.setCrossDay(resolveCrossDay(null, shift.getStartTime(), shift.getEndTime()));
         }
         if (shiftMapper.updateById(shift) == 0) {
             throw new BizException(ErrorCode.ATT_ERROR, "数据已被其他操作变更，请刷新后重试");
@@ -113,10 +125,18 @@ public class ShiftService {
         }
     }
 
+    /** 跨天标志解析：显式传入优先，否则按 end_time<=start_time 派生。 */
+    private Integer resolveCrossDay(Integer crossDay, java.time.LocalTime start,
+                                    java.time.LocalTime end) {
+        if (crossDay != null) {
+            return crossDay;
+        }
+        return start != null && end != null && !end.isAfter(start) ? 1 : 0;
+    }
+
     private ShiftResponse toResponse(Shift s) {
-        boolean crossDay = s.getStartTime() != null && s.getEndTime() != null
-                && !s.getEndTime().isAfter(s.getStartTime());
         return new ShiftResponse(s.getId(), s.getName(), s.getCode(), s.getStartTime(),
-                s.getEndTime(), s.getFlexible(), crossDay, s.getCreatedAt(), s.getUpdatedAt());
+                s.getEndTime(), s.getFlexible(), AttendanceCalculator.isCrossDay(s),
+                s.getCreatedAt(), s.getUpdatedAt());
     }
 }

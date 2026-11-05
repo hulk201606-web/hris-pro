@@ -28,6 +28,9 @@ public class Shift extends BaseEntity {
     /** 是否弹性 1=是 0=否 */
     private Integer flexible;
 
+    /** 是否跨天班次 1=是（下班时间为次日）0=否；历史数据可由 end_time<=start_time 派生兜底 */
+    private Integer crossDay;
+
     public String getName() {
         return name;
     }
@@ -66,5 +69,13 @@ public class Shift extends BaseEntity {
 
     public void setFlexible(Integer flexible) {
         this.flexible = flexible;
+    }
+
+    public Integer getCrossDay() {
+        return crossDay;
+    }
+
+    public void setCrossDay(Integer crossDay) {
+        this.crossDay = crossDay;
     }
 }

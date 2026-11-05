@@ -68,6 +68,12 @@ class LeaveRequestServiceTest {
         return t;
     }
 
+    private LeaveType stubTypeWithRules(String rules) {
+        LeaveType t = stubType();
+        t.setRules(rules);
+        return t;
+    }
+
     private LeaveRequest processingRequest() {
         LeaveRequest r = new LeaveRequest();
         r.setId(900001L);
@@ -132,6 +138,67 @@ class LeaveRequestServiceTest {
             ArgumentCaptor<LeaveRequest> captor = ArgumentCaptor.forClass(LeaveRequest.class);
             verify(mapper).insert(captor.capture());
             assertEquals(LeaveRequestService.STATUS_PROCESSING, captor.getValue().getStatus());
+        }
+
+        @Test
+        @DisplayName("最小单位 0.5d（B-6）：请假 2 小时向上取整为 0.5 天")
+        void roundsUpToHalfDayUnit() {
+            LeaveQuota quota = new LeaveQuota();
+            quota.setTotalQuota(new BigDecimal("10.00"));
+            quota.setUsedQuota(BigDecimal.ZERO);
+            when(quotaService.locate(anyLong(), anyLong(), anyString())).thenReturn(quota);
+            when(leaveTypeService.require(1L)).thenReturn(stubTypeWithRules(
+                    "{\"paid\":true,\"minUnit\":\"0.5d\"}"));
+            when(flowIntegration.start(anyString(), anyString(), any())).thenReturn("pi-9002");
+            when(mapper.insert(any(LeaveRequest.class))).thenReturn(1);
+            LeaveCreateRequest req = new LeaveCreateRequest(200001L, 1L,
+                    LocalDateTime.parse("2026-10-20T09:00:00"),
+                    LocalDateTime.parse("2026-10-20T11:00:00"), "短假");
+
+            var resp = service.create(req);
+
+            assertEquals(0, resp.days().compareTo(new BigDecimal("0.50")), "2h 应取整为 0.5d");
+        }
+
+        @Test
+        @DisplayName("最小单位 0.5h（B-6）：请假 1 小时 20 分向上取整为 1.5 小时口径")
+        void roundsUpToHalfHourUnit() {
+            LeaveQuota quota = new LeaveQuota();
+            quota.setTotalQuota(new BigDecimal("10.00"));
+            quota.setUsedQuota(BigDecimal.ZERO);
+            when(quotaService.locate(anyLong(), anyLong(), anyString())).thenReturn(quota);
+            when(leaveTypeService.require(1L)).thenReturn(stubTypeWithRules(
+                    "{\"minUnit\":\"0.5h\"}"));
+            when(flowIntegration.start(anyString(), anyString(), any())).thenReturn("pi-9003");
+            when(mapper.insert(any(LeaveRequest.class))).thenReturn(1);
+            LeaveCreateRequest req = new LeaveCreateRequest(200001L, 1L,
+                    LocalDateTime.parse("2026-10-20T09:00:00"),
+                    LocalDateTime.parse("2026-10-20T10:20:00"), "外出");
+
+            var resp = service.create(req);
+
+            // 1.5h / 8 = 0.1875 → 0.19 天（2 位小数）
+            assertEquals(0, resp.days().compareTo(new BigDecimal("0.19")));
+        }
+
+        @Test
+        @DisplayName("最小单位 1d（B-6）：请假 3 小时向上取整为 1 天")
+        void roundsUpToFullDayUnit() {
+            LeaveQuota quota = new LeaveQuota();
+            quota.setTotalQuota(new BigDecimal("10.00"));
+            quota.setUsedQuota(BigDecimal.ZERO);
+            when(quotaService.locate(anyLong(), anyLong(), anyString())).thenReturn(quota);
+            when(leaveTypeService.require(1L)).thenReturn(stubTypeWithRules(
+                    "{\"minUnit\":\"1d\"}"));
+            when(flowIntegration.start(anyString(), anyString(), any())).thenReturn("pi-9004");
+            when(mapper.insert(any(LeaveRequest.class))).thenReturn(1);
+            LeaveCreateRequest req = new LeaveCreateRequest(200001L, 1L,
+                    LocalDateTime.parse("2026-10-20T09:00:00"),
+                    LocalDateTime.parse("2026-10-20T12:00:00"), "事假");
+
+            var resp = service.create(req);
+
+            assertEquals(0, resp.days().compareTo(new BigDecimal("1.00")));
         }
     }
 

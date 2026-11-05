@@ -25,8 +25,12 @@ import java.util.Locale;
 /**
  * 打卡采集与当日考勤状态（ATT-F-004 / ATT-F-006 / ATT-F-007）。
  *
- * <p>幂等：以 uk(tenant_id, emp_id, punch_time) 为键先查后写；
- * 高峰期重复提交由唯一键兜底（docs/09）。MVP 为同步直写，MQ 缓冲待二期接入（见 OPEN-DECISIONS）。</p>
+ * <p>幂等（B-4 修正）：幂等键 = 员工 + 考勤日 + 打卡类型（原秒级 punch_time 键在
+ * 客户端重试携带新时间戳时去重失效）。同员工同日同类型首次成功，重复提交
+ * 直接返回已有记录（不报错、不新增行）；同日 IN/OUT 各自独立。
+ * DB 侧 uk(tenant_id, emp_id, punch_time) 保留作同刻并发兜底。
+ * 高峰期重复提交由先查后写 + 唯一键兜底（docs/09）。MVP 为同步直写，
+ * MQ 缓冲待二期接入（见 OPEN-DECISIONS）。</p>
  *
  * <p>外勤打卡（ATT-F-006）复用同一入口，以 source=GPS + location 承载定位与备注。</p>
  */
@@ -54,14 +58,14 @@ public class PunchService {
         this.shiftService = shiftService;
     }
 
-    /** 打卡写入（幂等）。已存在同员工同刻记录时直接返回原记录。 */
+    /**
+     * 打卡写入（幂等）。幂等键 = emp_id + 考勤日 + punch_type：
+     * 已存在同员工同日同类型记录时直接返回原记录，不新增行。
+     */
     @Transactional(rollbackFor = Exception.class)
     public PunchResponse punch(PunchCreateRequest req) {
         String type = normalizeType(req.type());
-        PunchRecord existing = punchMapper.selectOne(new LambdaQueryWrapper<PunchRecord>()
-                .eq(PunchRecord::getEmpId, req.empId())
-                .eq(PunchRecord::getPunchTime, req.punchTime())
-                .last("LIMIT 1"));
+        PunchRecord existing = findByDayAndType(req.empId(), req.punchTime().toLocalDate(), type);
         if (existing != null) {
             return toResponse(existing);
         }
@@ -79,6 +83,19 @@ public class PunchService {
         record.setStatus(isFieldPunch(record) ? STATUS_ABNORMAL : STATUS_NORMAL);
         punchMapper.insert(record);
         return toResponse(record);
+    }
+
+    /**
+     * 幂等查询：同员工同考勤日同类型的已有打卡记录。
+     * 考勤日取 punch_time 自然日（B-4：跨天班次的凌晨打卡按自然日归属，不做工作日归属推断）。
+     */
+    public PunchRecord findByDayAndType(Long empId, LocalDate attDate, String type) {
+        return punchMapper.selectOne(new LambdaQueryWrapper<PunchRecord>()
+                .eq(PunchRecord::getEmpId, empId)
+                .eq(PunchRecord::getType, type)
+                .ge(PunchRecord::getPunchTime, attDate.atStartOfDay())
+                .lt(PunchRecord::getPunchTime, attDate.plusDays(1).atStartOfDay())
+                .last("LIMIT 1"));
     }
 
     /** 打卡记录分页查询（按员工 + 时间区间，命中分区键）。 */

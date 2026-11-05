@@ -29,7 +29,8 @@ import java.util.Map;
  * <p>状态机：DRAFT → PROCESSING → APPROVED / REJECTED / CANCELLED。
  * 审批通过才扣减额度（DDL 无冻结列），销假按实际返岗时间退额度。</p>
  *
- * <p>跨月按日切片分摊：日考勤计算按天取本单与当日的重叠时长，不整单计入起始日。</p>
+ * <p>跨月按日切片分摊：日考勤计算按天取本单与当日的重叠时长，不整单计入起始日。
+ * 提交时长按假种 rules.minUnit（0.5h/0.5d）向上取整，额度按取整后口径扣减（B-6）。</p>
  */
 @Service
 public class LeaveRequestService {
@@ -70,7 +71,9 @@ public class LeaveRequestService {
             throw new BizException(ErrorCode.PARAM_INVALID, "请假结束时间必须晚于开始时间");
         }
         LeaveType type = leaveTypeService.require(req.leaveTypeId());
-        BigDecimal hours = TimeAmountUtil.hoursBetween(req.startTime(), req.endTime());
+        // B-6：请假时长按假种最小单位（rules.minUnit，0.5h/0.5d）向上取整后再折算天数
+        BigDecimal hours = TimeAmountUtil.roundUpToMinUnit(
+                TimeAmountUtil.hoursBetween(req.startTime(), req.endTime()), type.getRules());
         BigDecimal days = TimeAmountUtil.toDays(hours);
         String period = String.valueOf(req.startTime().getYear());
         ensureQuotaAvailable(req.empId(), req.leaveTypeId(), period, days);
