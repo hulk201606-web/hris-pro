@@ -1910,7 +1910,10 @@ CREATE TABLE kb_doc_version (
   `updated_at`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
   `deleted`         TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_kb_doc_version` (`tenant_id`, `document_id`, `version`)
+  -- 原为 UNIQUE KEY uk_kb_doc_version(tenant_id, document_id, version)：
+  -- version 列被实体层用作乐观锁（BaseEntity 约定），每次 update 自增，
+  -- 唯一键在该列上必然碰撞（docs/19 §9 联调发现），降级为普通索引。
+  KEY `idx_kb_doc_version_doc` (`tenant_id`, `document_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='文档版本';
 
 -- 切片

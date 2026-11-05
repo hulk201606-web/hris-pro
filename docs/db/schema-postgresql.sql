@@ -1890,8 +1890,12 @@ CREATE TABLE kb_doc_version (
   created_at        TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 创建时间(UTC)
   updated_at        TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 更新时间(UTC,应用层维护)
   deleted           SMALLINT     NOT NULL DEFAULT 0,              -- 逻辑删除 0=否 1=是
-  CONSTRAINT pk_kb_doc_version PRIMARY KEY (id),
-  CONSTRAINT uk_kb_doc_version UNIQUE (tenant_id, document_id, version)
+  CONSTRAINT pk_kb_doc_version PRIMARY KEY (id)
+  -- 原为 uk_kb_doc_version UNIQUE (tenant_id, document_id, version)：
+  -- version 列被实体层用作乐观锁（BaseEntity 约定），每次 update 自增，
+  -- 唯一键在该列上必然碰撞（docs/19 §9 联调发现），降级为普通索引。
+);
+CREATE INDEX idx_kb_doc_version_doc ON kb_doc_version (tenant_id, document_id);
 );
 
 -- 切片
