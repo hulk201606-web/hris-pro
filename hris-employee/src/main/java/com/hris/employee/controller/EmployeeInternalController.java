@@ -7,6 +7,7 @@ import com.hris.employee.dto.PreCreateRequest;
 import com.hris.employee.dto.PreHireLinkResponse;
 import com.hris.employee.service.EmployeeService;
 import com.hris.employee.service.LifecycleCaseService;
+import com.hris.employee.service.PendingTransactionService;
 import com.hris.employee.service.PreHireService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -29,12 +31,15 @@ public class EmployeeInternalController {
     private final EmployeeService employeeService;
     private final PreHireService preHireService;
     private final LifecycleCaseService lifecycleCaseService;
+    private final PendingTransactionService pendingTransactionService;
 
     public EmployeeInternalController(EmployeeService employeeService, PreHireService preHireService,
-                                      LifecycleCaseService lifecycleCaseService) {
+                                      LifecycleCaseService lifecycleCaseService,
+                                      PendingTransactionService pendingTransactionService) {
         this.employeeService = employeeService;
         this.preHireService = preHireService;
         this.lifecycleCaseService = lifecycleCaseService;
+        this.pendingTransactionService = pendingTransactionService;
     }
 
     /** 员工档案简报（内部端点）：供 org 汇报线解析等跨域调用，返回姓名/工号/状态/部门/岗位/直属上级。 */
@@ -68,5 +73,17 @@ public class EmployeeInternalController {
             @Valid @RequestBody ApprovalCallbackRequest req) {
         return R.ok(lifecycleCaseService.handleCallback(
                 req.tenantId(), req.bizKey(), Boolean.TRUE.equals(req.approved()), req.comment()));
+    }
+
+    /**
+     * 待生效事务批量落账（platform 调度中心 PENDING_TRANSACTION_APPLY 经 Feign 调用，docs/19 §9.1）。
+     * 应用 effect_date <= effectDate 的全部 PENDING 事务（缺省今天）；幂等：非 PENDING 跳过。
+     */
+    @PostMapping("/pending-transactions/apply-due")
+    public R<Integer> applyPendingTransactions(
+            @RequestParam Long tenantId,
+            @RequestParam(required = false) LocalDate effectDate) {
+        return R.ok(pendingTransactionService.applyDue(tenantId,
+                effectDate != null ? effectDate : LocalDate.now()));
     }
 }
