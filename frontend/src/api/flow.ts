@@ -105,6 +105,19 @@ export function fetchCcTasks(page: number, size: number): Promise<PageResult<Tas
   return get<PageResult<TaskView>>('/flow/tasks/cc', { page, size });
 }
 
+/** 无主任务（GET /flow/tasks/unassigned）：本租户 assignee 为空的任务，procDefKey 可选过滤 */
+export function fetchUnassignedTasks(
+  page: number,
+  size: number,
+  procDefKey?: string,
+): Promise<PageResult<TaskView>> {
+  return get<PageResult<TaskView>>('/flow/tasks/unassigned', {
+    page,
+    size,
+    ...(procDefKey ? { procDefKey } : {}),
+  });
+}
+
 /* ---------------------------- 任务操作（补充） ---------------------------- */
 
 /** 转办（POST /flow/tasks/{id}/transfer），需指定目标用户 */
@@ -120,6 +133,16 @@ export function addSignTask(id: string, targetUserId: string, comment?: string):
 /** 撤回（POST /flow/tasks/{id}/withdraw）：仅首节点未处理时可用 */
 export function withdrawTask(id: string, comment?: string): Promise<void> {
   return post<void>(`/flow/tasks/${id}/withdraw`, { comment });
+}
+
+/** 认领无主任务（POST /flow/tasks/{id}/claim）：assignee 置为操作者，重复认领自己幂等 */
+export function claimTask(id: string, comment?: string): Promise<boolean> {
+  return post<boolean>(`/flow/tasks/${id}/claim`, comment ? { comment } : undefined);
+}
+
+/** 指派（POST /flow/tasks/{id}/assign）：管理动作，强制把任务指给 targetUserId */
+export function assignTask(id: string, targetUserId: number, comment?: string): Promise<void> {
+  return post<void>(`/flow/tasks/${id}/assign`, { targetUserId, comment });
 }
 
 /* ---------------------------- 实例 ---------------------------- */

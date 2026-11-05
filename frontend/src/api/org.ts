@@ -43,6 +43,18 @@ export function updateDept(id: number, data: Record<string, unknown>): Promise<D
   return put<DeptNode>(`/org/depts/${id}`, data);
 }
 
+/**
+ * 部门移动 + 兄弟排序（POST /org/depts/{id}/move，ORG-F-002 深化拖拽排序）。
+ * newParentId 为空/0 表示移动为根；sortOrder 为目标兄弟位次。
+ */
+export function moveDept(
+  id: number,
+  newParentId: number | null,
+  sortOrder: number,
+): Promise<DeptNode> {
+  return post<DeptNode>(`/org/depts/${id}/move`, { newParentId, sortOrder });
+}
+
 /** 部门历史快照（GET /org/depts/{id}/snapshot） */
 export function getDeptSnapshot(id: number, at?: string): Promise<Record<string, unknown>> {
   return get<Record<string, unknown>>(`/org/depts/${id}/snapshot`, at ? { at } : undefined);
@@ -61,6 +73,16 @@ export function updatePosition(id: number, data: Record<string, unknown>): Promi
 }
 export function deletePosition(id: number): Promise<void> {
   return del<void>(`/org/positions/${id}`);
+}
+
+/** 查询岗位挂靠的部门 ID 列表（GET /org/positions/{id}/depts） */
+export function listPositionDepts(id: number): Promise<number[]> {
+  return get<number[]>(`/org/positions/${id}/depts`);
+}
+
+/** 岗位×部门挂靠整体替换（POST /org/positions/{id}/depts），空列表即清空，幂等 */
+export function replacePositionDepts(id: number, deptIds: number[]): Promise<number[]> {
+  return post<number[]>(`/org/positions/${id}/depts`, { deptIds });
 }
 
 export function listJobs(): Promise<CatalogResponse[]> {

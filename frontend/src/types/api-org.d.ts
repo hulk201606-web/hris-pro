@@ -16,6 +16,8 @@ export interface CatalogResponse {
   status: number;
   /** 仅职级使用：所属职级带 ID */
   gradeBandId?: number;
+  /** 仅岗位使用：岗位序列（管理 / 专业 / 销售 / 操作，ORG-F-006 深化） */
+  jobFamily?: string;
 }
 
 /** 部门节点（树形，query(tree=true) 时 children 有值） */

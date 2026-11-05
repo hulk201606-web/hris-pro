@@ -18,12 +18,20 @@ export interface TaskView {
   createTime: string;
   endTime: string;
   durationInMillis: number;
+  /** 所属模型配置的动态表单 Schema（JSON 字符串），非空时随待办返回，前端可渲染 */
+  formSchemaJson?: string | null;
+  /** 是否已超期（配置了超时时长且任务超期） */
+  overdue?: boolean;
 }
 
 export interface TaskActionRequest {
   comment?: string;
   attachments?: number[];
   targetUserId?: number;
+  /** 驳回语义开关（仅 reject 生效）：true=终止实例 */
+  terminate?: boolean;
+  /** 动态表单值（键=字段名），随审批动作落库 */
+  formValues?: Record<string, unknown>;
 }
 
 /* ============================ 审批流（flow + 考勤请求单） ============================ */
@@ -95,6 +103,31 @@ export interface OvertimeCreateRequest {
   endTime: string;
   reason?: string;
   mode?: string;
+}
+
+/** 出差单 */
+export interface TripRequest {
+  id: number;
+  empId: number;
+  bizKey: string;
+  startTime: string;
+  endTime: string;
+  destination: string;
+  reason: string;
+  status: string;
+  procInstId: string;
+  /** 补贴天数（按自然日跨度派生，供薪酬域计算） */
+  subsidyDays: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TripCreateRequest {
+  empId: number;
+  startTime: string;
+  endTime: string;
+  destination: string;
+  reason?: string;
 }
 
 /** 补卡单 */

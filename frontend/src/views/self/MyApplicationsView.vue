@@ -19,12 +19,12 @@ interface ApplicationEntry {
 }
 
 // 我的申请（SELF-F-003）：聚合请假/加班/出差/补卡/证明发起入口。
-// 请假/加班/补卡已接入真实发起页；出差/证明暂为占位。
+// 请假/加班/补卡/出差已接入真实发起页；证明暂为占位。
 const entries: ApplicationEntry[] = [
   { key: 'leave', title: '请假申请', desc: '年假 / 事假 / 病假', icon: CalendarOutlined, route: '/self/leave/apply', available: true },
   { key: 'overtime', title: '加班申请', desc: '工作日 / 休息日加班', icon: ClockCircleOutlined, route: '/self/overtime/apply', available: true },
   { key: 'fix', title: '补卡申请', desc: '漏打卡补录', icon: ScheduleOutlined, route: '/self/fix/apply', available: true },
-  { key: 'trip', title: '出差申请', desc: '差旅行程与费用', icon: CarOutlined, route: '', available: false },
+  { key: 'trip', title: '出差申请', desc: '差旅行程与费用', icon: CarOutlined, route: '/self/trip/apply', available: true },
   { key: 'proof', title: '证明开具', desc: '在职 / 收入证明', icon: FileProtectOutlined, route: '', available: false },
 ];
 

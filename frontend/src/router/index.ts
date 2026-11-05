@@ -64,6 +64,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '补卡申请' },
       },
       {
+        path: 'self/trip/apply',
+        name: 'TripApply',
+        component: () => import('../views/self/TripApplyView.vue'),
+        meta: { title: '出差申请' },
+      },
+      {
         path: 'self/payroll',
         name: 'MyPayroll',
         component: () => import('../views/self/MyPayrollView.vue'),

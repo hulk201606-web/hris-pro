@@ -10,6 +10,7 @@ import type { Component } from 'vue';
 import {
   AuditOutlined,
   CalendarOutlined,
+  CarOutlined,
   DollarOutlined,
   FormOutlined,
   IdcardOutlined,
@@ -29,6 +30,7 @@ interface QuickEntry {
 const quickEntries: QuickEntry[] = [
   { title: '我的申请', desc: '请假 / 加班 / 出差 / 补卡', route: '/self/applications', icon: FormOutlined },
   { title: '我的审批', desc: '待办事项处理', route: '/self/approvals', icon: AuditOutlined },
+  { title: '出差申请', desc: '差旅行程发起', route: '/self/trip/apply', icon: CarOutlined },
   { title: '我的信息', desc: '查看个人档案', route: '/self/profile', icon: IdcardOutlined },
   { title: '我的薪酬', desc: '工资条查询', route: '/self/payroll', icon: DollarOutlined },
   { title: '我的假期', desc: '假期额度与流水', route: '/self/leave', icon: CalendarOutlined },

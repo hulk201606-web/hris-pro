@@ -7,7 +7,7 @@
 import { get, post, put } from './http';
 import { isMockEnabled } from './mock';
 import { attendanceMock } from './attendance-mock';
-import type { PageResult, AttRequestQuery, FixCreateRequest, FixRequest, LeaveCreateRequest, LeaveRequest, OvertimeCreateRequest, OvertimeRequest } from '../types/api';
+import type { PageResult, AttRequestQuery, FixCreateRequest, FixRequest, LeaveCreateRequest, LeaveRequest, OvertimeCreateRequest, OvertimeRequest, TripCreateRequest, TripRequest } from '../types/api';
 import type {
   AttException,
   AttGroup,
@@ -246,8 +246,23 @@ export function rejectFixRequest(id: number, remark?: string): Promise<FixReques
   return post<FixRequest>(`/att/fix-requests/${id}/reject`, { remark });
 }
 
-/* ---------------------------- 报表（ATT-F-025） ---------------------------- */
+/* ---------------------------- 出差单（ATT-F-017） ---------------------------- */
 
+/** 分页查询出差单列表（GET /att/trip-requests） */
+export function fetchTrips(
+  params: AttRequestQuery,
+  page: number,
+  size: number,
+): Promise<PageResult<TripRequest>> {
+  return get<PageResult<TripRequest>>('/att/trip-requests', { ...params, page, size });
+}
+
+/** 发起出差单（POST /att/trip-requests），后端自动触发流程引擎 */
+export function createTrip(data: TripCreateRequest): Promise<TripRequest> {
+  return post<TripRequest>('/att/trip-requests', data);
+}
+
+/* ---------------------------- 报表（ATT-F-025） ---------------------------- */
 /** 出勤率报表项：按员工汇总出勤天数与异常次数 */
 export interface AttendanceRateItem {
   empId: number;

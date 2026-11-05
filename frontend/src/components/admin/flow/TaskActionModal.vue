@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { addSignTask, approveTask, rejectTask, transferTask, withdrawTask } from '../../../api/flow';
 import type { TaskView } from '../../../types/api';
+import DynamicForm from '../DynamicForm.vue';
 
 export type TaskAction = 'approve' | 'reject' | 'transfer' | 'addSign' | 'withdraw';
 
@@ -25,6 +26,9 @@ const emit = defineEmits<{ 'update:open': [boolean]; done: [] }>();
 const comment = ref('');
 const targetUserId = ref('');
 const submitting = ref(false);
+const formValues = ref<Record<string, unknown>>({});
+/** 已解析的动态表单 Schema；为空表示该任务无动态表单或解析失败（保持现状仅意见输入） */
+const parsedSchema = ref<Record<string, unknown> | null>(null);
 
 const ACTION_META: Record<TaskAction, { title: string; needTarget: boolean; okText: string }> = {
   approve: { title: '同意', needTarget: false, okText: '确认同意' },
@@ -42,6 +46,19 @@ watch(
     if (v) {
       comment.value = '';
       targetUserId.value = '';
+      formValues.value = {};
+      parsedSchema.value = null;
+      const raw = props.task?.formSchemaJson;
+      if (props.action === 'approve' && raw) {
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            parsedSchema.value = parsed as Record<string, unknown>;
+          }
+        } catch {
+          // Schema 非法时降级为仅意见输入，不阻断审批
+        }
+      }
     }
   },
 );
@@ -58,9 +75,15 @@ async function handleOk() {
   submitting.value = true;
   try {
     switch (props.action) {
-      case 'approve':
-        await approveTask(id, { comment: comment.value } as never);
+      case 'approve': {
+        const hasValues = parsedSchema.value && Object.keys(formValues.value).length > 0;
+        const req = {
+          comment: comment.value,
+          ...(hasValues ? { formValues: formValues.value } : {}),
+        };
+        await approveTask(id, req as never);
         break;
+      }
       case 'reject':
         await rejectTask(id, { comment: comment.value } as never);
         break;
@@ -100,6 +123,13 @@ async function handleOk() {
       <a-descriptions-item label="业务键">{{ task.bizKey || '-' }}</a-descriptions-item>
     </a-descriptions>
 
+    <DynamicForm
+      v-if="parsedSchema"
+      v-model="formValues"
+      :schema="parsedSchema"
+      class="dynamic"
+    />
+
     <a-form layout="vertical" class="form">
       <a-form-item v-if="meta?.needTarget" label="目标用户 ID" required>
         <a-input v-model:value="targetUserId" placeholder="转办/加签的目标用户 ID" />
@@ -121,6 +151,9 @@ async function handleOk() {
 <style scoped>
 .brief {
   margin-bottom: 16px;
+}
+.dynamic {
+  margin-top: 8px;
 }
 .form {
   margin-top: 8px;
