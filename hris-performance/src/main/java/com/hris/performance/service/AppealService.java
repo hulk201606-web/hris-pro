@@ -8,7 +8,9 @@ import com.hris.performance.dto.AppealDtos.AppealCreateRequest;
 import com.hris.performance.dto.AppealDtos.AppealResponse;
 import com.hris.performance.dto.AppealDtos.AppealUpdateRequest;
 import com.hris.performance.entity.Appeal;
+import com.hris.performance.entity.Cycle;
 import com.hris.performance.mapper.AppealMapper;
+import com.hris.performance.mapper.CycleMapper;
 import com.hris.common.dto.PageResult;
 import com.hris.common.exception.BizException;
 import com.hris.common.exception.ErrorCode;
@@ -54,10 +56,12 @@ public class AppealService {
 
     private final AppealMapper mapper;
     private final FlowIntegration flowIntegration;
+    private final CycleMapper cycleMapper;
 
-    public AppealService(AppealMapper mapper, FlowIntegration flowIntegration) {
+    public AppealService(AppealMapper mapper, FlowIntegration flowIntegration, CycleMapper cycleMapper) {
         this.mapper = mapper;
         this.flowIntegration = flowIntegration;
+        this.cycleMapper = cycleMapper;
     }
 
     /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
@@ -82,6 +86,7 @@ public class AppealService {
      */
     @Transactional(rollbackFor = Exception.class)
     public AppealResponse create(AppealCreateRequest req) {
+        ensureCycleAppealable(req.cycleId());
         Appeal e = new Appeal();
         e.setEmpId(req.empId());
         e.setCycleId(req.cycleId());
@@ -109,6 +114,7 @@ public class AppealService {
         if (e == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "Appeal 不存在");
         }
+        ensureCycleAppealable(req.cycleId() == null ? e.getCycleId() : req.cycleId());
         if (STATUS_APPROVED.equals(e.getStatus()) || STATUS_REJECTED.equals(e.getStatus())) {
             throw new BizException(ErrorCode.PRF_ERROR, "申诉单已终态（" + e.getStatus() + "），不可修改或重新发起");
         }
@@ -127,6 +133,21 @@ public class AppealService {
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "Appeal 不存在");
         }
+    }
+
+    /**
+     * 周期状态守卫（PRF-F-002 / PRF-F-009）：申诉只在结果公布（CLOSED）后开放，
+     * 是封板期唯一允许的写入口；周期不存在时不拦截（存在性由前端/流程侧保证）。
+     */
+    private void ensureCycleAppealable(Long cycleId) {
+        if (cycleId == null) {
+            return;
+        }
+        Cycle cycle = cycleMapper.selectById(cycleId);
+        if (cycle == null) {
+            return;
+        }
+        CycleStateMachine.requireAppealWritable(cycle.getStatus());
     }
 
     /** 落库：biz_key 服务端生成，撞 uk_prf_appeal_biz 唯一键时重新生成并重试。 */

@@ -2,6 +2,7 @@ package com.hris.performance.controller;
 
 import com.hris.performance.dto.CycleDtos.CycleCreateRequest;
 import com.hris.performance.dto.CycleDtos.CycleResponse;
+import com.hris.performance.dto.CycleDtos.CycleTransitionRequest;
 import com.hris.performance.dto.CycleDtos.CycleUpdateRequest;
 import com.hris.performance.entity.Cycle;
 import com.hris.performance.service.CycleService;
@@ -68,5 +69,16 @@ public class CycleController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    /**
+     * 周期状态流转（PRF-F-002）：DRAFT→ACTIVE→SCORING→CLOSED 白名单校验，
+     * 非法流转返回 PARAM_INVALID(10001)。
+     */
+    @RequirePerm("prf:cycle:write")
+    @PostMapping("/{id}/transition")
+    public R<CycleResponse> transition(@PathVariable Long id,
+                                       @Valid @RequestBody CycleTransitionRequest req) {
+        return R.ok(service.transition(id, req.target()));
     }
 }

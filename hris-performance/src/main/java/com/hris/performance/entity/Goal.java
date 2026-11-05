@@ -38,6 +38,15 @@ public class Goal extends BaseEntity {
     public void setTitle(String title) {
         this.title = title;
     }
+    private String dimension;  // 目标维度 KPI/OKR/COMPETENCY（权重合计口径：同周期+同员工+同维度）
+
+    public String getDimension() {
+        return dimension;
+    }
+
+    public void setDimension(String dimension) {
+        this.dimension = dimension;
+    }
     private BigDecimal weight;  // 权重(%)
 
     public BigDecimal getWeight() {

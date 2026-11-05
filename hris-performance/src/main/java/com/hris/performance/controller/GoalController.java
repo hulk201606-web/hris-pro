@@ -1,5 +1,6 @@
 package com.hris.performance.controller;
 
+import com.hris.performance.dto.GoalDtos.GoalBatchSaveRequest;
 import com.hris.performance.dto.GoalDtos.GoalCreateRequest;
 import com.hris.performance.dto.GoalDtos.GoalResponse;
 import com.hris.performance.dto.GoalDtos.GoalUpdateRequest;
@@ -18,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * Goal 端点。
@@ -68,5 +71,15 @@ public class GoalController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    /**
+     * 批量提交目标（PRF-F-003）：按 cycleId+empId+dimension 整组替换，
+     * 落库前先校验该组权重合计 = 100（不足/超差返回 PARAM_INVALID 并附实际合计）。
+     */
+    @RequirePerm("prf:goal:write")
+    @PostMapping("/batch")
+    public R<List<GoalResponse>> batchSave(@Valid @RequestBody GoalBatchSaveRequest req) {
+        return R.ok(service.batchSave(req));
     }
 }

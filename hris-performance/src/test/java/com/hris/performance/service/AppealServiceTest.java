@@ -7,6 +7,7 @@ import com.hris.performance.dto.AppealDtos.AppealResponse;
 import com.hris.performance.dto.AppealDtos.AppealUpdateRequest;
 import com.hris.performance.entity.Appeal;
 import com.hris.performance.mapper.AppealMapper;
+import com.hris.performance.mapper.CycleMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -48,11 +49,14 @@ class AppealServiceTest {
     @Mock
     private FlowIntegration flowIntegration;
 
+    @Mock
+    private CycleMapper cycleMapper;
+
     private AppealService service;
 
     @BeforeEach
     void setUp() {
-        service = new AppealService(mapper, flowIntegration);
+        service = new AppealService(mapper, flowIntegration, cycleMapper);
     }
 
     private AppealCreateRequest createReq() {

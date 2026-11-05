@@ -1187,6 +1187,7 @@ CREATE TABLE rcu_resume (
   `candidate_id`  BIGINT       NOT NULL COMMENT '候选人ID(逻辑外键 rcu_candidate.id)',
   `file_id`       BIGINT       DEFAULT NULL COMMENT '简历附件ID(逻辑外键 sys_file_meta.id)',
   `parse_result`  JSON         DEFAULT NULL COMMENT '简历解析结果(json)',
+  `retention_until` DATE       DEFAULT NULL COMMENT '简历保留截止日(RCS-F-022,创建时按租户配置计算)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1194,7 +1195,8 @@ CREATE TABLE rcu_resume (
   `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
   `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
-  KEY `idx_rcu_resume_candidate` (`tenant_id`, `candidate_id`)
+  KEY `idx_rcu_resume_candidate` (`tenant_id`, `candidate_id`),
+  KEY `idx_rcu_resume_retention` (`tenant_id`, `retention_until`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='简历';
 
 -- 简历解析结果(RCS-F-007)
@@ -1230,6 +1232,8 @@ CREATE TABLE rcu_application (
   `channel_id`    BIGINT       DEFAULT NULL COMMENT '渠道ID(逻辑外键 rcu_channel.id)',
   `stage`         VARCHAR(16)  NOT NULL DEFAULT 'APPLIED' COMMENT '阶段 APPLIED/SCREEN/INTERVIEW/OFFER/HIRED',
   `status`        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT '状态 ACTIVE/REJECTED/WITHDRAWN',
+  `reason`        VARCHAR(32)  DEFAULT NULL COMMENT '淘汰原因 RCS-F-012 SKILL_MISMATCH/SALARY_MISMATCH/ATTITUDE/HEADCOUNT_CLOSED/WITHDRAWN/OTHER',
+  `reason_note`   VARCHAR(255) DEFAULT NULL COMMENT '原因补充(OTHER 必填)',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1307,6 +1311,9 @@ CREATE TABLE rcu_offer (
   `salary_amount_mask`   VARCHAR(64)  DEFAULT NULL COMMENT 'Offer薪资掩码',
   `status`           VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT '状态 DRAFT/SENT/ACCEPTED/REJECTED',
   `proc_inst_id`     VARCHAR(64)  DEFAULT NULL COMMENT '流程实例ID',
+  `receipt_type`     VARCHAR(16)  DEFAULT NULL COMMENT '候选人回执类型 RCS-F-018 ACCEPTED/DECLINED',
+  `receipt_note`     VARCHAR(512) DEFAULT NULL COMMENT '回执备注',
+  `receipt_at`       DATETIME(3)  DEFAULT NULL COMMENT '回执登记时间(UTC)',
   `created_by`       BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`       BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1317,6 +1324,25 @@ CREATE TABLE rcu_offer (
   UNIQUE KEY `uk_rcu_offer_no` (`tenant_id`, `offer_no`),
   KEY `idx_rcu_offer_app` (`tenant_id`, `application_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Offer';
+
+-- Offer 发送日志(RCS-F-018)：每次发送留痕，FAILED 不透出为 SENT
+CREATE TABLE rcu_offer_send_log (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `offer_id`      BIGINT       NOT NULL COMMENT 'OfferID(逻辑外键 rcu_offer.id)',
+  `channel`       VARCHAR(16)  NOT NULL COMMENT '发送渠道 EMAIL/WECOM/DINGTALK',
+  `status`        VARCHAR(16)  NOT NULL COMMENT '发送状态 SENT/FAILED',
+  `error`         VARCHAR(512) DEFAULT NULL COMMENT '失败原因(FAILED 时透出)',
+  `sent_at`       DATETIME(3)  DEFAULT NULL COMMENT '发送成功时间(UTC)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_rcu_offer_send_log` (`tenant_id`, `offer_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Offer发送日志';
 
 -- 人才库标签
 CREATE TABLE rcu_talent_pool_tag (
@@ -1503,6 +1529,11 @@ CREATE TABLE cmp_payroll_run (
   `status`        VARCHAR(16)  NOT NULL DEFAULT 'INIT' COMMENT '状态 INIT/CALCULATING/TRIAL/CALC/REVIEW/APPROVE/PAID/LOCK',
   `calc_by`       BIGINT       DEFAULT NULL COMMENT '计算人ID',
   `review_by`     BIGINT       DEFAULT NULL COMMENT '复核人ID',
+  `reviewed_by_1` BIGINT       DEFAULT NULL COMMENT '第一复核人ID(双人复核)',
+  `reviewed_at_1` DATETIME(3)  DEFAULT NULL COMMENT '第一复核时间',
+  `reviewed_by_2` BIGINT       DEFAULT NULL COMMENT '第二复核人ID(须与第一复核人不同)',
+  `reviewed_at_2` DATETIME(3)  DEFAULT NULL COMMENT '第二复核时间',
+  `review_comment` VARCHAR(255) DEFAULT NULL COMMENT '最近一次复核意见/驳回理由',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1683,7 +1714,7 @@ CREATE TABLE prf_cycle (
   `period_code`   VARCHAR(16)  NOT NULL COMMENT '周期编码(如 2026H1)',
   `start_date`    DATE         NOT NULL COMMENT '周期开始日',
   `end_date`      DATE         NOT NULL COMMENT '周期结束日',
-  `status`        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT '状态 DRAFT/ACTIVE/CALIBRATING/PUBLISHED/CLOSED',
+  `status`        VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT '状态 DRAFT/ACTIVE/SCORING/CLOSED（仅白名单流转，见 CycleStateMachine）',
   `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
   `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
   `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
@@ -1701,6 +1732,7 @@ CREATE TABLE prf_goal (
   `cycle_id`      BIGINT       NOT NULL COMMENT '周期ID(逻辑外键 prf_cycle.id)',
   `emp_id`        BIGINT       NOT NULL COMMENT '员工ID(逻辑外键 emp_employee.id)',
   `title`         VARCHAR(128) NOT NULL COMMENT '目标标题',
+  `dimension`     VARCHAR(16)  NOT NULL DEFAULT 'KPI' COMMENT '目标维度 KPI/OKR/COMPETENCY（权重合计口径：同周期+同员工+同维度=100）',
   `weight`        DECIMAL(5,2) NOT NULL DEFAULT 0 COMMENT '权重(%)',
   `target_value`  VARCHAR(255) DEFAULT NULL COMMENT '目标值',
   `result_value`  VARCHAR(255) DEFAULT NULL COMMENT '完成值',
@@ -1711,7 +1743,7 @@ CREATE TABLE prf_goal (
   `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
   `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
-  KEY `idx_prf_goal` (`tenant_id`, `cycle_id`, `emp_id`)
+  KEY `idx_prf_goal` (`tenant_id`, `cycle_id`, `emp_id`, `dimension`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考核目标';
 
 -- OKR 目标
@@ -2127,6 +2159,45 @@ CREATE TABLE flow_ext_delegate (
   KEY `idx_flow_delegate_to` (`tenant_id`, `to_user`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='审批委托代理';
 
+-- 任务节点附件(FLW-F-020)：仅办理人可传且任务未完成；文件本体在 PLT sys_file_meta
+CREATE TABLE flow_ext_task_attachment (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `instance_id`   VARCHAR(64)  NOT NULL COMMENT '流程实例ID(逻辑外键 ACT_RU_TASK.PROC_INST_ID_)',
+  `task_id`       VARCHAR(64)  NOT NULL COMMENT '任务ID(逻辑外键 ACT_RU_TASK.ID_)',
+  `file_id`       VARCHAR(128) NOT NULL COMMENT 'PLT文件ID(sys_file_meta.id 或对象键,兼容VARCHAR)',
+  `file_name`     VARCHAR(255) NOT NULL COMMENT '文件名快照',
+  `uploaded_by`   BIGINT       NOT NULL COMMENT '上传人用户ID(逻辑外键 auth_user.id)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_flow_task_attachment` (`tenant_id`, `task_id`, `file_id`),
+  KEY `idx_flow_task_attachment_inst` (`tenant_id`, `instance_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务节点附件';
+
+-- 任务结构化审批意见标签(FLW-F-020)：与 flow_ext_task_action.comment 自由文本互补
+CREATE TABLE flow_ext_task_opinion_tag (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `task_id`       VARCHAR(64)  NOT NULL COMMENT '任务ID(逻辑外键 ACT_RU_TASK.ID_)',
+  `tag`           VARCHAR(32)  NOT NULL COMMENT '标签 RECHECK_DATA/NEED_MORE_INFO/COMPLIANT/OTHER',
+  `comment`       VARCHAR(512) DEFAULT NULL COMMENT '标签说明',
+  `operator`      BIGINT       NOT NULL COMMENT '打标人用户ID(逻辑外键 auth_user.id)',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_flow_task_opinion_tag` (`tenant_id`, `task_id`, `created_at`),
+  KEY `idx_flow_task_opinion_tag_val` (`tenant_id`, `tag`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务结构化意见标签';
+
 -- =====================================================================
 -- 域 9: rag_db 知识库与问答
 -- =====================================================================
@@ -2183,6 +2254,33 @@ CREATE TABLE kb_acl_tag (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_kb_acl_tag_code` (`tenant_id`, `code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='权限标签字典';
+
+-- 敏感词库(KBD-F-017)：上传/建文档/建切片时扫描，BLOCK 拒绝落库，WARN 放行并回传 warnings
+CREATE TABLE kb_sensitive_word (
+  `id`            BIGINT       NOT NULL COMMENT '主键: 雪花ID',
+  `tenant_id`     BIGINT       NOT NULL COMMENT '租户ID',
+  `word`          VARCHAR(64)  NOT NULL COMMENT '敏感词',
+  `level`         VARCHAR(16)  NOT NULL DEFAULT 'WARN' COMMENT '级别 BLOCK=拦截/WARN=告警放行',
+  `created_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人ID,0=系统',
+  `updated_by`    BIGINT       NOT NULL DEFAULT 0 COMMENT '更新人ID',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间(UTC)',
+  `updated_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间(UTC,应用层维护)',
+  `deleted`       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=否 1=是',
+  `version`       INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_kb_sensitive_word` (`tenant_id`, `word`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='敏感词库';
+
+-- 种子（演示租户 100001；其余租户由管理端自行维护）
+INSERT IGNORE INTO kb_sensitive_word (`id`, `tenant_id`, `word`, `level`) VALUES
+  (9000000000000000001, 100001, '赌博', 'BLOCK'),
+  (9000000000000000002, 100001, '毒品', 'BLOCK'),
+  (9000000000000000003, 100001, '枪支', 'BLOCK'),
+  (9000000000000000004, 100001, '传销', 'BLOCK'),
+  (9000000000000000005, 100001, '薪酬明细', 'BLOCK'),
+  (9000000000000000006, 100001, '工资明细', 'BLOCK'),
+  (9000000000000000007, 100001, '内部未公开', 'WARN'),
+  (9000000000000000008, 100001, '机密材料', 'WARN');
 
 -- 文档主档
 CREATE TABLE kb_document (
@@ -2616,4 +2714,4 @@ CREATE TABLE sys_notify_preference (
   UNIQUE KEY `uk_sys_notify_pref` (`tenant_id`, `user_id`, `channel`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='通知渠道偏好';
 
--- 文件结束: schema-mysql.sql (共 117 张逻辑表, 不含 Flowable ACT_* 引擎表)
+-- 文件结束: schema-mysql.sql (共 119 张逻辑表, 不含 Flowable ACT_* 引擎表)

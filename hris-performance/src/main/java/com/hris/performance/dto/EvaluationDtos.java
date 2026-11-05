@@ -19,7 +19,10 @@ public final class EvaluationDtos {
     public record EvaluationUpdateRequest(Long taskId, Long evaluatorId, String scores, String comment) {
     }
 
-    /** 响应。 */
+    /**
+     * 响应。scores/comment 可能为 null——不表示"未评分"，而是当前请求者视角无权查看
+     * 该过程分（PRF-F-004 互见掩码），前端应据 null 隐藏内容而非展示"未评"。
+     */
     public record EvaluationResponse(Long id, Long taskId, Long evaluatorId, String scores, String comment, LocalDateTime createdAt, LocalDateTime updatedAt) {
     }
 }

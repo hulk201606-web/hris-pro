@@ -5,7 +5,8 @@ import com.hris.common.entity.BaseEntity;
 import java.time.LocalDate;
 
 /**
- * 绩效周期（域：绩效，分层：实体/DO）。状态机 NOT_STARTED→IN_PROGRESS→SELF_REVIEW→MANAGER_REVIEW→CALIBRATION→ARCHIVED。
+ * 绩效周期（域：绩效，分层：实体/DO）。状态机 DRAFT→ACTIVE→SCORING→CLOSED，
+ * 白名单与守卫见 {@link com.hris.performance.service.CycleStateMachine}。
  */
 @TableName("prf_cycle")
 public class Cycle extends BaseEntity {
@@ -47,7 +48,7 @@ public class Cycle extends BaseEntity {
     public void setEndDate(LocalDate endDate) {
         this.endDate = endDate;
     }
-    private String status;  // 状态 DRAFT/ACTIVE/CALIBRATING/PUBLISHED/CLOSED
+    private String status;  // 状态 DRAFT/ACTIVE/SCORING/CLOSED
 
     public String getStatus() {
         return status;

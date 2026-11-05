@@ -5,6 +5,7 @@ import com.hris.common.exception.ErrorCode;
 import com.hris.performance.dto.EvalTaskDtos.EvalTaskCreateRequest;
 import com.hris.performance.dto.EvaluationDtos.EvaluationCreateRequest;
 import com.hris.performance.dto.GoalDtos.GoalCreateRequest;
+import com.hris.performance.dto.GoalDtos.GoalUpdateRequest;
 import com.hris.performance.entity.Cycle;
 import com.hris.performance.entity.EvalTask;
 import com.hris.performance.entity.Evaluation;
@@ -31,13 +32,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 绩效子对象周期锁守卫单测（§8.5-4）：所属周期 PUBLISHED/CLOSED 时，
- * Goal/EvalTask/Evaluation 的 create/update/delete 一律拒绝。
+ * 绩效子对象周期状态守卫单测（PRF-F-002）：目标/评价任务/评分在各周期状态下的写拒绝矩阵。
  *
- * <p>Evaluation 无 cycleId，经 taskId → EvalTask → cycleId 两跳定位周期。</p>
+ * <p>口径：目标与任务仅 DRAFT/ACTIVE 可写；SCORING 起冻结、CLOSED 全锁；
+ * 评分按角色区分——自评只开 ACTIVE 窗口，上级/互评开 ACTIVE+SCORING。
+ * Evaluation 无 cycleId，经 taskId → EvalTask → cycleId 两跳定位周期。</p>
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("绩效子对象周期锁守卫")
+@DisplayName("绩效子对象周期状态守卫")
 class PerformanceCycleGuardTest {
 
     private static final Long CYCLE_ID = 600001L;
@@ -65,13 +67,17 @@ class PerformanceCycleGuardTest {
         Goal g = new Goal();
         g.setId(GOAL_ID);
         g.setCycleId(cycleId);
+        g.setEmpId(200001L);
+        g.setWeight(new BigDecimal("50"));
         return g;
     }
 
-    private EvalTask task(Long cycleId) {
+    private EvalTask task(Long cycleId, String role) {
         EvalTask t = new EvalTask();
         t.setId(TASK_ID);
         t.setCycleId(cycleId);
+        t.setEmpId(200001L);
+        t.setEvaluatorRole(role);
         return t;
     }
 
@@ -79,7 +85,12 @@ class PerformanceCycleGuardTest {
         Evaluation e = new Evaluation();
         e.setId(EVAL_ID);
         e.setTaskId(taskId);
+        e.setEvaluatorId(200001L);
         return e;
+    }
+
+    private GoalCreateRequest goalCreate(String title, BigDecimal weight) {
+        return new GoalCreateRequest(CYCLE_ID, 200001L, title, "KPI", weight, null, null);
     }
 
     @Nested
@@ -94,15 +105,24 @@ class PerformanceCycleGuardTest {
         }
 
         @Test
-        @DisplayName("create：周期 PUBLISHED → PRF_ERROR，不落库")
-        void rejectsCreateWhenPublished() {
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("PUBLISHED"));
+        @DisplayName("create：SCORING（评分阶段）→ PRF_ERROR，不落库")
+        void rejectsCreateWhenScoring() {
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("SCORING"));
 
             BizException e = assertThrows(BizException.class,
-                    () -> service.create(new GoalCreateRequest(CYCLE_ID, 200001L, "目标",
-                            new BigDecimal("50"), null, null)));
+                    () -> service.create(goalCreate("目标", new BigDecimal("50"))));
 
             assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
+            verify(goalMapper, never()).insert(any(Goal.class));
+        }
+
+        @Test
+        @DisplayName("create：CLOSED → PRF_ERROR（周期已关闭）")
+        void rejectsCreateWhenClosed() {
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
+
+            assertThrows(BizException.class,
+                    () -> service.create(goalCreate("目标", new BigDecimal("50"))));
             verify(goalMapper, never()).insert(any(Goal.class));
         }
 
@@ -113,33 +133,30 @@ class PerformanceCycleGuardTest {
             when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
 
             BizException e = assertThrows(BizException.class, () -> service.update(GOAL_ID,
-                    new com.hris.performance.dto.GoalDtos.GoalUpdateRequest(
-                            CYCLE_ID, 200001L, "改目标", new BigDecimal("50"), null, null)));
+                    new GoalUpdateRequest(CYCLE_ID, 200001L, "改目标", "KPI",
+                            new BigDecimal("50"), null, null)));
 
             assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
             verify(goalMapper, never()).updateById(any(Goal.class));
         }
 
         @Test
-        @DisplayName("delete：周期 CLOSED → 拒绝")
-        void rejectsDeleteWhenClosed() {
+        @DisplayName("delete：SCORING → 拒绝（评分后不可删目标）")
+        void rejectsDeleteWhenScoring() {
             when(goalMapper.selectById(GOAL_ID)).thenReturn(goal(CYCLE_ID));
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("SCORING"));
 
-            BizException e = assertThrows(BizException.class, () -> service.delete(GOAL_ID));
-
-            assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
+            assertThrows(BizException.class, () -> service.delete(GOAL_ID));
             verify(goalMapper, never()).deleteById(any(Long.class));
         }
 
         @Test
-        @DisplayName("create：周期 ACTIVE → 正常落库")
+        @DisplayName("create：ACTIVE（目标可调整）→ 正常落库")
         void allowsCreateWhenActive() {
             when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("ACTIVE"));
             when(goalMapper.insert(any(Goal.class))).thenReturn(1);
 
-            service.create(new GoalCreateRequest(CYCLE_ID, 200001L, "目标",
-                    new BigDecimal("50"), null, null));
+            service.create(goalCreate("目标", new BigDecimal("50")));
 
             verify(goalMapper).insert(any(Goal.class));
         }
@@ -157,9 +174,9 @@ class PerformanceCycleGuardTest {
         }
 
         @Test
-        @DisplayName("create：周期 PUBLISHED → PRF_ERROR，不落库")
-        void rejectsCreateWhenPublished() {
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("PUBLISHED"));
+        @DisplayName("create：SCORING → PRF_ERROR，不落库")
+        void rejectsCreateWhenScoring() {
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("SCORING"));
 
             BizException e = assertThrows(BizException.class,
                     () -> service.create(new EvalTaskCreateRequest(CYCLE_ID, 200001L,
@@ -170,33 +187,17 @@ class PerformanceCycleGuardTest {
         }
 
         @Test
-        @DisplayName("update：周期 CLOSED → 拒绝")
-        void rejectsUpdateWhenClosed() {
-            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID));
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
-
-            BizException e = assertThrows(BizException.class, () -> service.update(TASK_ID,
-                    new com.hris.performance.dto.EvalTaskDtos.EvalTaskUpdateRequest(
-                            CYCLE_ID, 200001L, "SUPERVISOR", "DONE")));
-
-            assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
-            verify(evalTaskMapper, never()).updateById(any(EvalTask.class));
-        }
-
-        @Test
-        @DisplayName("delete：周期 CLOSED → 拒绝")
+        @DisplayName("delete：CLOSED → 拒绝")
         void rejectsDeleteWhenClosed() {
-            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID));
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SELF"));
             when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
 
-            BizException e = assertThrows(BizException.class, () -> service.delete(TASK_ID));
-
-            assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
+            assertThrows(BizException.class, () -> service.delete(TASK_ID));
             verify(evalTaskMapper, never()).deleteById(any(Long.class));
         }
 
         @Test
-        @DisplayName("create：周期 ACTIVE → 正常落库")
+        @DisplayName("create：ACTIVE（启动期生成任务树）→ 正常落库")
         void allowsCreateWhenActive() {
             when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("ACTIVE"));
             when(evalTaskMapper.insert(any(EvalTask.class))).thenReturn(1);
@@ -220,57 +221,73 @@ class PerformanceCycleGuardTest {
         }
 
         @Test
-        @DisplayName("create：所属周期 PUBLISHED → PRF_ERROR，不落库")
-        void rejectsCreateWhenPublished() {
-            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID));
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("PUBLISHED"));
+        @DisplayName("自评：DRAFT → 拒绝（周期未启动）")
+        void rejectsSelfWhenDraft() {
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SELF"));
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("DRAFT"));
 
             BizException e = assertThrows(BizException.class,
-                    () -> service.create(new EvaluationCreateRequest(TASK_ID, 200002L,
-                            "{}", "评语")));
+                    () -> service.create(new EvaluationCreateRequest(TASK_ID, 200001L, "{}", "自评")));
 
             assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
             verify(evaluationMapper, never()).insert(any(Evaluation.class));
         }
 
         @Test
-        @DisplayName("update：所属周期 PUBLISHED → 拒绝")
-        void rejectsUpdateWhenPublished() {
-            when(evaluationMapper.selectById(EVAL_ID)).thenReturn(evaluation(TASK_ID));
-            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID));
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("PUBLISHED"));
+        @DisplayName("自评：SCORING → 拒绝（自评窗口已关闭）")
+        void rejectsSelfWhenScoring() {
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SELF"));
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("SCORING"));
 
-            BizException e = assertThrows(BizException.class, () -> service.update(EVAL_ID,
-                    new com.hris.performance.dto.EvaluationDtos.EvaluationUpdateRequest(
-                            TASK_ID, 200002L, "{}", "改评语")));
+            assertThrows(BizException.class,
+                    () -> service.create(new EvaluationCreateRequest(TASK_ID, 200001L, "{}", "改自评")));
+            verify(evaluationMapper, never()).insert(any(Evaluation.class));
+        }
 
-            assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
-            verify(evaluationMapper, never()).updateById(any(Evaluation.class));
+        @Test
+        @DisplayName("自评：ACTIVE → 放行")
+        void allowsSelfWhenActive() {
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SELF"));
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("ACTIVE"));
+            when(evaluationMapper.insert(any(Evaluation.class))).thenReturn(1);
+
+            service.create(new EvaluationCreateRequest(TASK_ID, 200001L, "{}", "自评"));
+
+            verify(evaluationMapper).insert(any(Evaluation.class));
+        }
+
+        @Test
+        @DisplayName("上级评分：SCORING → 放行")
+        void allowsSupervisorWhenScoring() {
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SUPERVISOR"));
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("SCORING"));
+            when(evaluationMapper.insert(any(Evaluation.class))).thenReturn(1);
+
+            service.create(new EvaluationCreateRequest(TASK_ID, 200002L, "{}", "上级评"));
+
+            verify(evaluationMapper).insert(any(Evaluation.class));
+        }
+
+        @Test
+        @DisplayName("上级评分：CLOSED → 拒绝")
+        void rejectsSupervisorWhenClosed() {
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SUPERVISOR"));
+            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
+
+            assertThrows(BizException.class,
+                    () -> service.create(new EvaluationCreateRequest(TASK_ID, 200002L, "{}", "评")));
+            verify(evaluationMapper, never()).insert(any(Evaluation.class));
         }
 
         @Test
         @DisplayName("delete：所属周期 CLOSED → 拒绝")
         void rejectsDeleteWhenClosed() {
             when(evaluationMapper.selectById(EVAL_ID)).thenReturn(evaluation(TASK_ID));
-            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID));
+            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID, "SUPERVISOR"));
             when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("CLOSED"));
 
-            BizException e = assertThrows(BizException.class, () -> service.delete(EVAL_ID));
-
-            assertEquals(ErrorCode.PRF_ERROR.getCode(), e.getCode());
+            assertThrows(BizException.class, () -> service.delete(EVAL_ID));
             verify(evaluationMapper, never()).deleteById(any(Long.class));
-        }
-
-        @Test
-        @DisplayName("create：所属周期 ACTIVE → 正常落库")
-        void allowsCreateWhenActive() {
-            when(evalTaskMapper.selectById(TASK_ID)).thenReturn(task(CYCLE_ID));
-            when(cycleMapper.selectById(CYCLE_ID)).thenReturn(cycle("ACTIVE"));
-            when(evaluationMapper.insert(any(Evaluation.class))).thenReturn(1);
-
-            service.create(new EvaluationCreateRequest(TASK_ID, 200002L, "{}", "评语"));
-
-            verify(evaluationMapper).insert(any(Evaluation.class));
         }
     }
 }

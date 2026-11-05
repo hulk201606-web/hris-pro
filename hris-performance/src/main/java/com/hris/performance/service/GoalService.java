@@ -3,6 +3,8 @@ package com.hris.performance.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hris.performance.dto.GoalDtos.GoalBatchItem;
+import com.hris.performance.dto.GoalDtos.GoalBatchSaveRequest;
 import com.hris.performance.dto.GoalDtos.GoalCreateRequest;
 import com.hris.performance.dto.GoalDtos.GoalResponse;
 import com.hris.performance.dto.GoalDtos.GoalUpdateRequest;
@@ -16,21 +18,19 @@ import com.hris.common.exception.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Goal 服务（CRUD）。
+ * Goal 服务（CRUD + 周期状态守卫 + 权重合计校验）。
  *
- * <p>周期锁守卫（§8.5-4）：所属考核周期 status 为 PUBLISHED/CLOSED 时，
- * 目标（create/update/delete）一律拒绝，防止结果发布后仍可篡改评价数据。</p>
+ * <p>PRF-F-002：目标仅 DRAFT/ACTIVE 可写，SCORING 起冻结、CLOSED 全锁。
+ * PRF-F-003：同周期 + 同员工 + 同维度权重合计口径见 {@link GoalWeightRule}；
+ * 批量提交（{@code cycleId:empId:dimension} 整组）先聚合校验再整体替换落库。</p>
  */
 @Service
 public class GoalService {
-
-    /** 周期锁定态：已发布 */
-    private static final String CYCLE_PUBLISHED = "PUBLISHED";
-    /** 周期锁定态：已关闭 */
-    private static final String CYCLE_CLOSED = "CLOSED";
 
     private final GoalMapper mapper;
     private final CycleMapper cycleMapper;
@@ -42,11 +42,7 @@ public class GoalService {
 
     /** 按主键查询单条记录，不存在抛 NOT_FOUND。 */
     public GoalResponse get(Long id) {
-        Goal e = mapper.selectById(id);
-        if (e == null) {
-            throw new BizException(ErrorCode.NOT_FOUND, "Goal 不存在");
-        }
-        return toResponse(e);
+        return toResponse(require(id));
     }
 
     /** 分页查询记录列表。 */
@@ -55,38 +51,53 @@ public class GoalService {
         List<GoalResponse> records = pg.getRecords().stream().map(this::toResponse).toList();
         return new PageResult<>(records, page, size, pg.getTotal());
     }
-    /** 新建记录，落库后返回响应；@Transactional 保证写入原子性。 */
 
+    /** 新建目标：状态守卫 + 权重不超配（增量录入允许合计 < 100）。 */
     @Transactional(rollbackFor = Exception.class)
     public GoalResponse create(GoalCreateRequest req) {
         ensureCycleWritable(req.cycleId());
+        String dimension = GoalWeightRule.normalizeDimension(req.dimension());
+        GoalWeightRule.requireSingleWeight(req.weight(), req.title());
+
+        BigDecimal existing = GoalWeightRule.sum(weightsOf(req.cycleId(), req.empId(), dimension, null));
+        GoalWeightRule.requireNotExceed(existing.add(req.weight()),
+                GoalWeightRule.scope(req.cycleId(), req.empId(), dimension));
+
         Goal e = new Goal();
         e.setCycleId(req.cycleId());
         e.setEmpId(req.empId());
         e.setTitle(req.title());
+        e.setDimension(dimension);
         e.setWeight(req.weight());
         e.setTargetValue(req.targetValue());
         e.setResultValue(req.resultValue());
         mapper.insert(e);
         return toResponse(e);
     }
-    /** 按主键更新记录，不存在抛 NOT_FOUND；乐观锁防并发覆盖。 */
 
+    /** 更新目标：原周期与新周期都做状态守卫，权重按"剔除自身后的合计 + 新值"校验。 */
     @Transactional(rollbackFor = Exception.class)
     public GoalResponse update(Long id, GoalUpdateRequest req) {
-        Goal e = mapper.selectById(id);
-        if (e == null) {
-            throw new BizException(ErrorCode.NOT_FOUND, "Goal 不存在");
-        }
-        // 原周期与新周期都要锁定检查（防止把目标挂到已锁周期）
+        Goal e = require(id);
+        Long cycleId = req.cycleId() == null ? e.getCycleId() : req.cycleId();
+        Long empId = req.empId() == null ? e.getEmpId() : req.empId();
         ensureCycleWritable(e.getCycleId());
-        if (req.cycleId() != null) {
-            ensureCycleWritable(req.cycleId());
-        }
-        e.setCycleId(req.cycleId());
-        e.setEmpId(req.empId());
-        e.setTitle(req.title());
-        e.setWeight(req.weight());
+        ensureCycleWritable(cycleId);
+
+        String dimension = GoalWeightRule.normalizeDimension(
+                req.dimension() == null ? e.getDimension() : req.dimension());
+        BigDecimal weight = req.weight() == null ? e.getWeight() : req.weight();
+        GoalWeightRule.requireSingleWeight(weight, req.title() == null ? e.getTitle() : req.title());
+
+        BigDecimal others = GoalWeightRule.sum(weightsOf(cycleId, empId, dimension, id));
+        GoalWeightRule.requireNotExceed(others.add(weight),
+                GoalWeightRule.scope(cycleId, empId, dimension));
+
+        e.setCycleId(cycleId);
+        e.setEmpId(empId);
+        e.setTitle(req.title() == null ? e.getTitle() : req.title());
+        e.setDimension(dimension);
+        e.setWeight(weight);
         e.setTargetValue(req.targetValue());
         e.setResultValue(req.resultValue());
         if (mapper.updateById(e) == 0) {
@@ -94,21 +105,62 @@ public class GoalService {
         }
         return toResponse(e);
     }
-    /** 按主键删除记录，不存在抛 NOT_FOUND。 */
 
+    /**
+     * 批量提交（整体替换）：对整组 items 先聚合校验合计 = 100，再删除该组旧目标并写入新集合，
+     * 全过程在同一事务内，避免"删了旧的、新的校验失败"导致数据丢失。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public List<GoalResponse> batchSave(GoalBatchSaveRequest req) {
+        ensureCycleWritable(req.cycleId());
+        String dimension = GoalWeightRule.normalizeDimension(req.dimension());
+        String scope = GoalWeightRule.scope(req.cycleId(), req.empId(), dimension);
+
+        List<GoalBatchItem> items = req.items() == null ? List.of() : req.items();
+        List<BigDecimal> weights = new ArrayList<>(items.size());
+        List<String> titles = new ArrayList<>(items.size());
+        for (GoalBatchItem item : items) {
+            if (item == null || item.title() == null || item.title().isBlank()) {
+                throw new BizException(ErrorCode.PARAM_INVALID, "目标条目不能为空（" + scope + "）");
+            }
+            weights.add(item.weight());
+            titles.add(item.title());
+        }
+        GoalWeightRule.requireBatchItems(weights, titles, scope);
+        GoalWeightRule.requireComplete(GoalWeightRule.sum(weights), scope);
+
+        mapper.delete(new LambdaQueryWrapper<Goal>()
+                .eq(Goal::getCycleId, req.cycleId())
+                .eq(Goal::getEmpId, req.empId())
+                .eq(Goal::getDimension, dimension));
+
+        List<GoalResponse> saved = new ArrayList<>(items.size());
+        for (GoalBatchItem item : items) {
+            Goal e = new Goal();
+            e.setCycleId(req.cycleId());
+            e.setEmpId(req.empId());
+            e.setTitle(item.title());
+            e.setDimension(dimension);
+            e.setWeight(item.weight());
+            e.setTargetValue(item.targetValue());
+            e.setResultValue(item.resultValue());
+            mapper.insert(e);
+            saved.add(toResponse(e));
+        }
+        return saved;
+    }
+
+    /** 删除目标：状态守卫同写路径。 */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        Goal e = mapper.selectById(id);
-        if (e == null) {
-            throw new BizException(ErrorCode.NOT_FOUND, "Goal 不存在");
-        }
+        Goal e = require(id);
         ensureCycleWritable(e.getCycleId());
         if (mapper.deleteById(id) == 0) {
             throw new BizException(ErrorCode.NOT_FOUND, "Goal 不存在");
         }
     }
 
-    /** 周期锁守卫：目标所属周期处于 PUBLISHED/CLOSED 时拒绝变更（租户条件由插件注入）。 */
+    /** 周期状态守卫：目标仅 DRAFT/ACTIVE 可写（租户条件由插件注入）。 */
     private void ensureCycleWritable(Long cycleId) {
         if (cycleId == null) {
             return;
@@ -117,14 +169,33 @@ public class GoalService {
         if (cycle == null) {
             return;
         }
-        String status = cycle.getStatus();
-        if (CYCLE_PUBLISHED.equals(status) || CYCLE_CLOSED.equals(status)) {
-            throw new BizException(ErrorCode.PRF_ERROR,
-                    "考核周期已发布或已关闭，禁止变更目标数据");
+        CycleStateMachine.requireGoalWritable(cycle.getStatus());
+    }
+
+    /** 取同组权重（excludeId 非空时排除该条，用于更新场景）。 */
+    private List<BigDecimal> weightsOf(Long cycleId, Long empId, String dimension, Long excludeId) {
+        if (cycleId == null || empId == null) {
+            return List.of();
         }
+        LambdaQueryWrapper<Goal> w = new LambdaQueryWrapper<Goal>()
+                .eq(Goal::getCycleId, cycleId)
+                .eq(Goal::getEmpId, empId)
+                .eq(Goal::getDimension, dimension);
+        if (excludeId != null) {
+            w.ne(Goal::getId, excludeId);
+        }
+        return mapper.selectList(w).stream().map(Goal::getWeight).toList();
+    }
+
+    private Goal require(Long id) {
+        Goal e = mapper.selectById(id);
+        if (e == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "Goal 不存在");
+        }
+        return e;
     }
 
     private GoalResponse toResponse(Goal e) {
-        return new GoalResponse(e.getId(), e.getCycleId(), e.getEmpId(), e.getTitle(), e.getWeight(), e.getTargetValue(), e.getResultValue(), e.getCreatedAt(), e.getUpdatedAt());
+        return new GoalResponse(e.getId(), e.getCycleId(), e.getEmpId(), e.getTitle(), e.getDimension(), e.getWeight(), e.getTargetValue(), e.getResultValue(), e.getCreatedAt(), e.getUpdatedAt());
     }
 }

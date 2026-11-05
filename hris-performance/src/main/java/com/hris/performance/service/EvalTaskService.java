@@ -21,16 +21,11 @@ import java.util.List;
 /**
  * EvalTask 服务（CRUD）。
  *
- * <p>周期锁守卫（§8.5-4）：所属考核周期 status 为 PUBLISHED/CLOSED 时，
- * 评价任务（create/update/delete）一律拒绝，防止结果发布后仍可篡改评价数据。</p>
+ * <p>周期状态守卫（PRF-F-002）：任务树仅 DRAFT/ACTIVE 可建可改（ACTIVE 启动时按方案圈人生成），
+ * SCORING 起冻结、CLOSED 全锁，防止评分阶段临时加任务或删任务。</p>
  */
 @Service
 public class EvalTaskService {
-
-    /** 周期锁定态：已发布 */
-    private static final String CYCLE_PUBLISHED = "PUBLISHED";
-    /** 周期锁定态：已关闭 */
-    private static final String CYCLE_CLOSED = "CLOSED";
 
     private final EvalTaskMapper mapper;
     private final CycleMapper cycleMapper;
@@ -104,7 +99,7 @@ public class EvalTaskService {
         }
     }
 
-    /** 周期锁守卫：任务所属周期处于 PUBLISHED/CLOSED 时拒绝变更（租户条件由插件注入）。 */
+    /** 周期状态守卫：任务所属周期非 DRAFT/ACTIVE 时拒绝变更（租户条件由插件注入）。 */
     private void ensureCycleWritable(Long cycleId) {
         if (cycleId == null) {
             return;
@@ -113,11 +108,7 @@ public class EvalTaskService {
         if (cycle == null) {
             return;
         }
-        String status = cycle.getStatus();
-        if (CYCLE_PUBLISHED.equals(status) || CYCLE_CLOSED.equals(status)) {
-            throw new BizException(ErrorCode.PRF_ERROR,
-                    "考核周期已发布或已关闭，禁止变更评价任务");
-        }
+        CycleStateMachine.requireTaskWritable(cycle.getStatus());
     }
 
     private EvalTaskResponse toResponse(EvalTask e) {
