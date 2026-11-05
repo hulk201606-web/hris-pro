@@ -8,6 +8,7 @@
  */
 import { get, post, put, del } from './http';
 import type { CatalogResponse, DeptNode, HeadcountUsage } from '../types/api';
+import type { HeadcountStructureResponse } from '../types/api-batch3';
 
 /* ---------------------------- 法人主体 ---------------------------- */
 
@@ -142,4 +143,14 @@ export function listHeadcountUsage(deptId?: number, period?: string): Promise<He
   if (deptId) params.deptId = deptId;
   if (period) params.period = period;
   return get<HeadcountUsage[]>('/org/headcounts/usage', params);
+}
+
+/* ---------------------------- 报表（二期批 3） ---------------------------- */
+
+/**
+ * 人力结构分析（GET /org/reports/headcount-structure，P1 聚合报表）。
+ * deptScope=top 一级部门滚动聚合（默认）；all 逐部门。
+ */
+export function getHeadcountStructure(deptScope: string): Promise<HeadcountStructureResponse> {
+  return get<HeadcountStructureResponse>('/org/reports/headcount-structure', { deptScope });
 }

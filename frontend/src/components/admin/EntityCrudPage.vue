@@ -11,7 +11,8 @@ import type { CrudApi, CrudColumn, CrudField, CrudRow } from '../../types/admin'
  * 通用分页 CRUD 页：列表 + 新建/编辑弹窗 + 删除确认。
  * - 列渲染类型（文本/标签/日期/数值）由 columns 声明；
  * - 表单控件类型（文本/数字/日期/下拉/多行）由 fields 声明；
- * - 行内额外操作通过 #rowActions 插槽注入（如 Offer 录用建档）。
+ * - 行内额外操作通过 #rowActions 插槽注入（如 Offer 录用建档）；
+ * - 页头额外按钮通过 #actions 插槽注入（如薪酬核算页跳转算薪监控）。
  */
 const props = defineProps<{
   title: string;
@@ -173,6 +174,7 @@ onMounted(load);
         <p v-if="subtitle" class="head-sub">{{ subtitle }}</p>
       </div>
       <a-space>
+        <slot name="actions" />
         <a-button @click="load">
           <template #icon><ReloadOutlined /></template>
           刷新

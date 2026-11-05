@@ -115,6 +115,30 @@ export const adminChildren: RouteRecordRaw[] = [
     meta: { title: '期间关账' },
   },
   {
+    path: 'compensation/pay-items',
+    name: 'AdminPayItems',
+    component: () => import('../views/admin/compensation/PayItemListView.vue'),
+    meta: { title: '薪资项管理' },
+  },
+  {
+    path: 'compensation/calc-monitor',
+    name: 'AdminCalcMonitor',
+    component: () => import('../views/admin/compensation/CalcMonitorView.vue'),
+    meta: { title: '算薪监控' },
+  },
+  {
+    path: 'compensation/formula-sandbox',
+    name: 'AdminFormulaSandbox',
+    component: () => import('../views/admin/compensation/FormulaSandboxView.vue'),
+    meta: { title: '公式沙箱' },
+  },
+  {
+    path: 'compensation/legal-entity-cost',
+    name: 'AdminLegalEntityCost',
+    component: () => import('../views/admin/compensation/LegalEntityCostView.vue'),
+    meta: { title: '多法人成本报表' },
+  },
+  {
     path: 'performance/cycles',
     name: 'AdminCycles',
     component: () => import('../views/admin/performance/CycleListView.vue'),
@@ -203,6 +227,12 @@ export const adminChildren: RouteRecordRaw[] = [
     name: 'AdminHeadcountBoard',
     component: () => import('../views/admin/org/HeadcountBoardView.vue'),
     meta: { title: '编制看板' },
+  },
+  {
+    path: 'org/headcount-structure',
+    name: 'AdminHeadcountStructure',
+    component: () => import('../views/admin/org/HeadcountStructureView.vue'),
+    meta: { title: '人力结构分析' },
   },
   {
     path: 'employee/roster',

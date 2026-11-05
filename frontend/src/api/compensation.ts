@@ -9,6 +9,15 @@ import { adminMock } from './admin-mock';
 import type { PageResult } from '../types/api';
 import type { EmployeePay, PayrollPreviewLine, PayrollRun } from '../types/admin';
 import type { PeriodLock } from '../types/api-batch2';
+import type {
+  CalcProgress,
+  CalcRunResponse,
+  CalcTask,
+  FormulaValidateResponse,
+  LegalEntityCostRow,
+  PayGroup,
+  PayItem,
+} from '../types/api-batch3';
 
 /* ---------------------------- 薪酬核算批次 ---------------------------- */
 
@@ -95,5 +104,69 @@ export function lockPeriod(periodCode: string): Promise<PeriodLock> {
 /** 期间解锁（POST /cmp/period-locks/{periodCode}/unlock）：reason 必填，落审计 */
 export function unlockPeriod(periodCode: string, reason: string): Promise<PeriodLock> {
   return post<PeriodLock>(`/cmp/period-locks/${encodeURIComponent(periodCode)}/unlock`, { reason });
+}
+
+/* ---------------------------- 薪酬组与薪资项（二期批 3） ---------------------------- */
+
+/** 分页查询薪酬组（GET /cmp/pay-groups，薪资项页过滤下拉用） */
+export function listPayGroups(page: number, size: number): Promise<PageResult<PayGroup>> {
+  return get<PageResult<PayGroup>>('/cmp/pay-groups', { page, size });
+}
+
+/** 按薪资组查询薪资项（GET /cmp/pay-items?payGroupId=，seq 升序含全局项） */
+export function listPayItems(payGroupId: number): Promise<PayItem[]> {
+  return get<PayItem[]>('/cmp/pay-items', { payGroupId });
+}
+
+/** 新建薪资项（POST /cmp/pay-items；公式过沙箱编译校验） */
+export function createPayItem(data: Record<string, unknown>): Promise<PayItem> {
+  return post<PayItem>('/cmp/pay-items', data);
+}
+
+/** 更新薪资项（PUT /cmp/pay-items/{id}；code/payGroupId 不可改） */
+export function updatePayItem(id: number, data: Record<string, unknown>): Promise<PayItem> {
+  return put<PayItem>(`/cmp/pay-items/${id}`, data);
+}
+
+/** 删除薪资项（DELETE /cmp/pay-items/{id}） */
+export function deletePayItem(id: number): Promise<void> {
+  return del<void>(`/cmp/pay-items/${id}`);
+}
+
+/* ---------------------------- 算薪执行与监控（二期批 3） ---------------------------- */
+
+/** 触发算薪（POST /cmp/payroll-runs/{id}/calculate，同步 MVP） */
+export function calculatePayrollRun(id: number): Promise<CalcRunResponse> {
+  return post<CalcRunResponse>(`/cmp/payroll-runs/${id}/calculate`);
+}
+
+/** 逐员工算薪任务列表（GET /cmp/payroll-runs/{id}/calc-tasks，可按 status 过滤） */
+export function listCalcTasks(runId: number, status?: string): Promise<CalcTask[]> {
+  return get<CalcTask[]>(`/cmp/payroll-runs/${runId}/calc-tasks`, status ? { status } : undefined);
+}
+
+/** 单人重算（POST /cmp/payroll-runs/{id}/calc-tasks/{empId}/retry，仅 FAILED/SKIPPED） */
+export function retryCalcTask(runId: number, empId: number): Promise<CalcTask> {
+  return post<CalcTask>(`/cmp/payroll-runs/${runId}/calc-tasks/${empId}/retry`);
+}
+
+/** 计算进度（GET /cmp/payroll-runs/{id}/calc-progress） */
+export function getCalcProgress(runId: number): Promise<CalcProgress> {
+  return get<CalcProgress>(`/cmp/payroll-runs/${runId}/calc-progress`);
+}
+
+/* ---------------------------- 公式沙箱与报表（二期批 3） ---------------------------- */
+
+/** 公式校验（POST /cmp/formulas/validate：编译 + 试算 + 白名单清单） */
+export function validateFormula(
+  formula: string,
+  sampleVars?: Record<string, unknown>,
+): Promise<FormulaValidateResponse> {
+  return post<FormulaValidateResponse>('/cmp/formulas/validate', { formula, sampleVars });
+}
+
+/** 多法人成本合并报表（GET /cmp/reports/legal-entity-cost?periodCode=） */
+export function legalEntityCostReport(periodCode: string): Promise<LegalEntityCostRow[]> {
+  return get<LegalEntityCostRow[]>('/cmp/reports/legal-entity-cost', { periodCode });
 }
 

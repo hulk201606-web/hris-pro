@@ -76,6 +76,12 @@ const MODULES: ModuleMeta[] = [
       { resource: 'employee-pay', route: '/admin/compensation/employee-pays', title: '员工薪酬' },
       // 期间关账权限复用 payroll-run 读写码（后端不设独立资源），故挂 payroll-run 资源键
       { resource: 'payroll-run', route: '/admin/compensation/period-locks', title: '期间关账' },
+      // 薪资项 / 算薪监控 / 公式沙箱 / 法人成本报表：端点权限见各自 Controller（cmp:pay-item:*
+      // 与 cmp:payroll-run:*），菜单显隐统一复用 payroll-run 资源键
+      { resource: 'payroll-run', route: '/admin/compensation/pay-items', title: '薪资项管理' },
+      { resource: 'payroll-run', route: '/admin/compensation/calc-monitor', title: '算薪监控' },
+      { resource: 'payroll-run', route: '/admin/compensation/formula-sandbox', title: '公式沙箱' },
+      { resource: 'payroll-run', route: '/admin/compensation/legal-entity-cost', title: '多法人成本报表' },
     ],
   },
   {
@@ -114,6 +120,8 @@ const MODULES: ModuleMeta[] = [
       { resource: 'grade-band', route: '/admin/org/bands', title: '职级带' },
       { resource: 'headcount', route: '/admin/org/headcounts', title: '编制管理' },
       { resource: 'headcount', route: '/admin/org/headcount-board', title: '编制看板' },
+      // 人力结构分析（P1 聚合报表）：后端端点挂 org:dept:read，菜单挂 dept 资源键
+      { resource: 'dept', route: '/admin/org/headcount-structure', title: '人力结构分析' },
     ],
   },
   {
