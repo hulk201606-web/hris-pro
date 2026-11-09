@@ -234,12 +234,14 @@ jobs:
       - name: Compose config validation
         run: |
           set -euo pipefail
-          cat > .env.ci <<EOF
+          # 分隔符加单引号：内容按字面写入，不做变量展开。
+          # 不加引号时，注释里出现的 ${...} 会被 set -u 判定为未定义变量并直接中断。
+          cat > .env.ci <<'EOF'
           DB_PASSWORD=ci-placeholder-password
           JWT_SECRET=ci-placeholder-secret-at-least-32-bytes
-          # 应用编排里的 DB_URL 是 jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/<库名> 直接拼接，
-          # 不注入时 compose 会把主机渲染成空串（jdbc:mysql://:3306/...），
-          # 校验就失去意义。这里给出容器网内 MySQL 的默认地址。
+          # 应用编排里的 DB_URL 由主机、端口与库名直接拼接，
+          # 不注入这两项时 compose 会把主机渲染成空串（形如 jdbc:mysql://:3306/...），
+          # 校验就失去意义。这里给出容器网络内 MySQL 的默认地址。
           DB_URL_HOST=mysql
           DB_URL_PORT=3306
           EOF
