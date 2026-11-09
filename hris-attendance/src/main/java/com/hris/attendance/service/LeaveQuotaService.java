@@ -89,7 +89,7 @@ public class LeaveQuotaService {
         if (amount.signum() <= 0) {
             throw new BizException(ErrorCode.PARAM_INVALID, "结转额度必须大于 0");
         }
-        BigDecimal limit = carryOverLimit(type);
+        BigDecimal limit = LeaveRuleSupport.carryOverLimit(type);
         if (amount.compareTo(limit) > 0) {
             throw new BizException(ErrorCode.ATT_ERROR, "结转额度超过上限 " + limit + " 天");
         }
@@ -130,7 +130,7 @@ public class LeaveQuotaService {
         List<LeaveQuota> quotas = quotaMapper.selectList(new LambdaQueryWrapper<LeaveQuota>()
                 .eq(LeaveQuota::getEmpId, empId)
                 .orderByAsc(LeaveQuota::getPeriod).orderByAsc(LeaveQuota::getLeaveTypeId));
-        Map<Long, LeaveType> types = loadTypes(quotas);
+        Map<Long, LeaveType> types = LeaveTypeLookup.forQuotas(leaveTypeService, quotas);
         List<LeaveQuotaResponse> items = quotas.stream()
                 .map(q -> toResponse(q, types.get(q.getLeaveTypeId())))
                 .toList();
@@ -148,7 +148,7 @@ public class LeaveQuotaService {
         }
         qw.orderByAsc(LeaveQuota::getPeriod).orderByAsc(LeaveQuota::getLeaveTypeId);
         List<LeaveQuota> quotas = quotaMapper.selectList(qw);
-        Map<Long, LeaveType> types = loadTypes(quotas);
+        Map<Long, LeaveType> types = LeaveTypeLookup.forQuotas(leaveTypeService, quotas);
         return quotas.stream().map(q -> toResponse(q, types.get(q.getLeaveTypeId()))).toList();
     }
 
@@ -163,7 +163,7 @@ public class LeaveQuotaService {
         }
         qw.orderByDesc(LeaveLedger::getCreatedAt).orderByDesc(LeaveLedger::getId);
         List<LeaveLedger> list = ledgerMapper.selectList(qw);
-        Map<Long, LeaveType> types = loadTypesByLedger(list);
+        Map<Long, LeaveType> types = LeaveTypeLookup.forLedgers(leaveTypeService, list);
         return list.stream()
                 .map(l -> new LeaveLedgerResponse(l.getId(), l.getEmpId(), l.getLeaveTypeId(),
                         types.get(l.getLeaveTypeId()) == null ? null
@@ -196,7 +196,7 @@ public class LeaveQuotaService {
         }
         qw.orderByDesc(LeaveLedger::getCreatedAt).orderByDesc(LeaveLedger::getId);
         Page<LeaveLedger> result = ledgerMapper.selectPage(p, qw);
-        Map<Long, LeaveType> types = loadTypesByLedger(result.getRecords());
+        Map<Long, LeaveType> types = LeaveTypeLookup.forLedgers(leaveTypeService, result.getRecords());
         List<LeaveLedgerResponse> records = result.getRecords().stream()
                 .map(l -> new LeaveLedgerResponse(l.getId(), l.getEmpId(), l.getLeaveTypeId(),
                         types.get(l.getLeaveTypeId()) == null ? null
@@ -278,26 +278,6 @@ public class LeaveQuotaService {
         ledgerMapper.insert(ledger);
     }
 
-    private Map<Long, LeaveType> loadTypes(List<LeaveQuota> quotas) {
-        List<Long> ids = quotas.stream().map(LeaveQuota::getLeaveTypeId).distinct().toList();
-        return loadTypesByIds(ids);
-    }
-
-    private Map<Long, LeaveType> loadTypesByLedger(List<LeaveLedger> ledgers) {
-        List<Long> ids = ledgers.stream().map(LeaveLedger::getLeaveTypeId).distinct().toList();
-        return loadTypesByIds(ids);
-    }
-
-    private Map<Long, LeaveType> loadTypesByIds(List<Long> ids) {
-        if (ids.isEmpty()) {
-            return Map.of();
-        }
-        Map<Long, LeaveType> map = new LinkedHashMap<>();
-        for (LeaveType t : leaveTypeService.listByIds(ids)) {
-            map.put(t.getId(), t);
-        }
-        return map;
-    }
 
     private LeaveQuotaResponse toResponse(LeaveQuota q, LeaveType type) {
         BigDecimal total = TimeAmountUtil.amount(q.getTotalQuota());
@@ -307,42 +287,4 @@ public class LeaveQuotaService {
                 total.subtract(used));
     }
 
-    /**
-     * 读取假种规则中的结转上限 rules.carryOverMax。
-     * MVP 不做完整 JSON 解析，仅按 "carryOverMax":数字 文本匹配，
-     * 缺失时用 MAX_CARRY_OVER_DAYS 兜底（完整规则引擎待二期落地，见 OPEN-DECISIONS）。
-     */
-    private BigDecimal carryOverLimit(LeaveType type) {
-        String rules = type.getRules();
-        if (rules == null || rules.isBlank()) {
-            return MAX_CARRY_OVER_DAYS;
-        }
-        String key = "\"carryOverMax\"";
-        int idx = rules.indexOf(key);
-        if (idx < 0) {
-            return MAX_CARRY_OVER_DAYS;
-        }
-        int colon = rules.indexOf(':', idx + key.length());
-        if (colon < 0) {
-            return MAX_CARRY_OVER_DAYS;
-        }
-        StringBuilder digits = new StringBuilder();
-        for (int i = colon + 1; i < rules.length(); i++) {
-            char c = rules.charAt(i);
-            if (c == '.' || (c >= '0' && c <= '9')) {
-                digits.append(c);
-            } else if (digits.length() > 0) {
-                break;
-            }
-        }
-        if (digits.length() == 0) {
-            return MAX_CARRY_OVER_DAYS;
-        }
-        try {
-            BigDecimal parsed = new BigDecimal(digits.toString());
-            return parsed.signum() < 0 ? MAX_CARRY_OVER_DAYS : parsed;
-        } catch (NumberFormatException e) {
-            return MAX_CARRY_OVER_DAYS;
-        }
-    }
 }

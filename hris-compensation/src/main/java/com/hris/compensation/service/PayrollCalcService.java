@@ -103,8 +103,8 @@ public class PayrollCalcService {
     public CalcRunResponse calcRun(Long runId) {
         PayrollRun run = requireRunnable(runId);
         periodLockService.ensurePeriodUnlocked(run.getPeriodCode());
-        List<PayItem> items = loadItems(run.getPayGroupId());
-        List<EmployeePay> empPays = loadEffectiveEmpPays(run.getPayGroupId(), run.getPeriodCode());
+        List<PayItem> items = PayrollCalcSupport.loadItems(payItemMapper, run.getPayGroupId());
+        List<EmployeePay> empPays = PayrollCalcSupport.loadEffectiveEmpPays(employeePayMapper, run.getPayGroupId(), run.getPeriodCode());
         AttendanceBriefFetcher.BriefResult att =
                 fetchAttendance(run.getPeriodCode(), empPays.stream().map(EmployeePay::getEmpId).toList());
         // CMP-F-011：租户开关「离职当日是否计薪」每批读取一次（配置中心 → 部署默认）
@@ -153,9 +153,9 @@ public class PayrollCalcService {
                 log.warn("异步算薪中止：run 已不存在 runId={}", runId);
                 return;
             }
-            List<PayItem> items = loadItems(run.getPayGroupId());
+            List<PayItem> items = PayrollCalcSupport.loadItems(payItemMapper, run.getPayGroupId());
             List<EmployeePay> empPays =
-                    loadEffectiveEmpPays(run.getPayGroupId(), run.getPeriodCode());
+                    PayrollCalcSupport.loadEffectiveEmpPays(employeePayMapper, run.getPayGroupId(), run.getPeriodCode());
             AttendanceBriefFetcher.BriefResult att =
                     fetchAttendance(run.getPeriodCode(), empPays.stream().map(EmployeePay::getEmpId).toList());
             // CMP-F-011：与同步路径同口径，异步批亦按租户开关折算
@@ -187,8 +187,8 @@ public class PayrollCalcService {
             throw new BizException(ErrorCode.CMP_ERROR,
                     "仅失败或跳过的任务可重试（当前 " + task.getStatus() + "）");
         }
-        List<PayItem> items = loadItems(run.getPayGroupId());
-        EmployeePay empPay = requireEffectiveEmpPay(run.getPayGroupId(), run.getPeriodCode(), empId);
+        List<PayItem> items = PayrollCalcSupport.loadItems(payItemMapper, run.getPayGroupId());
+        EmployeePay empPay = PayrollCalcSupport.requireEffectiveEmpPay(employeePayMapper, run.getPayGroupId(), run.getPeriodCode(), empId);
         AttendanceBriefFetcher.BriefResult att = fetchAttendance(run.getPeriodCode(), List.of(empId));
         return toTaskResponse(calcOne(run, items, empId, empPay, att,
                 calcConfigService.payTerminationDay()));
@@ -205,7 +205,7 @@ public class PayrollCalcService {
                              AttendanceBriefFetcher.BriefResult att, boolean payTerminationDay) {
         EmployeePay empPay;
         try {
-            empPay = requireEffectiveEmpPay(run.getPayGroupId(), run.getPeriodCode(), empId);
+            empPay = PayrollCalcSupport.requireEffectiveEmpPay(employeePayMapper, run.getPayGroupId(), run.getPeriodCode(), empId);
         } catch (BizException e) {
             return writer.upsertTask(run.getId(), empId, TASK_SKIPPED, e.getMessage(), null);
         }
@@ -219,7 +219,7 @@ public class PayrollCalcService {
             return writer.upsertTask(run.getId(), empId, TASK_SKIPPED, "无有效定薪金额", null);
         }
         try {
-            BigDecimal rawBase = parseAmount(empPay.getSalaryAmountCipher(),
+            BigDecimal rawBase = PayrollCalcSupport.parseAmount(empPay.getSalaryAmountCipher(),
                     "员工 " + empId + " 定薪金额无效");
             // CMP-F-011：入离职当日折算——入职当日恒计，离职当日由租户开关决定；
             // 折算窗口取定薪生效区间（cmp_employee_pay.effective_from/to），整月覆盖时原值直出。
@@ -237,7 +237,7 @@ public class PayrollCalcService {
                     JSON.writeValueAsString(results));
         } catch (Exception e) {
             log.warn("算薪失败: runId={}, empId={}", run.getId(), empId, e);
-            return writer.upsertTask(run.getId(), empId, TASK_FAILED, truncate(e.getMessage()), null);
+            return writer.upsertTask(run.getId(), empId, TASK_FAILED, PayrollCalcSupport.truncate(e.getMessage()), null);
         }
     }
 
@@ -254,45 +254,6 @@ public class PayrollCalcService {
     }
 
     /** 薪资组启用项（含全局 0=全局项），seq 升序；NET 缺失时自动补缺省项。 */
-    private List<PayItem> loadItems(Long payGroupId) {
-        List<PayItem> items = payItemMapper.selectList(new LambdaQueryWrapper<PayItem>()
-                .in(PayItem::getPayGroupId, List.of(payGroupId, 0L))
-                .eq(PayItem::getStatus, 1)
-                .orderByAsc(PayItem::getSeq).orderByAsc(PayItem::getId));
-        boolean hasNet = items.stream().anyMatch(i -> PayItem.CATEGORY_NET.equals(i.getCategory()));
-        if (!hasNet) {
-            PayItem net = new PayItem();
-            net.setCode("netPay");
-            net.setName("实发(缺省)");
-            net.setCategory(PayItem.CATEGORY_NET);
-            net.setSeq(Integer.MAX_VALUE);
-            items = new ArrayList<>(items);
-            items.add(net);
-        }
-        return items;
-    }
-
-    /** 现行有效定薪（effective_from <= 期间月末 且 effective_to 为空或 >= 期间月初）。 */
-    private List<EmployeePay> loadEffectiveEmpPays(Long payGroupId, String periodCode) {
-        YearMonth ym = YearMonth.parse(periodCode);
-        LocalDate periodStart = ym.atDay(1);
-        LocalDate periodEnd = ym.atEndOfMonth();
-        return employeePayMapper.selectList(new LambdaQueryWrapper<EmployeePay>()
-                .eq(EmployeePay::getPayGroupId, payGroupId)
-                .le(EmployeePay::getEffectiveFrom, periodEnd)
-                .and(w -> w.isNull(EmployeePay::getEffectiveTo)
-                        .or().ge(EmployeePay::getEffectiveTo, periodStart)));
-    }
-
-    private EmployeePay requireEffectiveEmpPay(Long payGroupId, String periodCode, Long empId) {
-        List<EmployeePay> pays = loadEffectiveEmpPays(payGroupId, periodCode).stream()
-                .filter(p -> p.getEmpId().equals(empId)).toList();
-        if (pays.isEmpty()) {
-            throw new BizException(ErrorCode.CMP_ERROR, "员工 " + empId + " 无现行有效定薪");
-        }
-        return pays.get(0);
-    }
-
     private PayrollRun requireRunnable(Long runId) {
         PayrollRun run = runMapper.selectById(runId);
         if (run == null) {
@@ -327,21 +288,4 @@ public class PayrollCalcService {
                 t.getError(), t.getItemsJson(), t.getCreatedAt(), t.getUpdatedAt());
     }
 
-    private BigDecimal parseAmount(String cipher, String errMsg) {
-        if (cipher == null || cipher.isBlank()) {
-            throw new BizException(ErrorCode.CMP_ERROR, errMsg);
-        }
-        try {
-            return new BigDecimal(cipher.trim());
-        } catch (NumberFormatException e) {
-            throw new BizException(ErrorCode.CMP_ERROR, errMsg);
-        }
-    }
-
-    private String truncate(String msg) {
-        if (msg == null || msg.isBlank()) {
-            return "算薪失败";
-        }
-        return msg.length() > 255 ? msg.substring(0, 255) : msg;
-    }
 }

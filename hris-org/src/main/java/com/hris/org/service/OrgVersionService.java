@@ -204,10 +204,10 @@ public class OrgVersionService {
                 new LambdaQueryWrapper<OrgGradeVersion>()
                         .eq(OrgGradeVersion::getVersionNo, versionNo));
         for (OrgPositionVersion row : positionRows) {
-            restorePosition(JsonUtil.toMap(row.getSnapshot()));
+            OrgVersionRestorer.restorePosition(positionMapper, positionDeptMapper, JsonUtil.toMap(row.getSnapshot()));
         }
         for (OrgGradeVersion row : gradeRows) {
-            restoreGrade(JsonUtil.toMap(row.getSnapshot()));
+            OrgVersionRestorer.restoreGrade(gradeMapper, JsonUtil.toMap(row.getSnapshot()));
         }
         stateService.activate(versionNo);
         LocalDate snapshotDate = positionRows.isEmpty()
@@ -222,66 +222,6 @@ public class OrgVersionService {
     private OrgVersionStatus normalized(String status) {
         OrgVersionStatus parsed = OrgVersionStatus.from(status);
         return parsed == null ? OrgVersionStatus.ACTIVE : parsed;
-    }
-
-    /** 恢复岗位主数据（含空值显式覆盖）与挂靠部门（先删后插）。 */
-    private void restorePosition(Map<String, Object> snap) {
-        long id = longOf(snap.get("id"));
-        String name = str(snap.get("name"));
-        String code = str(snap.get("code"));
-        Integer status = intOf(snap.get("status"));
-        String jobFamily = str(snap.get("jobFamily"));
-        if (positionMapper.selectById(id) == null) {
-            OrgPosition e = new OrgPosition();
-            e.setId(id);
-            e.setName(name);
-            e.setCode(code);
-            e.setStatus(status);
-            e.setJobFamily(jobFamily);
-            positionMapper.insert(e);
-        } else {
-            positionMapper.update(null, new UpdateWrapper<OrgPosition>()
-                    .eq("id", id)
-                    .set("name", name)
-                    .set("code", code)
-                    .set("status", status)
-                    .set("job_family", jobFamily));
-        }
-        positionDeptMapper.delete(new LambdaQueryWrapper<OrgPositionDept>()
-                .eq(OrgPositionDept::getPositionId, id));
-        if (snap.get("deptIds") instanceof List<?> deptIds) {
-            for (Object deptId : deptIds) {
-                OrgPositionDept rel = new OrgPositionDept();
-                rel.setPositionId(id);
-                rel.setDeptId(longOf(deptId));
-                positionDeptMapper.insert(rel);
-            }
-        }
-    }
-
-    /** 恢复职级主数据（含空值显式覆盖）。 */
-    private void restoreGrade(Map<String, Object> snap) {
-        long id = longOf(snap.get("id"));
-        String name = str(snap.get("name"));
-        String code = str(snap.get("code"));
-        Integer status = intOf(snap.get("status"));
-        Long gradeBandId = snap.get("gradeBandId") == null ? null : longOf(snap.get("gradeBandId"));
-        if (gradeMapper.selectById(id) == null) {
-            OrgGrade e = new OrgGrade();
-            e.setId(id);
-            e.setName(name);
-            e.setCode(code);
-            e.setStatus(status);
-            e.setGradeBandId(gradeBandId);
-            gradeMapper.insert(e);
-        } else {
-            gradeMapper.update(null, new UpdateWrapper<OrgGrade>()
-                    .eq("id", id)
-                    .set("name", name)
-                    .set("code", code)
-                    .set("status", status)
-                    .set("grade_band_id", gradeBandId));
-        }
     }
 
     private void insertVersion(String versionNo, LocalDate date, LocalDate effective, long bizId,

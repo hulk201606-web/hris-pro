@@ -238,37 +238,13 @@ public class TaskQueryService {
         return idx > 0 ? defId.substring(0, idx) : defId;
     }
 
-    /** 按流程定义 key 批量取最新版模型的 form_schema_json（死代码激活：前端可渲染表单）。 */
+    /** form_schema_json 与超时配置的批量加载，实现见 TaskViewSupport。 */
     private Map<String, String> formSchemaByKeys(java.util.Set<String> keys) {
-        Map<String, String> result = new java.util.HashMap<>();
-        for (String key : keys) {
-            if (key == null || key.isBlank()) {
-                continue;
-            }
-            List<FlowModel> models = flowModelMapper.selectList(new LambdaQueryWrapper<FlowModel>()
-                    .eq(FlowModel::getProcDefKey, key)
-                    .orderByDesc(FlowModel::getVersion)
-                    .last("limit 1"));
-            if (models != null && !models.isEmpty() && models.get(0).getFormSchemaJson() != null) {
-                result.put(key, models.get(0).getFormSchemaJson());
-            }
-        }
-        return result;
+        return TaskViewSupport.formSchemaByKeys(flowModelMapper, keys);
     }
 
-    /** 按流程定义 ID 批量取超时配置，key = procDefId#nodeId。 */
     private Map<String, TimeoutCfg> timeoutCfgByProcDefIds(List<String> procDefIds) {
-        if (procDefIds.isEmpty()) {
-            return Map.of();
-        }
-        List<TimeoutCfg> cfgs = timeoutCfgMapper.selectList(new LambdaQueryWrapper<TimeoutCfg>()
-                .in(TimeoutCfg::getProcDefId, procDefIds));
-        if (cfgs == null || cfgs.isEmpty()) {
-            return Map.of();
-        }
-        return cfgs.stream()
-                .filter(c -> c.getProcDefId() != null && c.getNodeId() != null)
-                .collect(Collectors.toMap(c -> c.getProcDefId() + "#" + c.getNodeId(), c -> c, (a, b) -> a));
+        return TaskViewSupport.timeoutCfgByProcDefIds(timeoutCfgMapper, procDefIds);
     }
 
     /** 超期判定：配置了超时时长（escalateAfterH 小时）且任务创建时间已超期（不做自动催办/升级）。 */

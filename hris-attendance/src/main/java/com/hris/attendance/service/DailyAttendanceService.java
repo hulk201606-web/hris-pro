@@ -87,7 +87,7 @@ public class DailyAttendanceService {
     public DailyComputeResult compute(DailyComputeRequest req) {
         LocalDate workDate = req.workDate();
         dailyCloseService.ensureNotClosed(workDate);
-        ensurePayrollNotClosed(workDate);
+        DailyAttendanceSupport.ensurePayrollNotClosed(cycleMapper, closingMapper, workDate);
         List<Long> empIds = req.empIds() == null || req.empIds().isEmpty()
                 ? resolveAssignedEmpIds(workDate)
                 : req.empIds();
@@ -153,17 +153,17 @@ public class DailyAttendanceService {
 
         Page<DailyAttendance> result = dailyMapper.selectPage(p, qw);
         List<DailyAttendanceResponse> records = result.getRecords().stream()
-                .map(this::toResponse).toList();
+                .map(DailyAttendanceSupport::toResponse).toList();
         return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     /** 单条日考勤明细。 */
     public DailyAttendanceResponse get(Long empId, LocalDate workDate) {
-        DailyAttendance daily = find(empId, workDate);
+        DailyAttendance daily = DailyAttendanceSupport.find(dailyMapper, empId, workDate);
         if (daily == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "该员工当日暂无考勤结果");
         }
-        return toResponse(daily);
+        return DailyAttendanceSupport.toResponse(daily);
     }
 
     /** 查询某周期内的日考勤（供月结与薪酬取数）。 */
@@ -242,57 +242,14 @@ public class DailyAttendanceService {
     public List<DailyAttendanceBriefItem> attendanceBrief(List<Long> empIds,
                                                           LocalDate periodStart,
                                                           LocalDate periodEnd) {
-        List<Long> ids = empIds == null ? List.of()
-                : empIds.stream().distinct().toList();
-        if (ids.isEmpty()) {
-            return List.of();
-        }
-        List<DailyAttendance> rows = dailyMapper.selectList(new LambdaQueryWrapper<DailyAttendance>()
-                .in(DailyAttendance::getEmpId, ids)
-                .ge(DailyAttendance::getWorkDate, periodStart)
-                .le(DailyAttendance::getWorkDate, periodEnd));
-        Map<Long, long[]> agg = new LinkedHashMap<>();
-        for (DailyAttendance row : rows) {
-            long[] counts = agg.computeIfAbsent(row.getEmpId(), k -> new long[2]);
-            if (AttendanceCalculator.STATUS_LATE.equals(row.getAttStatus())) {
-                counts[0]++;
-            }
-            if (AttendanceCalculator.STATUS_ABSENT.equals(row.getAttStatus())) {
-                counts[1]++;
-            }
-        }
-        return ids.stream()
-                .map(id -> {
-                    long[] counts = agg.getOrDefault(id, new long[2]);
-                    return new DailyAttendanceBriefItem(id, counts[0], counts[1]);
-                })
-                .toList();
-    }
-
-    /**
-     * 月结守卫（§8.5-5）：覆盖该日期的薪酬取数周期若已完成月结（DONE），
-     * 历史结果不可重算，差异一律走调整通道。
-     */
-    private void ensurePayrollNotClosed(LocalDate workDate) {
-        List<PayrollCycle> cycles = cycleMapper.selectList(new LambdaQueryWrapper<PayrollCycle>()
-                .le(PayrollCycle::getStartDate, workDate)
-                .ge(PayrollCycle::getEndDate, workDate));
-        for (PayrollCycle cycle : cycles) {
-            MonthlyClosing closing = closingMapper.selectOne(
-                    new LambdaQueryWrapper<MonthlyClosing>()
-                            .eq(MonthlyClosing::getPeriodCode, cycle.getPeriodCode())
-                            .last("LIMIT 1"));
-            if (closing != null && MonthlyClosingService.STATUS_DONE.equals(closing.getStatus())) {
-                throw new BizException(ErrorCode.ATT_ERROR, "月结已锁定，请走调整通道");
-            }
-        }
+        return DailyAttendanceSupport.attendanceBrief(dailyMapper, empIds, periodStart, periodEnd);
     }
 
     /** 落库：存在则更新，不存在则插入。 */
     private DailyAttendance upsert(Long empId, LocalDate workDate, LocalDateTime punchIn,
                                    LocalDateTime punchOut, BigDecimal leaveHours,
                                    BigDecimal overtimeHours, String status) {
-        DailyAttendance daily = find(empId, workDate);
+        DailyAttendance daily = DailyAttendanceSupport.find(dailyMapper, empId, workDate);
         boolean isNew = daily == null;
         if (isNew) {
             daily = new DailyAttendance();
@@ -333,17 +290,4 @@ public class DailyAttendanceService {
         return assignment == null ? null : shiftService.require(assignment.getShiftId());
     }
 
-    private DailyAttendance find(Long empId, LocalDate workDate) {
-        return dailyMapper.selectOne(new LambdaQueryWrapper<DailyAttendance>()
-                .eq(DailyAttendance::getEmpId, empId)
-                .eq(DailyAttendance::getWorkDate, workDate)
-                .last("LIMIT 1"));
-    }
-
-    private DailyAttendanceResponse toResponse(DailyAttendance d) {
-        return new DailyAttendanceResponse(d.getId(), d.getEmpId(), d.getWorkDate(),
-                d.getEmploymentId(), d.getAttStatus(), d.getPunchIn(), d.getPunchOut(),
-                TimeAmountUtil.amount(d.getLeaveHours()),
-                TimeAmountUtil.amount(d.getOvertimeHours()), d.getUpdatedAt());
-    }
 }

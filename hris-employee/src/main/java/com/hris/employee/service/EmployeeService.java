@@ -57,6 +57,10 @@ public class EmployeeService {
     private final EmploymentService employmentService;
     private final ProfileService profileService;
     private final EmployeeStateMachine stateMachine;
+    /** 花名册查询/档案组装/变更落账（拆分自本类，构造器内实例化，保持外部构造器签名 7 参不变）。 */
+    private final EmployeeRosterQuery rosterQuery;
+    private final EmployeeProfileAssembler assembler;
+    private final EmployeeProfileChangeApplier changeApplier;
 
     public EmployeeService(EmployeeMapper employeeMapper, EmploymentMapper employmentMapper,
                            EmpChangeAuditService changeAuditService, EmpNoService empNoService,
@@ -68,6 +72,10 @@ public class EmployeeService {
         this.employmentService = employmentService;
         this.profileService = profileService;
         this.stateMachine = stateMachine;
+        this.rosterQuery = new EmployeeRosterQuery(employeeMapper, employmentMapper);
+        this.assembler = new EmployeeProfileAssembler(employmentService, profileService);
+        this.changeApplier = new EmployeeProfileChangeApplier(employeeMapper, employmentMapper,
+                changeAuditService, employmentService);
     }
 
     /** 建档（状态=待入职）。 */
@@ -78,7 +86,7 @@ public class EmployeeService {
         e.setName(req.name());
         e.setCertType(req.certType() == null || req.certType().isBlank() ? "ID_CARD" : req.certType());
         e.setCertNoCipher(req.certNo());
-        e.setCertNoHash(hashCertNo(req.certNo()));
+        e.setCertNoHash(EmployeeIdentitySupport.hashCertNo(req.certNo()));
         e.setCertNoMask(MaskUtil.maskCertNo(req.certNo()));
         e.setMobileCipher(req.mobile());
         e.setMobileMask(MaskUtil.maskMobile(req.mobile()));
@@ -89,54 +97,40 @@ public class EmployeeService {
         e.setBlacklisted(0);
         employeeMapper.insert(e);
         profileService.replace(e.getId(), req.educations(), req.works(), req.families(), req.emergencies());
-        changeAuditService.record(e.getId(), "CREATE", null, snapshot(e), "建档");
+        changeAuditService.record(e.getId(), "CREATE", null, EmployeeIdentitySupport.snapshot(e), "建档");
         return get(e.getId());
     }
 
-    /** 花名册多维筛选 + 分页（EMP-F-022）。 */
+    /** 花名册多维筛选 + 分页（EMP-F-022），实现见 {@link EmployeeRosterQuery}。 */
     public PageResult<EmployeeBrief> roster(String name, String empNo, Integer status, Long deptId,
                                             Long positionId, String hireType, long page, long size) {
-        List<Long> empIds = resolveEmpIdsByEmployment(deptId, positionId, hireType);
-        if (empIds != null && empIds.isEmpty()) {
-            return new PageResult<>(List.of(), page, size, 0);
-        }
-        Page<Employee> p = new Page<>(page, size);
-        LambdaQueryWrapper<Employee> qw = new LambdaQueryWrapper<>();
-        if (empIds != null) {
-            qw.in(Employee::getId, empIds);
-        }
-        if (name != null && !name.isBlank()) {
-            qw.like(Employee::getName, name);
-        }
-        if (empNo != null && !empNo.isBlank()) {
-            qw.eq(Employee::getEmpNo, empNo);
-        }
-        if (status != null) {
-            qw.eq(Employee::getStatus, status);
-        }
-        qw.orderByDesc(Employee::getId);
-        Page<Employee> result = employeeMapper.selectPage(p, qw);
+        return rosterQuery.roster(name, empNo, status, deptId, positionId, hireType, page, size);
+    }
 
-        Map<Long, Employment> empMap = batchCurrentEmployments(result.getRecords());
-        List<EmployeeBrief> briefs = result.getRecords().stream()
-                .map(e -> toBrief(e, empMap.get(e.getId())))
-                .toList();
-        return new PageResult<>(briefs, result.getCurrent(), result.getSize(), result.getTotal());
+    /** 关键信息变更审批通过后落账（EMP_PROFILE_CHG 回调），实现见 {@link EmployeeProfileChangeApplier}。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void applyProfileChange(Long empId, Map<String, Object> changes, String reason) {
+        changeApplier.apply(empId, changes, reason);
+    }
+
+    /** 取员工实体，不存在抛 NOT_FOUND。 */
+    private Employee require(Long id) {
+        return EmployeeIdentitySupport.require(employeeMapper, id);
     }
 
     /** 档案详情（默认脱敏）。 */
     public EmployeeProfileResponse get(Long id) {
         Employee e = require(id);
-        return toProfile(e, false);
+        return assembler.toProfile(e, false);
     }
 
     /** 档案更新（敏感字段变更落 diff 审计 EMP-F-020）。 */
     @Transactional(rollbackFor = Exception.class)
     public EmployeeProfileResponse update(Long id, EmployeeUpdateRequest req) {
         Employee e = require(id);
-        Map<String, Object> before = snapshot(e);
-        applySensitiveChange(e, "cert_no", e.getCertNoCipher(), req.certNo());
-        applySensitiveChange(e, "mobile", e.getMobileCipher(), req.mobile());
+        Map<String, Object> before = EmployeeIdentitySupport.snapshot(e);
+        EmployeeIdentitySupport.applySensitiveChange(e, "cert_no", e.getCertNoCipher(), req.certNo());
+        EmployeeIdentitySupport.applySensitiveChange(e, "mobile", e.getMobileCipher(), req.mobile());
         if (req.name() != null && !req.name().isBlank()) {
             e.setName(req.name());
         }
@@ -153,60 +147,11 @@ public class EmployeeService {
             e.setCertType(req.certType());
         }
         employeeMapper.updateById(e);
-        changeAuditService.record(id, "UPDATE", before, snapshot(e), null);
+        changeAuditService.record(id, "UPDATE", before, EmployeeIdentitySupport.snapshot(e), null);
         profileService.replace(id, req.educations(), req.works(), req.families(), req.emergencies());
         return get(id);
     }
 
-    /**
-     * 关键信息变更审批通过后落账（EMP_PROFILE_CHG 回调）。
-     *
-     * <p>与 update 共用 diff 采集：证件的密文/哈希/掩码三列同写，手机号走原
-     * TypeHandler 密文列；hireType 落在现行雇佣关系上。未知字段忽略，避免回调
-     * 载荷夹带任意列写入。</p>
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void applyProfileChange(Long empId, Map<String, Object> changes, String reason) {
-        Employee e = require(empId);
-        Map<String, Object> before = snapshot(e);
-        String certNo = text(changes.get("certNo"));
-        String mobile = text(changes.get("mobile"));
-        applySensitiveChange(e, "cert_no", e.getCertNoCipher(), certNo);
-        applySensitiveChange(e, "mobile", e.getMobileCipher(), mobile);
-        String name = text(changes.get("name"));
-        if (name != null && !name.isBlank()) {
-            e.setName(name);
-        }
-        if (changes.containsKey("certType")) {
-            e.setCertType(text(changes.get("certType")));
-        }
-        if (changes.containsKey("email")) {
-            e.setEmail(text(changes.get("email")));
-        }
-        if (changes.containsKey("address")) {
-            e.setAddress(text(changes.get("address")));
-        }
-        employeeMapper.updateById(e);
-        changeAuditService.record(empId, "PROFILE_CHANGE_APPROVED", before, snapshot(e), reason);
-        // 银行卡落库归薪酬域（cmp_employee_pay.bank_account_cipher），emp 无对应列：
-        // 审批通过的变更至少留一条脱敏审计，避免「批了但无痕迹」。
-        String bankAccount = text(changes.get("bankAccount"));
-        if (bankAccount != null && !bankAccount.isBlank()) {
-            changeAuditService.record(empId, "PROFILE_CHANGE_APPROVED",
-                    Map.of("bankAccount", ""), Map.of("bankAccount", bankAccount), reason);
-        }
-        String hireType = text(changes.get("hireType"));
-        if (hireType != null && !hireType.isBlank()) {
-            Employment current = employmentService.current(empId);
-            if (current != null) {
-                Map<String, Object> empBefore = Map.of("hireType", current.getHireType());
-                current.setHireType(hireType);
-                employmentMapper.updateById(current);
-                changeAuditService.record(empId, "PROFILE_CHANGE_APPROVED",
-                        empBefore, Map.of("hireType", hireType), reason);
-            }
-        }
-    }
 
     /** 教育经历分签独立整体替换（EMP-F-001：null 保留旧数据，空列表清空该域）。 */
     @Transactional(rollbackFor = Exception.class)
@@ -255,7 +200,7 @@ public class EmployeeService {
         }
         String plain = certNo.trim();
         LambdaQueryWrapper<Employee> qw = new LambdaQueryWrapper<>();
-        qw.eq(Employee::getCertNoHash, hashCertNo(plain))
+        qw.eq(Employee::getCertNoHash, EmployeeIdentitySupport.hashCertNo(plain))
                 .or(nested -> nested.isNull(Employee::getCertNoHash).eq(Employee::getCertNoCipher, plain));
         qw.orderByDesc(Employee::getId);
         List<Employee> hits = employeeMapper.selectList(qw);
@@ -308,136 +253,4 @@ public class EmployeeService {
         return m;
     }
 
-    /** 证件号哈希：SHA-256 小写十六进制（等值查重键，生产者路径唯一化）。 */
-    private String hashCertNo(String certNo) {
-        if (certNo == null || certNo.isBlank()) {
-            return null;
-        }
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(certNo.trim().getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
-    }
-
-    private Employee require(Long id) {
-        Employee e = employeeMapper.selectById(id);
-        if (e == null) {
-            throw new BizException(ErrorCode.NOT_FOUND, "员工不存在");
-        }
-        return e;
-    }
-
-    /** 更新敏感列的密文/哈希/掩码（审计由 changeAuditService 统一按 diff 落库）。 */
-    private void applySensitiveChange(Employee e, String field, String currentCipher, String newPlain) {
-        if (newPlain == null || newPlain.isBlank()) {
-            return;
-        }
-        if (newPlain.equals(currentCipher)) {
-            return;
-        }
-        if ("cert_no".equals(field)) {
-            e.setCertNoCipher(newPlain);
-            e.setCertNoHash(hashCertNo(newPlain));
-            e.setCertNoMask(MaskUtil.maskCertNo(newPlain));
-        } else {
-            e.setMobileCipher(newPlain);
-            e.setMobileMask(MaskUtil.maskMobile(newPlain));
-        }
-    }
-
-    /** 关键字段快照（diff 采集用；明文只在内存中比较，落审计前由 EmpDiffUtil 脱敏）。 */
-    private Map<String, Object> snapshot(Employee e) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("name", e.getName());
-        m.put("cert_no", e.getCertNoCipher());
-        m.put("cert_type", e.getCertType());
-        m.put("mobile", e.getMobileCipher());
-        m.put("email", e.getEmail());
-        m.put("address", e.getAddress());
-        return m;
-    }
-
-    private String text(Object v) {
-        return v == null ? null : String.valueOf(v);
-    }
-
-    private List<Long> resolveEmpIdsByEmployment(Long deptId, Long positionId, String hireType) {
-        if (deptId == null && positionId == null && (hireType == null || hireType.isBlank())) {
-            return null;
-        }
-        LambdaQueryWrapper<Employment> ew = new LambdaQueryWrapper<Employment>()
-                .eq(Employment::getStatus, 1)
-                .isNull(Employment::getEffectiveTo);
-        if (deptId != null) {
-            ew.eq(Employment::getDeptId, deptId);
-        }
-        if (positionId != null) {
-            ew.eq(Employment::getPositionId, positionId);
-        }
-        if (hireType != null && !hireType.isBlank()) {
-            ew.eq(Employment::getHireType, hireType);
-        }
-        return employmentMapper.selectList(ew).stream().map(Employment::getEmpId).toList();
-    }
-
-    private Map<Long, Employment> batchCurrentEmployments(List<Employee> rows) {
-        if (rows.isEmpty()) {
-            return Map.of();
-        }
-        List<Long> ids = rows.stream().map(Employee::getId).toList();
-        List<Employment> list = employmentMapper.selectList(new LambdaQueryWrapper<Employment>()
-                .in(Employment::getEmpId, ids)
-                .eq(Employment::getStatus, 1)
-                .isNull(Employment::getEffectiveTo));
-        return list.stream().collect(Collectors.toMap(Employment::getEmpId, Function.identity(), (a, b) -> a));
-    }
-
-    private EmployeeBrief toBrief(Employee e, Employment emp) {
-        return new EmployeeBrief(e.getId(), e.getEmpNo(), e.getName(), e.getGender(),
-                e.getStatus(), statusLabel(e.getStatus()), e.getBlacklisted(),
-                e.getCertNoMask(), e.getMobileMask(), e.getEmail(),
-                emp == null ? null : emp.getDeptId(),
-                emp == null ? null : emp.getPositionId(),
-                emp == null ? null : emp.getHireType(),
-                emp == null ? null : emp.getSupervisorEmpId());
-    }
-
-    private EmployeeProfileResponse toProfile(Employee e, boolean sensitive) {
-        Employment emp = employmentService.current(e.getId());
-        ProfileService.ProfileSnapshot ps = profileService.load(e.getId());
-        return new EmployeeProfileResponse(
-                e.getId(), e.getEmpNo(), e.getName(), e.getGender(), e.getBirthDate(), e.getEmail(),
-                e.getStatus(), statusLabel(e.getStatus()), e.getBlacklisted(),
-                e.getCertNoMask(), e.getMobileMask(),
-                sensitive ? e.getCertNoCipher() : null,
-                sensitive ? e.getMobileCipher() : null,
-                emp == null ? null : new EmploymentInfo(emp.getLegalEntityId(), emp.getDeptId(),
-                        emp.getPositionId(), emp.getGradeId(), emp.getHireType(),
-                        emp.getSupervisorEmpId(), emp.getEffectiveFrom()),
-                visibleGroup(ps.educations(), PERM_PROFILE_READ_EDUCATION),
-                visibleGroup(ps.works(), PERM_PROFILE_READ_WORK),
-                visibleGroup(ps.families(), PERM_PROFILE_READ_FAMILY),
-                visibleGroup(ps.emergencies(), PERM_PROFILE_READ_EMERGENCY));
-    }
-
-    /**
-     * 字段组权限过滤（EMP-F-001 字段分组权限）：当前用户无该组权限码时整组返回空集合（脱敏兜底）。
-     * 权限上下文缺失（内部调度/系统调用）同样视为无权限，宁可不发不可多发。
-     */
-    private <T> List<T> visibleGroup(List<T> list, String perm) {
-        return hasPerm(perm) ? list : List.of();
-    }
-
-    private boolean hasPerm(String perm) {
-        java.util.Set<String> perms = AuthContextHolder.getPerms();
-        return perms != null && perms.contains(perm);
-    }
-
-    private String statusLabel(Integer code) {
-        EmployeeStatus s = EmployeeStatus.fromCode(code);
-        return s == null ? null : s.getLabel();
-    }
 }

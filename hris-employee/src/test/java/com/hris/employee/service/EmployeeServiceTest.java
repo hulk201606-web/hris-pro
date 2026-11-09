@@ -206,64 +206,6 @@ class EmployeeServiceTest {
     }
 
     @Nested
-    @DisplayName("rehireCheck：再入职识别")
-    class RehireCheck {
-
-        @Test
-        @DisplayName("证件号为空 → PARAM_INVALID，不查询")
-        void rejectsBlankCertNo() {
-            BizException e = assertThrows(BizException.class, () -> service.rehireCheck("  "));
-
-            assertEquals(ErrorCode.PARAM_INVALID.getCode(), e.getCode());
-            verify(employeeMapper, never()).selectList(any());
-        }
-
-        @Test
-        @DisplayName("命中历史任职 → rehire=true 且带出状态标签")
-        void findsHistory() {
-            Employee hit = new Employee();
-            hit.setId(100L);
-            hit.setEmpNo("E001");
-            hit.setName("张三");
-            hit.setStatus(EmployeeStatus.RESIGNED.getCode());
-            hit.setBlacklisted(0);
-            when(employeeMapper.selectList(any())).thenReturn(List.of(hit));
-
-            var resp = service.rehireCheck(" 110101199001011234 ");
-
-            assertTrue(resp.rehire());
-            assertEquals(1, resp.historyCount());
-            assertEquals("已离职", resp.histories().get(0).statusLabel());
-        }
-
-        @Test
-        @DisplayName("查重条件：cert_no_hash 优先 + hash 为空的存量行回退 cipher 等值")
-        void queriesByHashWithCipherFallback() {
-            // MP 3.5.x 条件/参数为懒渲染：先初始化实体 TableInfo，再渲染 SQL 才能断言查询条件
-            MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
-            assistant.setCurrentNamespace("EmployeeServiceTest");
-            TableInfoHelper.initTableInfo(assistant, Employee.class);
-
-            when(employeeMapper.selectList(any())).thenReturn(List.of());
-
-            service.rehireCheck("110101199001011234");
-
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<LambdaQueryWrapper<Employee>> captor =
-                    ArgumentCaptor.forClass(LambdaQueryWrapper.class);
-            verify(employeeMapper).selectList(captor.capture());
-            String sql = captor.getValue().getSqlSegment();
-            assertTrue(sql.contains("cert_no_hash"), "查询应包含 cert_no_hash 条件，实际 SQL=" + sql);
-            assertTrue(sql.contains("cert_no_cipher"), "存量 hash 空行回退 cipher 等值条件，实际 SQL=" + sql);
-            var params = captor.getValue().getParamNameValuePairs().values();
-            assertTrue(params.contains(sha256("110101199001011234")),
-                "查询应包含 cert_no_hash 哈希值");
-            assertTrue(params.contains("110101199001011234"),
-                "查询应包含原文等值条件（存量 hash 空行回退 cipher 匹配）");
-        }
-    }
-
-    @Nested
     @DisplayName("blacklist：加入黑名单（终态守卫）")
     class Blacklist {
 

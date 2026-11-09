@@ -182,11 +182,11 @@ onMounted(load);
 }
 
 .change {
-  color: #389e0d;
+  color: var(--color-success);
 }
 
 .change.negative {
-  color: #cf1322;
+  color: var(--color-error);
 }
 
 .fallback {

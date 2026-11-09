@@ -25,6 +25,10 @@
   --color-border: hsl(220 18% 91%);
   --color-border-strong: hsl(220 18% 84%);
 
+  /* ---- 色彩 · 状态语义色（正向/负向数值着色，组件内一律 var(--xxx) 引用） ---- */
+  --color-success: hsl(102 85% 34%);
+  --color-error: hsl(355 83% 44%);
+
   /* ---- 间距 · 8px 栅格 ---- */
   --space-1: 4px;
   --space-2: 8px;

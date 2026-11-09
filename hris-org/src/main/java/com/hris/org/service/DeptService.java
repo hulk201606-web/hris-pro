@@ -41,8 +41,6 @@ import java.util.Map;
 @Service
 public class DeptService {
 
-    private static final int MAX_DEPTH = 8;
-
     private final OrgDeptMapper deptMapper;
     private final OrgDeptHistoryMapper deptHistoryMapper;
     private final OrgAdjustmentSnapshotMapper adjustmentSnapshotMapper;
@@ -50,6 +48,8 @@ public class DeptService {
     private final EmployeeClient employeeClient;
     private final OrgHeadcountMapper headcountMapper;
     private final OrgHcOccupancyMapper occupancyMapper;
+    /** 组织调整申请落单/回调（拆分自本类，构造器内实例化，保持外部构造器签名 7 参不变）。 */
+    private final DeptAdjustService adjustService;
 
     public DeptService(OrgDeptMapper deptMapper, OrgDeptHistoryMapper deptHistoryMapper,
                        OrgAdjustmentSnapshotMapper adjustmentSnapshotMapper,
@@ -62,6 +62,7 @@ public class DeptService {
         this.employeeClient = employeeClient;
         this.headcountMapper = headcountMapper;
         this.occupancyMapper = occupancyMapper;
+        this.adjustService = new DeptAdjustService(adjustmentSnapshotMapper, flowIntegration);
     }
 
     /** 部门树/列表查询（tree=true 返回嵌套树，否则返回扁平当前生效部门）。 */
@@ -72,8 +73,8 @@ public class DeptService {
                 .le(OrgDept::getEffectiveFrom, today)
                 .and(w -> w.isNull(OrgDept::getEffectiveTo).or().ge(OrgDept::getEffectiveTo, today))
                 .orderByAsc(OrgDept::getPath));
-        List<DeptNode> nodes = depts.stream().map(this::toNode).toList();
-        return asTree ? buildTree(nodes) : nodes;
+        List<DeptNode> nodes = depts.stream().map(DeptTreeAssembler::toNode).toList();
+        return asTree ? DeptTreeAssembler.buildTree(nodes) : nodes;
     }
 
     /**
@@ -83,15 +84,15 @@ public class DeptService {
     @Transactional(rollbackFor = Exception.class)
     public DeptNode create(DeptRequest req) {
         long parentId = req.parentId() == null ? 0L : req.parentId();
-        OrgDept parent = loadParent(parentId);
+        OrgDept parent = DeptValidator.loadParent(deptMapper, parentId);
         if (parent != null) {
-            validateDepth(parent);
+            DeptValidator.validateDepth(parent);
         }
         String code = CodeUtil.normalize(req.code());
         if (code == null || code.isBlank()) {
             code = CodeUtil.next("d");
         }
-        ensureCodeAvailable(code);
+        DeptValidator.ensureCodeAvailable(deptMapper, code);
 
         Long id = IdWorker.getId();
         String path = parent == null ? String.valueOf(id) : parent.getPath() + "." + id;
@@ -107,7 +108,7 @@ public class DeptService {
         dept.setEffectiveTo(req.effectiveTo());
         dept.setStatus(req.status() == null ? 1 : req.status());
         deptMapper.insert(dept);
-        return toNode(dept);
+        return DeptTreeAssembler.toNode(dept);
     }
 
     /**
@@ -120,12 +121,12 @@ public class DeptService {
         if (dept == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "部门不存在");
         }
-        writeSnapshot(dept);
+        DeptSnapshotSupport.writeSnapshot(deptHistoryMapper, dept);
 
         if (req.parentId() != null && !req.parentId().equals(dept.getParentId())) {
-            OrgDept parent = loadParent(req.parentId());
+            OrgDept parent = DeptValidator.loadParent(deptMapper, req.parentId());
             if (parent != null) {
-                validateDepth(parent);
+                DeptValidator.validateDepth(parent);
                 dept.setPath(parent.getPath() + "." + dept.getId());
             } else {
                 dept.setPath(String.valueOf(dept.getId()));
@@ -149,7 +150,7 @@ public class DeptService {
             dept.setStatus(req.status());
         }
         deptMapper.updateById(dept);
-        return toNode(dept);
+        return DeptTreeAssembler.toNode(dept);
     }
 
     /** 历史快照查询（at 为空取最新）。org_dept_history 已回归纯历史语义（B-7 根治后申请单落独立表），无需过滤。 */
@@ -170,159 +171,24 @@ public class DeptService {
         if (dept == null) {
             throw new BizException(ErrorCode.NOT_FOUND, "部门不存在");
         }
-        Map<String, Object> snap = snapshotMap(dept);
+        Map<String, Object> snap = DeptSnapshotSupport.snapshotMap(dept);
         snap.put("deptId", id);
         snap.put("snapshotDate", date.toString());
         return snap;
     }
-
-    /**
-     * 组织调整申请：落单 + 预留 flow 调用（MVP 降级不阻断）。
-     * 申请单落独立表 org_adjustment_snapshot（B-7 根治，OPEN-DECISIONS 登记），不写 org_dept_history。
-     */
+    /** 组织调整申请：落单 + 预留 flow 调用（MVP 降级不阻断），申请单落独立表 org_adjustment_snapshot。 */
     @Transactional(rollbackFor = Exception.class)
     public AdjustRequestResponse adjust(AdjustRequestCreate req) {
-        long adjustmentId = IdWorker.getId();
-        String bizKey = "ORG_ADJUST:" + adjustmentId;
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("action", req.action());
-        payload.put("deptId", req.deptId());
-        payload.put("name", req.payload().name());
-        payload.put("code", req.payload().code());
-        payload.put("parentId", req.payload().parentId());
-        payload.put("managerEmpId", req.payload().managerEmpId());
-        payload.put("effectiveFrom", req.payload().effectiveFrom() == null
-                ? null : req.payload().effectiveFrom().toString());
-        payload.put("effectiveTo", req.payload().effectiveTo() == null
-                ? null : req.payload().effectiveTo().toString());
-
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("kind", "ORG_ADJUST_REQUEST");
-        snapshot.put("bizKey", bizKey);
-        snapshot.put("action", req.action());
-        snapshot.put("deptId", req.deptId());
-        snapshot.put("payload", payload);
-        snapshot.put("reason", req.reason());
-        snapshot.put("status", "PENDING");
-        snapshot.put("flowInstanceId", null);
-
-        OrgAdjustmentSnapshot record = new OrgAdjustmentSnapshot();
-        record.setAdjustmentId(adjustmentId);
-        record.setDeptId(req.deptId() == null ? 0L : req.deptId());
-        record.setSnapshotJson(JsonUtil.toJson(snapshot));
-        adjustmentSnapshotMapper.insert(record);
-
-        Map<String, Object> flowReq = new LinkedHashMap<>();
-        flowReq.put("bizType", "ORG_ADJUST");
-        flowReq.put("bizKey", bizKey);
-        flowReq.put("payload", payload);
-        String flowInstanceId = flowIntegration.startOrgAdjust(flowReq);
-
-        return new AdjustRequestResponse(bizKey, "PENDING", flowInstanceId);
+        return adjustService.adjust(req);
     }
 
     /**
-     * 审批结果回调（flow → org，docs/19 §8.7-1）：幂等更新 ORG_ADJUST 申请单状态。
-     * 申请单以 org_adjustment_snapshot 独立表承载（B-7 根治），按 bizKey 解析 adjustment_id 定位，
-     * 非 PENDING 视为重复回调直接返回 changed=false；审批通过且 payload 含结构化变更动作
-     * （CREATE/UPDATE + name）时应用变更。回调调用方须先在 TraceContext 还原租户（内部端点负责）。
+     * 审批结果回调（flow → org，docs/19 §8.7-1）：幂等更新申请单状态，
+     * 审批通过且 payload 含结构化变更（CREATE/UPDATE + name）时经 create/update 应用变更。
      */
     @Transactional(rollbackFor = Exception.class)
     public ApprovalCallbackResponse handleAdjustCallback(String bizKey, boolean approved, String comment) {
-        OrgAdjustmentSnapshot record = adjustmentSnapshotMapper.selectOne(
-                new LambdaQueryWrapper<OrgAdjustmentSnapshot>()
-                        .eq(OrgAdjustmentSnapshot::getAdjustmentId, parseAdjustmentId(bizKey))
-                        .orderByDesc(OrgAdjustmentSnapshot::getId)
-                        .last("LIMIT 1"));
-        if (record == null) {
-            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
-        }
-        Map<String, Object> snap = JsonUtil.toMap(record.getSnapshotJson());
-        if (!"ORG_ADJUST_REQUEST".equals(snap.get("kind"))) {
-            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
-        }
-        String status = String.valueOf(snap.get("status"));
-        if (!"PENDING".equals(status)) {
-            // 幂等：申请单已处终态，重复回调直接返回成功，不重复应用变更
-            return new ApprovalCallbackResponse(false, status);
-        }
-        if (approved) {
-            applyAdjustAction(snap);
-        }
-        String newStatus = approved ? "APPROVED" : "REJECTED";
-        snap.put("status", newStatus);
-        if (comment != null && !comment.isBlank()) {
-            snap.put("approvalComment", comment);
-        }
-        record.setSnapshotJson(JsonUtil.toJson(snap));
-        adjustmentSnapshotMapper.updateById(record);
-        return new ApprovalCallbackResponse(true, newStatus);
-    }
-
-    /** 从业务键解析调整申请 ID（格式 ORG_ADJUST:{adjustment_id}），非法格式视为申请不存在。 */
-    private Long parseAdjustmentId(String bizKey) {
-        if (bizKey == null || !bizKey.startsWith("ORG_ADJUST:")) {
-            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
-        }
-        try {
-            return Long.parseLong(bizKey.substring("ORG_ADJUST:".length()));
-        } catch (NumberFormatException e) {
-            throw new BizException(ErrorCode.NOT_FOUND, "组织调整申请不存在");
-        }
-    }
-
-    /**
-     * 应用结构化调整动作：action=CREATE 建部门、action=UPDATE 改部门（以申请单 deptId 定位）；
-     * payload 缺 name（自由文本）或未知 action 时仅更新状态，不应用变更。
-     */
-    private void applyAdjustAction(Map<String, Object> snap) {
-        String action = snap.get("action") == null ? ""
-                : String.valueOf(snap.get("action")).trim().toUpperCase(java.util.Locale.ROOT);
-        if (!"CREATE".equals(action) && !"UPDATE".equals(action)) {
-            return;
-        }
-        Map<String, Object> p = snap.get("payload") instanceof Map<?, ?> m
-                ? new LinkedHashMap<String, Object>() {{
-                    m.forEach((k, v) -> put(String.valueOf(k), v));
-                }}
-                : Map.of();
-        String name = str(p.get("name"));
-        if (name == null || name.isBlank()) {
-            return;
-        }
-        LocalDate effectiveFrom = dateOrNull(p.get("effectiveFrom"));
-        DeptRequest req = new DeptRequest(name, str(p.get("code")), longOrNull(p.get("parentId")),
-                longOrNull(p.get("managerEmpId")),
-                effectiveFrom == null ? LocalDate.now() : effectiveFrom,
-                dateOrNull(p.get("effectiveTo")), null);
-        if ("CREATE".equals(action)) {
-            create(req);
-            return;
-        }
-        Long deptId = longOrNull(snap.get("deptId"));
-        if (deptId == null) {
-            throw new BizException(ErrorCode.PARAM_INVALID, "调整申请缺少 deptId，无法应用变更");
-        }
-        update(deptId, req);
-    }
-
-    private String str(Object v) {
-        return v == null ? null : String.valueOf(v);
-    }
-
-    private Long longOrNull(Object v) {
-        return v instanceof Number n ? n.longValue() : null;
-    }
-
-    private LocalDate dateOrNull(Object v) {
-        if (v == null) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(String.valueOf(v));
-        } catch (Exception e) {
-            return null;
-        }
+        return adjustService.handleAdjustCallback(bizKey, approved, comment, this::create, this::update);
     }
 
     /**
@@ -363,7 +229,7 @@ public class DeptService {
         if (occupancy != null && occupancy > 0) {
             throw new BizException(ErrorCode.ORG_ERROR, "存在编制占用流水，不可删除");
         }
-        writeSnapshot(dept);
+        DeptSnapshotSupport.writeSnapshot(deptHistoryMapper, dept);
         headcountMapper.delete(new LambdaQueryWrapper<OrgHeadcount>()
                 .eq(OrgHeadcount::getDeptId, id));
         deptMapper.deleteById(id);
@@ -382,14 +248,14 @@ public class DeptService {
             throw new BizException(ErrorCode.NOT_FOUND, "部门不存在");
         }
         long newParentId = req.newParentId() == null ? 0L : req.newParentId();
-        OrgDept parent = loadParent(newParentId);
+        OrgDept parent = DeptValidator.loadParent(deptMapper, newParentId);
         if (parent != null) {
             if (parent.getId().equals(dept.getId())
                     || parent.getPath().equals(dept.getPath())
                     || parent.getPath().startsWith(dept.getPath() + ".")) {
                 throw new BizException(ErrorCode.PARAM_INVALID, "不能移动到自身或自身子孙部门");
             }
-            validateDepth(parent);
+            DeptValidator.validateDepth(parent);
             dept.setPath(parent.getPath() + "." + dept.getId());
         } else {
             dept.setPath(String.valueOf(dept.getId()));
@@ -397,104 +263,7 @@ public class DeptService {
         dept.setParentId(newParentId);
         dept.setSortOrder(req.sortOrder() == null ? 0 : req.sortOrder());
         deptMapper.updateById(dept);
-        reorderSiblings(dept);
-        return toNode(dept);
-    }
-
-    /** 兄弟序列重排：取新父下全部子部门，按（sortOrder, id）排序后写入连续序号（0..n-1）。 */
-    private void reorderSiblings(OrgDept moved) {
-        List<OrgDept> siblings = new ArrayList<>(deptMapper.selectList(new LambdaQueryWrapper<OrgDept>()
-                .eq(OrgDept::getParentId, moved.getParentId())));
-        siblings.sort(Comparator.comparingInt((OrgDept d) -> d.getSortOrder() == null ? Integer.MAX_VALUE : d.getSortOrder())
-                .thenComparing(OrgDept::getId));
-        int order = 0;
-        for (OrgDept s : siblings) {
-            int target = order++;
-            if (s.getSortOrder() == null || s.getSortOrder() != target) {
-                s.setSortOrder(target);
-                deptMapper.updateById(s);
-            }
-        }
-    }
-
-    private OrgDept loadParent(long parentId) {
-        if (parentId == 0L) {
-            return null;
-        }
-        OrgDept parent = deptMapper.selectById(parentId);
-        if (parent == null) {
-            throw new BizException(ErrorCode.NOT_FOUND, "父部门不存在");
-        }
-        return parent;
-    }
-
-    private void validateDepth(OrgDept parent) {
-        int parentDepth = parent.getPath().split("\\.").length;
-        if (parentDepth + 1 > MAX_DEPTH) {
-            throw new BizException(ErrorCode.PARAM_INVALID, "部门树深度不能超过 " + MAX_DEPTH + " 层");
-        }
-    }
-
-    private void ensureCodeAvailable(String code) {
-        Long cnt = deptMapper.selectCount(new LambdaQueryWrapper<OrgDept>().eq(OrgDept::getCode, code));
-        if (cnt != null && cnt > 0) {
-            throw new BizException(ErrorCode.PARAM_INVALID, "部门编码已存在");
-        }
-    }
-
-    private void writeSnapshot(OrgDept dept) {
-        OrgDeptHistory history = new OrgDeptHistory();
-        history.setDeptId(dept.getId());
-        history.setSnapshotDate(LocalDate.now());
-        history.setSnapshot(JsonUtil.toJson(snapshotMap(dept)));
-        deptHistoryMapper.insert(history);
-    }
-
-    private Map<String, Object> snapshotMap(OrgDept dept) {
-        Map<String, Object> snap = new LinkedHashMap<>();
-        snap.put("id", dept.getId());
-        snap.put("parentId", dept.getParentId());
-        snap.put("path", dept.getPath());
-        snap.put("name", dept.getName());
-        snap.put("code", dept.getCode());
-        snap.put("managerEmpId", dept.getManagerEmpId());
-        snap.put("effectiveFrom", dept.getEffectiveFrom() == null ? null : dept.getEffectiveFrom().toString());
-        snap.put("effectiveTo", dept.getEffectiveTo() == null ? null : dept.getEffectiveTo().toString());
-        snap.put("status", dept.getStatus());
-        return snap;
-    }
-
-    private DeptNode toNode(OrgDept dept) {
-        return DeptNode.leaf(dept.getId(), dept.getParentId(), dept.getName(), dept.getCode(),
-                dept.getPath(), dept.getManagerEmpId(), dept.getEffectiveFrom(),
-                dept.getEffectiveTo(), dept.getStatus());
-    }
-
-    private List<DeptNode> buildTree(List<DeptNode> nodes) {
-        Map<Long, DeptNode> byId = new HashMap<>();
-        for (DeptNode n : nodes) {
-            byId.put(n.id(), n);
-        }
-        Map<Long, List<DeptNode>> children = new HashMap<>();
-        List<DeptNode> roots = new ArrayList<>();
-        for (DeptNode n : nodes) {
-            Long pid = n.parentId();
-            if (pid == null || pid == 0L || !byId.containsKey(pid)) {
-                roots.add(n);
-            } else {
-                children.computeIfAbsent(pid, k -> new ArrayList<>()).add(n);
-            }
-        }
-        return assemble(roots, children);
-    }
-
-    private List<DeptNode> assemble(List<DeptNode> current, Map<Long, List<DeptNode>> children) {
-        List<DeptNode> out = new ArrayList<>();
-        for (DeptNode n : current) {
-            List<DeptNode> kids = assemble(children.getOrDefault(n.id(), List.of()), children);
-            out.add(new DeptNode(n.id(), n.parentId(), n.name(), n.code(), n.path(),
-                    n.managerEmpId(), n.effectiveFrom(), n.effectiveTo(), n.status(), kids));
-        }
-        return out;
+        DeptSorter.reorderSiblings(deptMapper, dept);
+        return DeptTreeAssembler.toNode(dept);
     }
 }

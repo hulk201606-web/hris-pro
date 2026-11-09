@@ -43,6 +43,8 @@ public class TaskActionService {
     private final DelegateService delegateService;
     private final TaskStrategyService strategyService;
     private final TaskOpinionService opinionService;
+    /** 校验/留痕/终态回调支持：构造器内实例化，保持外部构造器签名（11 参）不变。 */
+    private final TaskActionSupport support;
 
     public TaskActionService(TaskService taskService, RuntimeService runtimeService,
                              HistoryService historyService, TaskActionMapper taskActionMapper,
@@ -61,6 +63,9 @@ public class TaskActionService {
         this.delegateService = delegateService;
         this.strategyService = strategyService;
         this.opinionService = opinionService;
+        this.support = new TaskActionSupport(taskService, runtimeService, historyService,
+                taskActionMapper, bizRelationService, eventOutboxService, callbackDispatcher,
+                delegateService);
     }
 
     /**
@@ -72,7 +77,7 @@ public class TaskActionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void approve(String taskId, TaskActionRequest req) {
-        Task task = requireTaskAndCheck(taskId);
+        Task task = support.requireTaskAndCheck(taskId);
         Optional<StrategyOutcome> outcome = strategyService.evaluate(task, true);
         if (outcome.isPresent() && outcome.get().rejected()) {
             returnToInitiator(taskId, task, req, "会签未达标，驳回退回发起人重提（" + outcome.get().message() + "）");
@@ -80,7 +85,7 @@ public class TaskActionService {
         }
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
-        record(taskId, TaskActionType.APPROVE, operator, req, resolveDelegateFrom(task, operator));
+        support.record(taskId, TaskActionType.APPROVE, operator, req, support.resolveDelegateFrom(task, operator));
         taskService.complete(taskId);
         if (req != null) {
             opinionService.recordForAction(taskId, req.tag(), req.comment());
@@ -90,7 +95,7 @@ public class TaskActionService {
                 Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(), "outcome", "APPROVED"));
         if (runtimeService.createProcessInstanceQuery()
                 .processInstanceId(task.getProcessInstanceId()).singleResult() == null) {
-            finishInstance(task.getProcessInstanceId(), "APPROVED", true,
+            support.finishInstance(task.getProcessInstanceId(), "APPROVED", true,
                     req == null ? null : req.comment());
         }
     }
@@ -109,7 +114,7 @@ public class TaskActionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void reject(String taskId, TaskActionRequest req) {
-        Task task = requireTaskAndCheck(taskId);
+        Task task = support.requireTaskAndCheck(taskId);
         boolean strategyReject = strategyService.evaluate(task, false)
                 .map(StrategyOutcome::rejected).orElse(false);
         if (req != null) {
@@ -126,11 +131,11 @@ public class TaskActionService {
     private void terminate(String taskId, Task task, TaskActionRequest req, boolean strategyReject) {
         Long tenantId = TraceContext.getTenantId();
         Long operator = TraceContext.getUserId();
-        TaskActionRequest effective = strategyReject ? withNote(req, "一票否决（会签策略），流程终止") : req;
-        record(taskId, TaskActionType.REJECT, operator, effective, resolveDelegateFrom(task, operator));
+        TaskActionRequest effective = strategyReject ? support.withNote(req, "一票否决（会签策略），流程终止") : req;
+        support.record(taskId, TaskActionType.REJECT, operator, effective, support.resolveDelegateFrom(task, operator));
         runtimeService.deleteProcessInstance(task.getProcessInstanceId(),
                 "REJECTED:TERMINATED:" + (effective == null || effective.comment() == null ? "" : effective.comment()));
-        BizRelation rel = terminateRelation(task.getProcessInstanceId());
+        BizRelation rel = support.terminateRelation(task.getProcessInstanceId());
         eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, tenantId,
                 task.getProcessInstanceId(),
                 Map.of("taskId", taskId, "procInstId", task.getProcessInstanceId(),
@@ -146,15 +151,15 @@ public class TaskActionService {
     private void returnToInitiator(String taskId, Task task, TaskActionRequest req, String note) {
         Long operator = TraceContext.getUserId();
         String procInstId = task.getProcessInstanceId();
-        record(taskId, TaskActionType.REJECT, operator, withNote(req, note),
-                resolveDelegateFrom(task, operator));
-        String initiator = requireInitiator(procInstId);
+        support.record(taskId, TaskActionType.REJECT, operator, support.withNote(req, note),
+                support.resolveDelegateFrom(task, operator));
+        String initiator = support.requireInitiator(procInstId);
         // 当前活动 = 被驳回任务所在节点（taskDefinitionKey 即活动 ID）
         String current = task.getTaskDefinitionKey();
-        String firstUserTask = firstUserTaskActivityId(procInstId);
+        String firstUserTask = support.firstUserTaskActivityId(procInstId);
         // 当前活动即起始任务时无需移位（如单节点模板），仅改派发起人
         if (current == null || current.isBlank()) {
-            current = currentActivityId(procInstId);
+            current = support.currentActivityId(procInstId);
         }
         if (!firstUserTask.equals(current)) {
             runtimeService.createChangeActivityStateBuilder()
@@ -168,65 +173,14 @@ public class TaskActionService {
         }
     }
 
-    /** 留痕备注：在审批意见前注明动作语义。 */
-    private TaskActionRequest withNote(TaskActionRequest req, String note) {
-        String origin = req == null || req.comment() == null || req.comment().isBlank()
-                ? null : req.comment();
-        String comment = origin == null ? note : note + "：" + origin;
-        return new TaskActionRequest(comment,
-                req == null ? null : req.attachments(),
-                req == null ? null : req.targetUserId(),
-                req == null ? null : req.terminate(),
-                req == null ? null : req.formValues(),
-                req == null ? null : req.tag());
-    }
-
-    /** 当前活动节点 ID（运行中实例）。 */
-    private String currentActivityId(String procInstId) {
-        ProcessInstance pi = runtimeService.createProcessInstanceQuery()
-                .processInstanceId(procInstId).singleResult();
-        if (pi == null || pi.getActivityId() == null) {
-            throw new BizException(ErrorCode.FLOW_STATE_CONFLICT, "流程实例不在运行中，无法退回");
-        }
-        return pi.getActivityId();
-    }
-
-    /** 起始用户任务：实例历史中最早执行的 userTask（兼容 start 后经网关/分支路由的模板）。 */
-    private String firstUserTaskActivityId(String procInstId) {
-        List<HistoricActivityInstance> acts = historyService.createHistoricActivityInstanceQuery()
-                .processInstanceId(procInstId)
-                .activityType("userTask")
-                .orderByHistoricActivityInstanceStartTime().asc()
-                .listPage(0, 1);
-        if (acts == null || acts.isEmpty()) {
-            throw new BizException(ErrorCode.FLOW_STATE_CONFLICT, "流程尚无审批节点，无法退回");
-        }
-        return acts.get(0).getActivityId();
-    }
-
-    /** 发起人：优先 Flowable startedBy（发起时 Authentication 记录），兜底 initiator 变量。 */
-    private String requireInitiator(String procInstId) {
-        ProcessInstance pi = runtimeService.createProcessInstanceQuery()
-                .processInstanceId(procInstId).singleResult();
-        String startedBy = pi == null ? null : pi.getStartUserId();
-        if (startedBy == null || startedBy.isBlank()) {
-            Object v = runtimeService.getVariable(procInstId, "initiator");
-            startedBy = v == null ? null : String.valueOf(v);
-        }
-        if (startedBy == null || startedBy.isBlank()) {
-            throw new BizException(ErrorCode.FLOW_STATE_CONFLICT, "无法确定流程发起人，退回失败");
-        }
-        return startedBy;
-    }
-
     /** 转办：任务所有权转移，原审批人留痕（docs/04 §5）。 */
     @Transactional(rollbackFor = Exception.class)
     public void transfer(String taskId, TaskActionRequest req) {
-        Task task = requireTaskAndCheck(taskId);
-        Long target = requireTarget(req);
+        Task task = support.requireTaskAndCheck(taskId);
+        Long target = support.requireTarget(req);
         Long operator = TraceContext.getUserId();
         String from = task.getAssignee();
-        record(taskId, TaskActionType.TRANSFER, operator, req, from == null ? null : parseLong(from));
+        support.record(taskId, TaskActionType.TRANSFER, operator, req, from == null ? null : support.parseLong(from));
         taskService.setAssignee(taskId, String.valueOf(target));
     }
 
@@ -236,8 +190,8 @@ public class TaskActionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public boolean claim(String taskId, TaskActionRequest req) {
-        Task task = requireTask(taskId);
-        Long operator = requireOperator();
+        Task task = support.requireTask(taskId);
+        Long operator = support.requireOperator();
         String uid = String.valueOf(operator);
         if (uid.equals(task.getAssignee())) {
             return false;
@@ -245,7 +199,7 @@ public class TaskActionService {
         if (task.getAssignee() != null && !task.getAssignee().isBlank()) {
             throw new BizException(ErrorCode.FLOW_NO_PERMISSION, "任务已被他人认领，无权操作");
         }
-        record(taskId, TaskActionType.CLAIM, operator, req, null);
+        support.record(taskId, TaskActionType.CLAIM, operator, req, null);
         taskService.setAssignee(taskId, uid);
         return true;
     }
@@ -253,148 +207,31 @@ public class TaskActionService {
     /** 指派（管理动作，docs/19 §9-1）：管理员强制把任务指给 targetUserId，无需是当前 assignee。 */
     @Transactional(rollbackFor = Exception.class)
     public void assign(String taskId, TaskActionRequest req) {
-        Task task = requireTask(taskId);
-        Long target = requireTarget(req);
-        Long operator = requireOperator();
+        Task task = support.requireTask(taskId);
+        Long target = support.requireTarget(req);
+        Long operator = support.requireOperator();
         String from = task.getAssignee();
-        record(taskId, TaskActionType.ASSIGN, operator, req, from == null ? null : parseLong(from));
+        support.record(taskId, TaskActionType.ASSIGN, operator, req, from == null ? null : support.parseLong(from));
         taskService.setAssignee(taskId, String.valueOf(target));
     }
 
     /** 加签（MVP：追加候选人并行加签，完整前/后/并行加签链属后续增量）。 */
     @Transactional(rollbackFor = Exception.class)
     public void addSign(String taskId, TaskActionRequest req) {
-        Task task = requireTaskAndCheck(taskId);
-        Long target = requireTarget(req);
+        Task task = support.requireTaskAndCheck(taskId);
+        Long target = support.requireTarget(req);
         Long operator = TraceContext.getUserId();
-        record(taskId, TaskActionType.ADD_SIGN, operator, req, null);
+        support.record(taskId, TaskActionType.ADD_SIGN, operator, req, null);
         taskService.addCandidateUser(taskId, String.valueOf(target));
     }
 
     /** 撤回（发起人撤回，仅当无已处理节点时允许），以 approved=false / WITHDRAWN 语义通知业务域。 */
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(String taskId) {
-        Task task = requireTask(taskId);
+        Task task = support.requireTask(taskId);
         Long operator = TraceContext.getUserId();
-        record(taskId, TaskActionType.WITHDRAW, operator, null, null);
+        support.record(taskId, TaskActionType.WITHDRAW, operator, null, null);
         instanceService.withdraw(task.getProcessInstanceId(), "发起人撤回");
     }
 
-    /**
-     * 委托代办留痕判定（FLW-F-009）：操作人（被委托人 to_user）处理的是生效委托中
-     * from_user 名下的任务时，返回 from_user 作为 delegateFrom；否则 null。
-     * 流程定义 Key 取 processDefinitionId 前缀（':' 之前）。
-     */
-    private Long resolveDelegateFrom(Task task, Long operator) {
-        if (operator == null || task == null) {
-            return null;
-        }
-        String defId = task.getProcessDefinitionId();
-        String procDefKey = defId == null ? null : (defId.contains(":") ? defId.substring(0, defId.indexOf(':')) : defId);
-        Long tenantId = TraceContext.getTenantId();
-        return delegateService.resolveDelegateFrom(operator, tenantId,
-                task.getAssignee(), procDefKey);
-    }
-
-    private Task requireTask(String taskId) {
-        String tenantId = requireTenant();
-        Task task = taskService.createTaskQuery().taskId(taskId).taskTenantId(tenantId).singleResult();
-        if (task == null) {
-            throw new BizException(ErrorCode.FLOW_NOT_FOUND, "任务不存在或已处理");
-        }
-        return task;
-    }
-
-    private Task requireTaskAndCheck(String taskId) {
-        Task task = requireTask(taskId);
-        Long userId = TraceContext.getUserId();
-        if (userId == null) {
-            throw new BizException(ErrorCode.UNAUTHORIZED, "缺少用户身份");
-        }
-        String uid = String.valueOf(userId);
-        if (task.getAssignee() != null && task.getAssignee().equals(uid)) {
-            return task;
-        }
-        long candidate = taskService.createTaskQuery().taskId(taskId).taskCandidateUser(uid).count();
-        if (candidate > 0) {
-            return task;
-        }
-        // 委托代办放行（FLW-F-009）：任务 assignee 为生效委托的发起人时，被委托人可处理
-        if (resolveDelegateFrom(task, userId) != null) {
-            return task;
-        }
-        throw new BizException(ErrorCode.FLOW_NO_PERMISSION, "无权处理该流程任务");
-    }
-
-    private void record(String taskId, TaskActionType action, Long operator,
-                        TaskActionRequest req, Long delegateFrom) {
-        TaskAction a = new TaskAction();
-        a.setTaskId(taskId);
-        a.setAction(action.name());
-        a.setOperator(operator == null ? 0L : operator);
-        a.setComment(req == null ? null : req.comment());
-        a.setAttachments(req == null || req.attachments() == null ? null : JsonUtil.toJson(req.attachments()));
-        a.setFormValues(req == null || req.formValues() == null ? null : JsonUtil.toJson(req.formValues()));
-        a.setDelegateFrom(delegateFrom);
-        a.setTs(LocalDateTime.now());
-        taskActionMapper.insert(a);
-    }
-
-    /** 实例结束：回写映射状态 + 发布终态事件 + 按终态结论回调业务域（回调失败不影响审批）。 */
-    private void finishInstance(String procInstId, String outcome, boolean approved, String comment) {
-        try {
-            BizRelation rel = bizRelationService.requireByProcInstId(procInstId);
-            bizRelationService.updateStatus(rel, InstanceStatus.FINISHED);
-            eventOutboxService.publish(EventOutboxService.TOPIC_INSTANCE_FINISHED, rel.getTenantId(), rel.getBizKey(),
-                    Map.of("procInstId", procInstId, "bizType", rel.getBizType(), "bizKey", rel.getBizKey(),
-                            "outcome", outcome));
-            callbackDispatcher.dispatchOnTerminal(rel.getBizType(), rel.getBizKey(), rel.getTenantId(),
-                    approved, outcome, comment, procInstId);
-        } catch (BizException ignored) {
-            // 无映射（如手工测试流程）时跳过状态回写与回调，仅记录
-        }
-    }
-
-    /** 终止映射；返回映射（无映射时返回 null），供驳回分支以 bizType 路由回调。 */
-    private BizRelation terminateRelation(String procInstId) {
-        try {
-            BizRelation rel = bizRelationService.requireByProcInstId(procInstId);
-            bizRelationService.updateStatus(rel, InstanceStatus.TERMINATED);
-            return rel;
-        } catch (BizException ignored) {
-            // 无映射时跳过
-            return null;
-        }
-    }
-
-    private Long requireOperator() {
-        Long userId = TraceContext.getUserId();
-        if (userId == null) {
-            throw new BizException(ErrorCode.UNAUTHORIZED, "缺少用户身份");
-        }
-        return userId;
-    }
-
-    private Long requireTarget(TaskActionRequest req) {
-        if (req == null || req.targetUserId() == null) {
-            throw new BizException(ErrorCode.PARAM_INVALID, "targetUserId 不能为空");
-        }
-        return req.targetUserId();
-    }
-
-    private Long parseLong(String v) {
-        try {
-            return Long.parseLong(v);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private String requireTenant() {
-        Long tenantId = TraceContext.getTenantId();
-        if (tenantId == null || tenantId == 0L) {
-            throw new BizException(ErrorCode.TENANT_INVALID);
-        }
-        return String.valueOf(tenantId);
-    }
 }
