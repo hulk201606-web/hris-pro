@@ -237,7 +237,16 @@ jobs:
           cat > .env.ci <<EOF
           DB_PASSWORD=ci-placeholder-password
           JWT_SECRET=ci-placeholder-secret-at-least-32-bytes
+          # 应用编排里的 DB_URL 是 jdbc:mysql://${DB_URL_HOST}:${DB_URL_PORT}/<库名> 直接拼接，
+          # 不注入时 compose 会把主机渲染成空串（jdbc:mysql://:3306/...），
+          # 校验就失去意义。这里给出容器网内 MySQL 的默认地址。
+          DB_URL_HOST=mysql
+          DB_URL_PORT=3306
           EOF
+          # Nacos 3.x 即使关闭 auth 也强制要求 NACOS_AUTH_TOKEN（Base64，原文 ≥32 字节）。
+          # 这里在流水线内现场 base64 生成占位值，仓库内不落任何形似密钥的字面量；
+          # 原文 34 字节，仅服务于下面的编排语法校验，不可用于任何实际环境。
+          printf 'NACOS_AUTH_TOKEN=%s\n' "$(printf 'ci-placeholder-nacos-auth-token-v1' | base64 -w0)" >> .env.ci
           docker compose --env-file .env.ci -f docker-compose.yml -f docker-compose.app.yml config > /dev/null
           echo "::notice::应用编排（11 服务）语法校验通过"
 

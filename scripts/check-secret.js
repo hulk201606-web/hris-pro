@@ -167,9 +167,12 @@ const LINE_EXEMPT = [
   },
   {
     file: /\.github\/workflows\/ci\.yml$/,
-    // CI 流水线自身的占位凭据：只用于让 compose 变量插值不失败，
-    // 值为 ci-placeholder-*，且仓库内不存在真实密钥
-    line: /(DB_PASSWORD|JWT_SECRET)=ci-placeholder-[a-z-]+/,
+    // CI 流水线自身的占位凭据：只用于让 compose 变量插值不失败。
+    // DB_PASSWORD / JWT_SECRET 直接写成 ci-placeholder-*；
+    // NACOS_AUTH_TOKEN 则在流水线内由常量现场 base64 生成后追加进 .env.ci
+    // （Nacos 3.x 要求该值必须是 Base64 且原文 ≥32 字节），
+    // 因此仓库内既无明文口令、也无 Base64 形态的密钥字面量。
+    line: /(DB_PASSWORD|JWT_SECRET)=ci-placeholder-[a-z-]+|base64 -w0.*>> \.env\.ci/,
     reason: 'CI 占位凭据（ci-placeholder-*），非真实密钥',
   },
   {
